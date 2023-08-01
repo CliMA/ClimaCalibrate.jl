@@ -1,0 +1,12 @@
+dt: 200secs 
+t_end: 200secs 
+# t_end: 2days 
+ode_algo: ARS343 
+# dt_save_to_disk: Inf 
+dt_save_to_disk: 200secs 
+# vert_diff: "true" 
+moist: equil 
+forcing: held_suarez 
+precip_model: 0M 
+job_id: sphere_held_suarez_rhoe_equilmoist
+output_dir: output/moist_held_suarez
