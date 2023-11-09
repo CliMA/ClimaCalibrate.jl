@@ -1,0 +1,9 @@
+[deps]
+CLIMAParameters = "6eacf6c3-8458-43b9-ae03-caf5306d3d53"
+CalibrateAtmos = "4347a170-ebd6-470c-89d3-5c705c0cacc2"
+ClimaCore = "d414da3d-4745-48bb-8d80-42e94e092884"
+Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
+EnsembleKalmanProcesses = "aa8a2aa5-91d8-4396-bcef-d4f2ec43552d"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+SafeTestsets = "1bc83da4-3b8d-516f-aca4-4fe02f6d838f"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
