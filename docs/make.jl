@@ -1,24 +1,32 @@
 using Documenter
 using Documenter: doctest
+using CalibrateAtmos
 using Base.CoreLogging
 using DocumenterCitations
 
 disable_logging(Base.CoreLogging.Info) # Hide doctest's `@info` printing
+bib = CitationBibliography(joinpath(@__DIR__, "bibliography.bib"))
+
+doctest(CalibrateAtmos; plugins = [bib])
 disable_logging(Base.CoreLogging.BelowMinLevel) # Re-enable all logging
 
 makedocs(
-    CitationBibliography(joinpath(@__DIR__, "bibliography.bib")),
-    modules = Vector{Module}(),
+    plugins = [bib],
+    modules = [CalibrateAtmos],
     sitename = "CalibrateAtmos.jl",
     authors = "Clima",
-    strict = true,
     checkdocs = :exports,
     format = Documenter.HTML(
         prettyurls = !isempty(get(ENV, "CI", "")),
         collapselevel = 1,
         mathengine = MathJax3(),
     ),
-    pages = ["Home" => "index.md"],
+    pages = [
+        "Home" => "index.md",
+        "Getting Started" => "quickstart.md",
+        "Experiment Setup Guide" => "experiment_setup_guide.md",
+        "API" => "api.md",
+    ],
 )
 
 deploydocs(
