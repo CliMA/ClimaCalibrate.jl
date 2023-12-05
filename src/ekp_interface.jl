@@ -56,6 +56,7 @@ function initialize(
         Γ,
         EKP.Inversion();
         rng = rng_ekp,
+        failure_handler_method = EKP.SampleSuccGauss(),
     )
 
     save_parameter_ensemble(
