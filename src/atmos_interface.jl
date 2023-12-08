@@ -45,8 +45,8 @@ Runs the atmosphere model with the given an AtmosConfig object.
 Currently only has basic error handling.
 """
 function run_forward_model(atmos_config::CA.AtmosConfig)
-    integrator = CA.get_integrator(atmos_config)
-    sol_res = CA.solve_atmos!(integrator)
+    simulation = CA.get_simulation(atmos_config)
+    sol_res = CA.solve_atmos!(simulation)
     if sol_res.ret_code == :simulation_crashed
         !isnothing(sol_res.sol) && sol_res.sol .= eltype(sol_res.sol)(NaN)
         error(

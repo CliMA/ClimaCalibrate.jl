@@ -25,7 +25,8 @@
 [codecov-img]: https://codecov.io/gh/CliMA/CalibrateAtmos.jl/branch/main/graph/badge.svg
 [codecov-url]: https://codecov.io/gh/CliMA/CalibrateAtmos.jl
 
-The recommended Julia version is: Stable release v1.9.3
+The recommended Julia version is: Stable release v1.9.4
+
 This pipeline currently runs on the Resnick High Performance Computing Center.
 We strive to support flexible and clearly documented calibration experiments.
 

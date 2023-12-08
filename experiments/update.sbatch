@@ -7,12 +7,10 @@ i=$2
 echo "Iteration $i"
 
 julia --project=experiments -e '
-    import YAML
+    import YAML, JLD2
     import CalibrateAtmos
-    using Distributions
-    using EnsembleKalmanProcesses.ParameterDistributions
 
-    experiment_id = "'${experiment_id}'"
+    experiment_id = "'$experiment_id'"
     i = '$i'
     include("experiments/$experiment_id/observation_map.jl")
     G_ensemble = observation_map(i)

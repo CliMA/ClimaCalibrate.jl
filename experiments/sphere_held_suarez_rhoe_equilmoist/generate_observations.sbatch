@@ -27,8 +27,8 @@ config_dict["t_end"] = "3000days"
 config_dict["output_dir"] = output_dir
 
 config = CA.AtmosConfig(config_dict)
-integrator = CA.get_integrator(config)
-CA.solve_atmos!(integrator)
+simulation = CA.get_simulation(config)
+CA.solve_atmos!(simulation)
 
 ta = ncread(joinpath(output_dir, "ta_60.0d_average.nc"), "ta")
 include(joinpath(experiment_dir, "observation_map.jl"))
