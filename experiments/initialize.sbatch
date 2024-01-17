@@ -7,9 +7,9 @@
 experiment_id=$1
 
 echo "Initializing calibration for experiment $experiment_id"
-julia --project=experiments -e 'using Pkg; Pkg.instantiate(;verbose=true)'
+julia --color=no --project=experiments -e 'using Pkg; Pkg.instantiate(;verbose=true)'
 
-julia --project=experiments -e '
+julia --color=no --project=experiments -e '
     import CalibrateAtmos
     CalibrateAtmos.initialize("'$experiment_id'")
 '
