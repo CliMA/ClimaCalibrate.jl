@@ -43,7 +43,7 @@ function observation_map(iteration)
         YAML.load_file(joinpath("experiments", experiment_id, "ekp_config.yml"))
     output_dir = config["output_dir"]
     ensemble_size = config["ensemble_size"]
-    model_output = "ta_60.0d_average.nc"
+    model_output = "ta_60d_average.nc"
 
     dims = 1
     G_ensemble = Array{Float64}(undef, dims..., ensemble_size)

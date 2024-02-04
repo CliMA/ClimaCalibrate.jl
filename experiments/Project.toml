@@ -12,16 +12,16 @@ TOML = "fa267f1f-6049-4f14-aa54-33bafae1ed76"
 YAML = "ddb6d928-2868-570f-bddf-ab3f9cf99eb6"
 
 [extras]
-CUDA_Runtime_jll = "76a88914-d11a-5bdc-97e0-2f5a05c973a2"
 CUDA_Driver_jll = "4ee394cb-3365-5eb0-8335-949819d2adfc"
+CUDA_Runtime_jll = "76a88914-d11a-5bdc-97e0-2f5a05c973a2"
 MPIPreferences = "3da0fdf6-3ccc-4f1b-acd9-58baa6c99267"
 
 [preferences.CUDA_Driver_jll]
 compat = false
 
 [preferences.CUDA_Runtime_jll]
-version = "12.2"
 local = "true"
+version = "12.2"
 
 [preferences.MPIPreferences]
 _format = "1.0"
