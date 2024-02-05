@@ -6,7 +6,7 @@ i=$2
 
 echo "Iteration $i"
 
-julia --project=experiments -e '
+julia --color=no --project=experiments -e '
     import YAML, JLD2
     import CalibrateAtmos
 

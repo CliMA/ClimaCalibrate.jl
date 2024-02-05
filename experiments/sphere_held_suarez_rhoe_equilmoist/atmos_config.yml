@@ -1,7 +1,6 @@
 dt: 500secs
 t_end: 560days 
 ode_algo: ARS343 
-dt_save_to_disk: 50days 
 moist: equil 
 forcing: held_suarez 
 precip_model: 0M 

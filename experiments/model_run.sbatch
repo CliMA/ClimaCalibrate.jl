@@ -13,7 +13,7 @@ member=$(printf "member_%03d" "$SLURM_ARRAY_TASK_ID")
 output=output/$experiment_id/$format_i/$member/model_log.out
 
 # Run the forward model
-srun --output=$output julia --project=experiments -e "
+srun --output=$output julia --color=no --project=experiments -e "
     using ClimaComms
     ClimaComms.init(ClimaComms.context())
     import CalibrateAtmos
