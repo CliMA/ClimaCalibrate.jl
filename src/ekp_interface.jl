@@ -14,6 +14,20 @@ path_to_iteration(output_dir, iteration) =
     joinpath(output_dir, join(["iteration", lpad(iteration, 3, "0")], "_"))
 
 """
+    get_prior(prior_path; names = nothing)
+
+Constructs the combined prior distribution from the TOML file at the `prior_path`.
+If no parameter names are passed in, all parameters in the TOML are used in the distribution.
+"""
+function get_prior(prior_path; names = nothing)
+    param_dict = TOML.parsefile(prior_path)
+    names = isnothing(names) ? keys(param_dict) : names
+    prior_vec = [get_parameter_distribution(param_dict, n) for n in names]
+    prior = combine_distributions(prior_vec)
+    return prior
+end
+
+"""
     initialize(
         experiment_id;
         config = YAML.load_file("experiments/\$experiment_id/ekp_config.yml"),
