@@ -3,7 +3,7 @@ using Statistics
 import YAML
 import EnsembleKalmanProcesses: TOMLInterface
 import JLD2
-import CalibrateAtmos
+import CalibrateAtmos: observation_map
 
 export observation_map
 
@@ -27,17 +27,7 @@ function latitudinal_avg(arr)
     return dropdims(mean(arr; dims); dims)
 end
 
-function height_avg(arr)
-    dims = 4
-    return dropdims(mean(arr; dims); dims)
-end
-
-function time_avg(arr)
-    dims = 1
-    return dropdims(mean(arr; dims); dims)
-end
-
-function observation_map(iteration)
+function observation_map(::Val{:sphere_held_suarez_rhoe_equilmoist}, iteration)
     experiment_id = "sphere_held_suarez_rhoe_equilmoist"
     config =
         YAML.load_file(joinpath("experiments", experiment_id, "ekp_config.yml"))

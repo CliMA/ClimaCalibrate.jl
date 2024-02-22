@@ -6,14 +6,14 @@ i=$2
 
 echo "Iteration $i"
 
-julia --color=no --project=experiments -e '
+julia --color=no --project=experiments/$experiment_id -e '
     import YAML, JLD2
     import CalibrateAtmos
 
     experiment_id = "'$experiment_id'"
     i = '$i'
-    include("experiments/$experiment_id/observation_map.jl")
-    G_ensemble = observation_map(i)
+    include("experiments/'$experiment_id'/model_interface.jl")
+    G_ensemble = CalibrateAtmos.observation_map(Val(:'$experiment_id'), i)
     config = YAML.load_file(joinpath("experiments", experiment_id, "ekp_config.yml"))
     output_dir = config["output_dir"]
     iter_path = CalibrateAtmos.path_to_iteration(output_dir, i)
