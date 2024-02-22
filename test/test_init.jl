@@ -1,7 +1,7 @@
 using Distributions
 using EnsembleKalmanProcesses.ParameterDistributions
 import CalibrateAtmos
-import CLIMAParameters as CP
+import ClimaParams as CP
 import LinearAlgebra: I
 using Test
 
