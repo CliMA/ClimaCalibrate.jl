@@ -41,14 +41,17 @@ The initial stepsize can be specified by `init_stepsize` with a default of 0.1,
 and the number of initial samples to discard can be set by `discard_initial` with a default of 0.
 Returns both the MCMC object and the samples in a NamedTuple.
 """
-function sample(emulator, y_obs, prior, init_params; n_samples = 100_000, init_stepsize = 0.1, discard_initial = 0)
+function sample(
+    emulator,
+    y_obs,
+    prior,
+    init_params;
+    n_samples = 100_000,
+    init_stepsize = 0.1,
+    discard_initial = 0,
+)
     mcmc = MCMCWrapper(RWMHSampling(), y_obs, prior, emulator; init_params)
-    new_step = optimize_stepsize(
-        mcmc;
-        init_stepsize,
-        N = 2000,
-        discard_initial,
-    )
+    new_step = optimize_stepsize(mcmc; init_stepsize, N = 2000, discard_initial)
     chain = MarkovChainMonteCarlo.sample(
         mcmc,
         n_samples;
