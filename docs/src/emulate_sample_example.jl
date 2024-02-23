@@ -33,7 +33,7 @@ prior = CAL.get_prior(prior_path)
 input_output_pairs = CAL.get_input_output_pairs(ekp)
 emulator = CAL.gp_emulator(input_output_pairs, y_noise_cov)
 (; mcmc, chain) = CAL.sample(emulator, y_obs, prior, init_params)
-constrained_posterior = CAL.save_samples(mcmc, chain, prior)
+constrained_posterior = CAL.save_posterior(mcmc, chain, prior)
 
 display(chain)
 
