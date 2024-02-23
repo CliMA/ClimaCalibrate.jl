@@ -33,12 +33,20 @@ function gp_emulator(input_output_pairs, obs_noise_cov)
 end
 
 """
-    sample(emulator, y_obs, prior, init_params; n_samples = 100_000)
+    sample(
+        emulator, 
+        y_obs,
+        prior, 
+        init_params; 
+        n_samples = 100_000, 
+        init_stepsize = 0.1, 
+        discard_initial = 0
+    )
 
 Constructs a MarkovChainMonteCarlo object, optimizes its stepsize, and takes
 `n_samples` number of samples. 
-The initial stepsize can be specified by `init_stepsize` with a default of 0.1, 
-and the number of initial samples to discard can be set by `discard_initial` with a default of 0.
+The initial stepsize can be specified by `init_stepsize`, 
+and the number of initial samples to discard can be set by `discard_initial`.
 Returns both the MCMC object and the samples in a NamedTuple.
 """
 function sample(
@@ -62,7 +70,7 @@ function sample(
 end
 
 """
-    save_posterior(mcmc, chain, prior; filename = "samples.jld2")
+    save_posterior(mcmc, chain; filename = "samples.jld2")
 
 Given an MCMC object, a Markov chain of samples, and a prior distribution, 
 constructs the posterior distribution and saves it to `filename`. 
