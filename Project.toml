@@ -17,6 +17,7 @@ TOML = "fa267f1f-6049-4f14-aa54-33bafae1ed76"
 YAML = "ddb6d928-2868-570f-bddf-ab3f9cf99eb6"
 
 [compat]
+CalibrateEmulateSample = "0.5"
 ClimaAtmos = "0.20.0"
 Distributions = "0.25"
 EnsembleKalmanProcesses = "1"
