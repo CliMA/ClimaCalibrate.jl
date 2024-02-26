@@ -26,6 +26,7 @@ makedocs(
         "Getting Started" => "quickstart.md",
         "Experiment Setup Guide" => "experiment_setup_guide.md",
         "Emulate and Sample" => "emulate_sample.md",
+        "Precompilation" => "precompilation.md",
         "API" => "api.md",
     ],
 )
