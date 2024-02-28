@@ -3,13 +3,15 @@
 #SBATCH --ntasks=32
 #SBATCH --cpus-per-task=8
 #SBATCH --output="experiments/sphere_held_suarez_rhoe_equilmoist/truth_simulation/model_log.out"
+#SBATCH --partition=expansion
 
 # Configure the environment
-source experiments/common_env.sh
+export MODULEPATH=/groups/esm/modules:$MODULEPATH
+module load climacommon/2024_02_27
 
 echo "Generating truth observations."
 
-srun  --open-mode=append julia --project=experiments -e '
+srun --open-mode=append julia --project=experiments -e '
 using ClimaComms
 ClimaComms.init(ClimaComms.context())
 import ClimaAtmos as CA
