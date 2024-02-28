@@ -1,7 +1,7 @@
 #!/bin/bash
-
 # Configure the environment
-source experiments/common_env.sh
+export MODULEPATH=/groups/esm/modules:$MODULEPATH
+module load climacommon/2024_02_27
 
 # Parse command line
 experiment_id=${1?Error: no experiment ID given}
@@ -11,6 +11,7 @@ echo "Running experiment $experiment_id with $tasks_per_model_run tasks per mode
 echo 'Initializing ensemble for calibration.'
 init_id=$(sbatch --parsable \
                  --output=init_$experiment_id.out \
+                 --partition=expansion \
                  experiments/initialize.sbatch $experiment_id)
 
 # Get ensemble size and the number of iterations from configuration file
@@ -30,6 +31,7 @@ do
                --output=/dev/null \
                --ntasks=$tasks_per_model_run \
                --array=1-$ensemble_size \
+               --partition=expansion \
                experiments/model_run.sbatch $experiment_id $i)
 
     dependency=afterany:$ensemble_array_id
@@ -39,8 +41,10 @@ do
         sbatch --dependency=$dependency --kill-on-invalid-dep=yes --parsable \
                --job=update-$i \
                --output=output/$experiment_id/$format_i/update_log.out \
+               --partition=expansion \
                experiments/update.sbatch $experiment_id $i)
 
     dependency=afterany:$update_id
     echo "Update $i job id: $update_id"
+    echo ""
 done
