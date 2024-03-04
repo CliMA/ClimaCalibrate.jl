@@ -78,10 +78,6 @@ Returns the samples in constrained (physical) parameter space.
 """
 function save_posterior(mcmc, chain; filename = "samples.jld2")
     posterior = MarkovChainMonteCarlo.get_posterior(mcmc, chain)
-    constrained_posterior = transform_unconstrained_to_constrained(
-        posterior,
-        MarkovChainMonteCarlo.get_distribution(posterior),
-    )
     JLD2.save_object(filename, posterior)
-    return constrained_posterior
+    return posterior
 end

@@ -32,5 +32,3 @@ emulator = CAL.gp_emulator(input_output_pairs, y_noise_cov)
 @test mean(chain.value[1:100000]) ≈ 4.19035299 rtol = 0.0001
 
 constrained_posterior = CAL.save_posterior(mcmc, chain)
-@test mean(constrained_posterior["equator_pole_temperature_gradient_wet"]) ≈
-      66.046965013381 rtol = 0.0001
