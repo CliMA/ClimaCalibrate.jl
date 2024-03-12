@@ -13,10 +13,11 @@ member=$(printf "member_%03d" "$SLURM_ARRAY_TASK_ID")
 output=output/$experiment_id/$format_i/$member/model_log.out
 
 # Run the forward model
-srun --output=$output julia --color=no --project=experiments -e "
-    using ClimaComms
-    ClimaComms.init(ClimaComms.context())
+srun --output=$output julia --color=no --project=experiments/$experiment_id -e "
     import CalibrateAtmos
-    atmos_config = CalibrateAtmos.get_atmos_config($SLURM_ARRAY_TASK_ID, $iteration, \"$experiment_id\")
-    CalibrateAtmos.run_forward_model(atmos_config)
+    include(\"experiments/$experiment_id/model_interface.jl\")
+
+    physical_model = CalibrateAtmos.get_forward_model(Val(:$experiment_id))
+    config = CalibrateAtmos.get_config(physical_model, $SLURM_ARRAY_TASK_ID, $iteration, \"$experiment_id\")
+    CalibrateAtmos.run_forward_model(physical_model, config)
 "
