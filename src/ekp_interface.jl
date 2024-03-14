@@ -14,13 +14,18 @@ path_to_iteration(output_dir, iteration) =
     joinpath(output_dir, join(["iteration", lpad(iteration, 3, "0")], "_"))
 
 """
-    get_prior(prior_path; names = nothing)
+    get_prior(prior_pathAbstractString; names = nothing)
+    get_prior(param_dict::AbstractDict; names = nothing)
 
 Constructs the combined prior distribution from the TOML file at the `prior_path`.
 If no parameter names are passed in, all parameters in the TOML are used in the distribution.
 """
-function get_prior(prior_path; names = nothing)
+function get_prior(prior_path::AbstractString; names = nothing)
     param_dict = TOML.parsefile(prior_path)
+    return get_prior(param_dict; names)
+end
+
+function get_prior(param_dict::AbstractDict; names = nothing)
     names = isnothing(names) ? keys(param_dict) : names
     prior_vec = [get_parameter_distribution(param_dict, n) for n in names]
     prior = combine_distributions(prior_vec)
@@ -52,15 +57,12 @@ function initialize(
     rng_ekp = Random.MersenneTwister(rng_seed)
 
     output_dir = config["output_dir"]
-    prior_path = config["prior_path"]
-    param_names = config["parameter_names"]
     ensemble_size = config["ensemble_size"]
     # Save in EKI object in iteration_000 folder
     eki_path = joinpath(output_dir, "iteration_000", "eki_file.jld2")
 
-    param_dict = TOML.parsefile(prior_path)
-    prior_vec = [get_parameter_distribution(param_dict, n) for n in param_names]
-    prior = combine_distributions(prior_vec)
+    param_dict = TOML.parsefile(config["prior_path"])
+    prior = get_prior(param_dict)
 
     initial_ensemble =
         EKP.construct_initial_ensemble(rng_ekp, prior, ensemble_size)
@@ -100,7 +102,6 @@ function update_ensemble(
     config = YAML.load_file("experiments/$experiment_id/ekp_config.yml"),
 )
     output_dir = config["output_dir"]
-    names = config["parameter_names"]
     # Load EKI object from iteration folder
     iter_path = path_to_iteration(output_dir, iteration)
     eki_path = joinpath(iter_path, "eki_file.jld2")
@@ -114,10 +115,9 @@ function update_ensemble(
     iteration += 1
 
     # Update and save parameters for next iteration
-    prior_path = config["prior_path"]
-    param_dict = TOML.parsefile(prior_path)
-    prior_vec = [get_parameter_distribution(param_dict, n) for n in names]
-    prior = combine_distributions(prior_vec)
+    param_dict = TOML.parsefile(config["prior_path"])
+    prior = get_prior(param_dict)
+
     save_parameter_ensemble(
         EKP.get_u_final(eki),  # constraints applied when saving
         prior,

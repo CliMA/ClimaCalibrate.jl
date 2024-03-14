@@ -117,10 +117,7 @@ eki_path = joinpath(
 eki = JLD2.load_object(eki_path);
 EKP.get_u(eki)
 prior_path = joinpath(pkg_dir, ekp_config["prior_path"])
-param_names = ekp_config["parameter_names"]
-param_dict = TOML.parsefile(prior_path)
-prior_vec = [get_parameter_distribution(param_dict, n) for n in param_names]
-prior = combine_distributions(prior_vec)
+prior = CalibrateAtmos.get_prior(prior_path)
 
 theta_star_vec =
     (; coefficient_a_m_businger = 4.7, coefficient_a_h_businger = 4.7)
@@ -129,7 +126,7 @@ convergence_plot(
     eki,
     prior,
     theta_star_vec,
-    param_names,
+    ["coefficient_a_m_businger", "coefficient_a_h_businger"],
     joinpath(pkg_dir, "output"),
 )
 

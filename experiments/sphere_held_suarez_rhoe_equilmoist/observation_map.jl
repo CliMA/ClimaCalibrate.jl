@@ -1,4 +1,4 @@
-using NetCDF
+import NetCDF as NC
 using Statistics
 import YAML
 import EnsembleKalmanProcesses: TOMLInterface
@@ -40,8 +40,13 @@ function observation_map(::Val{:sphere_held_suarez_rhoe_equilmoist}, iteration)
     for m in 1:ensemble_size
         member_path =
             TOMLInterface.path_to_ensemble_member(output_dir, iteration, m)
-        ta = ncread(joinpath(member_path, model_output), "ta")
-        G_ensemble[:, m] = process_member_data(ta)
+        try
+            ta = NC.ncread(joinpath(member_path, model_output), "ta")
+            G_ensemble[:, m] = process_member_data(ta)
+        catch e
+            @assert e isa NC.NetCDFError
+            G_ensemble[:, m] .= NaN
+        end
     end
     return G_ensemble
 end

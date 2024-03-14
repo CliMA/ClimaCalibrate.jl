@@ -2,6 +2,7 @@
 #SBATCH --time=24:00:00
 #SBATCH --ntasks=32
 #SBATCH --cpus-per-task=8
+#SBATCH --partition=expansion
 #SBATCH --output="experiments/sphere_held_suarez_rhoe_equilmoist/truth_simulation/model_log.out"
 #SBATCH --partition=expansion
 
