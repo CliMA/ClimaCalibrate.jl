@@ -29,3 +29,13 @@ end
         "observation_map not implemented for experiment Val{:test}() at iteration 1",
     ) CalibrateAtmos.observation_map(Val(:test), 1)
 end
+
+# This test depends on `surface_fluxes_perfect_model` in the `experiments/` folder 
+@testset "calibrate func" begin
+    dir = pwd()
+    cd(pkgdir(CalibrateAtmos))
+    @test_throws ErrorException CalibrateAtmos.calibrate(
+        "surface_fluxes_perfect_model",
+    )
+    cd(dir)
+end

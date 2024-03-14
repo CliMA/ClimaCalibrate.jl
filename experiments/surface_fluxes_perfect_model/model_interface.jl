@@ -33,7 +33,7 @@ struct SurfaceFluxModel <: AbstractPhysicalModel end
 include("sf_model.jl")
 include("observation_map.jl")
 
-function get_forward_model(experiment_id::Val{:surface_fluxes_perfect_model})
+function get_forward_model(::Val{:surface_fluxes_perfect_model})
     return SurfaceFluxModel()
 end
 
@@ -84,8 +84,18 @@ end
 Runs the model with the given an AbstractDict object.
 """
 
-function run_forward_model(::SurfaceFluxModel, config::AbstractDict)
-    x_inputs = load_profiles(config["x_data_file"])
+function run_forward_model(
+    ::SurfaceFluxModel,
+    config::AbstractDict;
+    lk = nothing,
+)
+    x_inputs = if isnothing(lk)
+        load_profiles(config["x_data_file"])
+    else
+        lock(lk) do
+            load_profiles(config["x_data_file"])
+        end
+    end
     FT = typeof(x_inputs.profiles_int[1].T)
     obtain_ustar(FT, x_inputs, config)
 end
