@@ -19,3 +19,4 @@ julia --color=no --project=experiments/$experiment_id -e '
     JLD2.save_object(joinpath(iter_path, "observation_map.jld2"), G_ensemble)
     CalibrateAtmos.update_ensemble(experiment_id, i)
 '
+echo "Update step for iteration $i complete"

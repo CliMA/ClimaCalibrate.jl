@@ -1,7 +1,4 @@
 #!/bin/bash
-#SBATCH --time=2:00:00
-#SBATCH --cpus-per-task=8
-#SBATCH --mem-per-cpu=8G
 
 # Extract command-line arguments
 experiment_id=$1
