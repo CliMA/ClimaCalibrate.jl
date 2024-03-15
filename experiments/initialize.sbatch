@@ -6,7 +6,7 @@
 
 experiment_id=$1
 
-echo "Initializing calibration for experiment $experiment_id"
+echo "Initializing calibration for experiment: $experiment_id"
 julia --color=no --project=experiments/$experiment_id -e 'using Pkg; Pkg.instantiate(;verbose=true)'
 
 julia --color=no --project=experiments/$experiment_id -e '
@@ -14,4 +14,4 @@ julia --color=no --project=experiments/$experiment_id -e '
     CalibrateAtmos.initialize("'$experiment_id'")
 '
 
-echo "Calibration initialized."
+echo "Calibration initialized"
