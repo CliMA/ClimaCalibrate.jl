@@ -3,8 +3,7 @@
 
 experiment_id=$1
 i=$2
-
-echo "Iteration $i"
+echo "Running update step after iteration $i"
 
 julia --color=no --project=experiments/$experiment_id -e '
     import YAML, JLD2
