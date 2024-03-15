@@ -5,6 +5,7 @@ using Distributions
 import EnsembleKalmanProcesses as EKP
 using EnsembleKalmanProcesses.ParameterDistributions
 using EnsembleKalmanProcesses.TOMLInterface
+import ClimaComms
 
 """
     path_to_iteration(output_dir, iteration)
@@ -131,4 +132,55 @@ function update_ensemble(
     iter_path = path_to_iteration(output_dir, iteration)
     eki_path = joinpath(iter_path, "eki_file.jld2")
     JLD2.save_object(eki_path, eki)
+    return eki
+end
+
+"""
+    calibrate(experiment_id)
+
+Convenience function for running a full calibration experiment for the given
+`experiment_id`. 
+This function requires the relevant experiment project and model interface to be loaded.
+
+```julia
+import CalibrateAtmos
+
+experiment_id = "surface_fluxes_perfect_model"
+experiment_path = joinpath(pkgdir(CalibrateAtmos), "experiments", experiment_id)
+include(joinpath(experiment_path, "model_interface.jl"))
+include(joinpath(experiment_path, "generate_truth.jl"))
+
+eki = CalibrateAtmos.calibrate(experiment_id)
+```
+"""
+function calibrate(experiment_id; device = ClimaComms.device())
+    ekp_config =
+        YAML.load_file(joinpath("experiments", experiment_id, "ekp_config.yml"))
+    # initialize the CalibrateAtmos
+    initialize(experiment_id)
+
+    # run experiment with CalibrateAtmos for N_iter iterations
+    N_iter = ekp_config["n_iterations"]
+    N_mem = ekp_config["ensemble_size"]
+    output_dir = ekp_config["output_dir"]
+    eki = nothing
+    physical_model = get_forward_model(Val(Symbol(experiment_id)))
+    lk = ReentrantLock()
+    for i in 0:(N_iter - 1)
+        ClimaComms.@threaded device for m in 1:N_mem
+            # model run for each ensemble member
+            model_config = get_config(physical_model, m, i, experiment_id)
+            run_forward_model(physical_model, model_config; lk)
+            @info "Finished model run for member $m at iteration $i"
+        end
+
+        # update EKP with the ensemble output and update calibrated parameters
+        G_ensemble = observation_map(Val(Symbol(experiment_id)), i)
+        JLD2.save_object(
+            joinpath(path_to_iteration(output_dir, i), "observation_map.jld2"),
+            G_ensemble,
+        )
+        eki = update_ensemble(experiment_id, i)
+    end
+    return eki
 end

@@ -1,9 +1,7 @@
 ["coefficient_a_m_businger"]
 prior = "constrained_gaussian(coefficient_a_m_businger, 4.7, 0.5, 2, 6)"
 type = "float"
-alias = "businger_a_m"
 
 ["coefficient_a_h_businger"]
 prior = "constrained_gaussian(coefficient_a_h_businger, 4.6, 3, 0, 10)"
 type = "float"
-alias = "businger_a_h"
