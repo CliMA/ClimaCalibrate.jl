@@ -1,4 +1,7 @@
 #!/bin/bash
+export MODULEPATH=/groups/esm/modules:$MODULEPATH
+module load climacommon/2024_03_18
+
 source slurm/parse_commandline.sh
 if [ ! -d $output ] ; then
     mkdir $output

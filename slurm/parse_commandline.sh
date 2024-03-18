@@ -1,6 +1,3 @@
-export MODULEPATH=/groups/esm/modules:$MODULEPATH
-module load climacommon/2024_03_18
-
 # Default arguments
 slurm_time="2:00:00"
 slurm_ntasks="1"
@@ -18,11 +15,7 @@ Options:
     -h, --help:          Display this help message.
 
 Arguments:
-    experiment_id:   A unique identifier for your experiment (required).
-
-Notes:
-    Cannot specify both CPU and GPU resources.
-    Script exits with error on missing arguments or invalid options."
+    experiment_id:   A unique identifier for your experiment (required)."
 
 # Parse arguments using getopt
 VALID_ARGS=$(getopt -o h,t:,n:,c:,g: --long help,time:,ntasks:,cpus_per_task:,gpus_per_task: -- "$@")
