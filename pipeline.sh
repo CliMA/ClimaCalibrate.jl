@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 export MODULEPATH=/groups/esm/modules:$MODULEPATH
 module load climacommon/2024_03_18
 
