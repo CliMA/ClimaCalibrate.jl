@@ -4,28 +4,8 @@ import YAML
 import EnsembleKalmanProcesses: TOMLInterface
 import JLD2
 import CalibrateAtmos: observation_map
-
+using ClimaAnalysis
 export observation_map
-
-function longitudinal_avg(arr)
-    dims = 2
-    for (idx, dim_size) in enumerate(size(arr))
-        if dim_size == 180
-            dims = idx
-        end
-    end
-    return dropdims(mean(arr; dims); dims)
-end
-
-function latitudinal_avg(arr)
-    dims = 3
-    for (idx, dim_size) in enumerate(size(arr))
-        if dim_size == 80
-            dims = idx
-        end
-    end
-    return dropdims(mean(arr; dims); dims)
-end
 
 function observation_map(::Val{:sphere_held_suarez_rhoe_equilmoist}, iteration)
     experiment_id = "sphere_held_suarez_rhoe_equilmoist"
@@ -41,8 +21,8 @@ function observation_map(::Val{:sphere_held_suarez_rhoe_equilmoist}, iteration)
         member_path =
             TOMLInterface.path_to_ensemble_member(output_dir, iteration, m)
         try
-            ta = NC.ncread(joinpath(member_path, model_output), "ta")
-            G_ensemble[:, m] = process_member_data(ta)
+            simdir = SimDir(member_path)
+            G_ensemble[:, m] = process_member_data(simdir)
         catch e
             @assert e isa NC.NetCDFError
             G_ensemble[:, m] .= NaN
@@ -51,19 +31,16 @@ function observation_map(::Val{:sphere_held_suarez_rhoe_equilmoist}, iteration)
     return G_ensemble
 end
 
-function process_member_data(ta; output_variance = false)
+function process_member_data(simdir; output_variance = false)
     # Cut off first 120 days to get equilibrium, take second level slice
-    level_slice = 2
-    ta_second_height = ta[3:size(ta)[1], :, :, level_slice]
-    # Average over long and latitude
-    area_avg_ta_second_height =
-        longitudinal_avg(latitudinal_avg(ta_second_height))
-    observation = Float64[area_avg_ta_second_height[3]]
+    ta = get(simdir; short_name = "ta", reduction = "average", period = "60d");
+    area_avg_ta_second_height = slice(average_lat(average_lon(ta)), z = 242)
+    observation = Float64(slice(z_slice_ta, time = 2.0736e7).data[1])
     if !(output_variance)
         return observation
     else
         variance = Matrix{Float64}(undef, 1, 1)
-        variance[1] = var(area_avg_ta_second_height)
+        variance[1] = var(area_avg_ta_second_height.data)
         return (; observation, variance)
     end
 end

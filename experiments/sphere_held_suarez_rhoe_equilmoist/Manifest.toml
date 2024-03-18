@@ -1,8 +1,8 @@
 # This file is machine-generated - editing it directly is not advised
 
-julia_version = "1.10.1"
+julia_version = "1.10.2"
 manifest_format = "2.0"
-project_hash = "0f71853ffab26879f98be7233d8c1e12c6740717"
+project_hash = "13ca8744b0f42370f32b8ea813deaba16b706d68"
 
 [[deps.ADTypes]]
 git-tree-sha1 = "016833eb52ba2d6bea9fcb50ca295980e728ee24"
@@ -301,6 +301,20 @@ weakdeps = ["SparseArrays"]
 
     [deps.ChainRulesCore.extensions]
     ChainRulesCoreSparseArraysExt = "SparseArrays"
+
+[[deps.ClimaAnalysis]]
+deps = ["NCDatasets", "OrderedCollections", "Statistics"]
+git-tree-sha1 = "4a4125a27588354952013d95050729aaaba6642c"
+uuid = "29b5916a-a76c-4e73-9657-3c8fd22e65e6"
+version = "0.5.0"
+
+    [deps.ClimaAnalysis.extensions]
+    CairoMakieExt = "CairoMakie"
+    GeoMakieExt = "GeoMakie"
+
+    [deps.ClimaAnalysis.weakdeps]
+    CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
+    GeoMakie = "db073c08-6b98-4ee5-b6a4-5efafb3259c6"
 
 [[deps.ClimaAtmos]]
 deps = ["Adapt", "ArgParse", "ArtifactWrappers", "Artifacts", "AtmosphericProfilesLibrary", "ClimaComms", "ClimaCore", "ClimaParams", "ClimaTimeSteppers", "CloudMicrophysics", "Colors", "Dates", "Dierckx", "DiffEqBase", "DiffEqCallbacks", "DocStringExtensions", "FastGaussQuadrature", "Insolation", "Interpolations", "IntervalSets", "Krylov", "LinearAlgebra", "Logging", "NCDatasets", "NVTX", "Pkg", "Printf", "RRTMGP", "Random", "RootSolvers", "SciMLBase", "StaticArrays", "Statistics", "StatsBase", "SurfaceFluxes", "Thermodynamics", "YAML"]
