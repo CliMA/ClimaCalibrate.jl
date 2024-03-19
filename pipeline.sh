@@ -33,8 +33,7 @@ do
                 --partition=$partition \
                 --cpus-per-task=$slurm_cpus_per_task \
                 --gpus-per-task=$slurm_gpus_per_task \
-                slurm/model_run.sbatch $experiment_id $i
-    )
+                slurm/model_run.sbatch $experiment_id $i)
 
     dependency=afterany:$ensemble_array_id
     echo "Iteration $i job id: $ensemble_array_id"
