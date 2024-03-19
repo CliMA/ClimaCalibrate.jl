@@ -73,7 +73,7 @@ fi
 
 # Output slurm configuration
 echo "Running experiment: $experiment_id"
-indent="  └ "
+indent=" └ "
 printf "Slurm configuration (per ensemble member):\n"
 printf "%sTime limit: %s\n" "$indent" "$slurm_time"
 printf "%sTasks: %s\n" "$indent" "$slurm_ntasks"

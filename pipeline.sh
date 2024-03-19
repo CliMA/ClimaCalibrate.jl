@@ -1,6 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 export MODULEPATH=/groups/esm/modules:$MODULEPATH
+module purge
 module load climacommon/2024_03_18
 
 source slurm/parse_commandline.sh
@@ -13,8 +14,7 @@ init_id=$(sbatch --parsable \
                  --output=$logfile \
                  --partition=$partition \
                  slurm/initialize.sbatch $experiment_id)
-echo "Initialization job_id: $init_id"
-echo ""
+echo -e "Initialization job_id: $init_id\n"
 
 # Loop over iterations
 dependency="afterok:$init_id"
@@ -48,6 +48,5 @@ do
                slurm/update.sbatch $experiment_id $i)
 
     dependency=afterany:$update_id
-    echo "Update $i job id: $update_id"
-    echo ""
+    echo -e "Update $i job id: $update_id\n"
 done
