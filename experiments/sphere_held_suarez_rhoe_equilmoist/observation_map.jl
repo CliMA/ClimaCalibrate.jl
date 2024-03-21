@@ -22,8 +22,9 @@ function observation_map(::Val{:sphere_held_suarez_rhoe_equilmoist}, iteration)
             TOMLInterface.path_to_ensemble_member(output_dir, iteration, m)
         try
             simdir = SimDir(member_path)
-            G_ensemble[:, m] = process_member_data(simdir)
+            G_ensemble[:, m] .= process_member_data(simdir)
         catch e
+            # Catch error for missing files
             @assert e isa NC.NetCDFError
             G_ensemble[:, m] .= NaN
         end
@@ -33,9 +34,10 @@ end
 
 function process_member_data(simdir; output_variance = false)
     # Cut off first 120 days to get equilibrium, take second level slice
-    ta = get(simdir; short_name = "ta", reduction = "average", period = "60d");
+    ta = get(simdir; short_name = "ta", reduction = "average", period = "60d")
     area_avg_ta_second_height = slice(average_lat(average_lon(ta)), z = 242)
-    observation = Float64(slice(z_slice_ta, time = 2.0736e7).data[1])
+    observation =
+        Float64(slice(area_avg_ta_second_height, time = 2.0736e7).data[1])
     if !(output_variance)
         return observation
     else
