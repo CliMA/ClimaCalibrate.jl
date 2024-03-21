@@ -17,7 +17,6 @@ using ClimaComms
 ClimaComms.init(ClimaComms.context())
 import ClimaAtmos as CA
 import YAML
-using NetCDF
 import JLD2
 
 experiment_dir = joinpath("experiments", "sphere_held_suarez_rhoe_equilmoist")
@@ -31,9 +30,9 @@ config = CA.AtmosConfig(config_dict)
 simulation = CA.get_simulation(config)
 CA.solve_atmos!(simulation)
 
-ta = ncread(joinpath(output_dir, "ta_60d_average.nc"), "ta")
 include(joinpath(experiment_dir, "observation_map.jl"))
-(; observation, variance) = process_member_data(ta; output_variance = true)
+simdir = SimDir(output_dir)
+(; observation, variance) = process_member_data(simdir; output_variance = true)
 JLD2.save_object(joinpath(experiment_dir, "obs_mean.jld2"), observation)
 JLD2.save_object(joinpath(experiment_dir, "obs_noise_cov.jld2"), variance)
 '

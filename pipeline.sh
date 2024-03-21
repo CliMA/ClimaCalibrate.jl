@@ -21,7 +21,6 @@ dependency="afterok:$init_id"
 for i in $(seq 0 $((n_iterations - 1)))
 do
     echo "Scheduling iteration $i"
-    format_i=$(printf "iteration_%03d" "$i")
 
     ensemble_array_id=$(
         sbatch --dependency=$dependency --kill-on-invalid-dep=yes --parsable \
@@ -46,6 +45,6 @@ do
                --partition=$partition \
                slurm/update.sbatch $experiment_id $i)
 
-    dependency=afterany:$update_id
+    dependency=afterok:$update_id
     echo -e "Update $i job id: $update_id\n"
 done

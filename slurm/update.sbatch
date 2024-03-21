@@ -12,7 +12,7 @@ julia --color=no --project=experiments/$experiment_id -e '
     experiment_id = "'$experiment_id'"
     i = '$i'
     include("experiments/'$experiment_id'/model_interface.jl")
-    G_ensemble = CalibrateAtmos.observation_map(Val(:'$experiment_id'), i)
+    G_ensemble = CalibrateAtmos.observation_map(Val(Symbol(experiment_id)), i)
     config = YAML.load_file(joinpath("experiments", experiment_id, "ekp_config.yml"))
     output_dir = config["output_dir"]
     iter_path = CalibrateAtmos.path_to_iteration(output_dir, i)
