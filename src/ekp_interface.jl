@@ -169,8 +169,11 @@ function calibrate(experiment_id; device = ClimaComms.device())
     for i in 0:(N_iter - 1)
         ClimaComms.@threaded device for m in 1:N_mem
             # model run for each ensemble member
-            model_config = get_config(physical_model, m, i, experiment_id)
-            run_forward_model(physical_model, model_config; lk)
+            run_forward_model(
+                physical_model,
+                get_config(physical_model, m, i, experiment_id);
+                lk,
+            )
             @info "Finished model run for member $m at iteration $i"
         end
 
