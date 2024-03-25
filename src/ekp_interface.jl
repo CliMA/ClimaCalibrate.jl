@@ -48,8 +48,7 @@ Save an ensemble's observation map output to the correct folder.
 """
 function save_G_ensemble(experiment_id, iteration, G_ensemble)
     config = get_ekp_config(experiment_id)
-    iter_path =
-        path_to_iteration(config["output_dir"], iteration)
+    iter_path = path_to_iteration(config["output_dir"], iteration)
     JLD2.save_object(joinpath(iter_path, "G_ensemble.jld2"), G_ensemble)
 end
 
