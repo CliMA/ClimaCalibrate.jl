@@ -1,6 +1,6 @@
 # This file is machine-generated - editing it directly is not advised
 
-julia_version = "1.10.1"
+julia_version = "1.10.2"
 manifest_format = "2.0"
 project_hash = "8b52a1f87337958a3f0ec6e731cccb862b78de20"
 
@@ -300,7 +300,7 @@ uuid = "83423d85-b0ee-5818-9007-b63ccbeb887a"
 version = "1.16.1+1"
 
 [[deps.CalibrateAtmos]]
-deps = ["CalibrateEmulateSample", "ClimaComms", "ClimaCore", "ClimaParams", "Distributions", "EnsembleKalmanProcesses", "JLD2", "PrecompileTools", "Random", "SciMLBase", "TOML", "YAML"]
+deps = ["CalibrateEmulateSample", "ClimaComms", "ClimaParams", "Distributions", "EnsembleKalmanProcesses", "JLD2", "PrecompileTools", "Random", "SciMLBase", "TOML", "YAML"]
 path = "../.."
 uuid = "4347a170-ebd6-470c-89d3-5c705c0cacc2"
 version = "0.1.0"

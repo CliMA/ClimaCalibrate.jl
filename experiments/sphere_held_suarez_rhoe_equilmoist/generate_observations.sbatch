@@ -3,7 +3,7 @@
 #SBATCH --ntasks=64
 #SBATCH --cpus-per-task=8
 #SBATCH --partition=expansion
-#SBATCH --output="experiments/sphere_held_suarez_rhoe_equilmoist/truth_simulation/model_log.out"
+#SBATCH --output="experiments/sphere_held_suarez_rhoe_equilmoist/truth_simulation/model_log.txt"
 #SBATCH --partition=expansion
 
 # Configure the environment

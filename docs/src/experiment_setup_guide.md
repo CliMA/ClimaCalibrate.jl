@@ -136,7 +136,7 @@ observation_map(::Val(Symbol(experiment_id)), iteration)
 This function must load in model diagnostics for each ensemble member in the iteration and construct an array `arr = Array{Float64}(undef, dims..., ensemble_size)` such that
 `arr[:, i]` will return the i-th ensemble member's observation map output. Note this floating point precision is required for the EKI update step.
 
-In the update step of EKI, the array will be saved in a JLD2 file named `observation_map.jld2` in the iteration folder of the output directory.
+In the update step of EKI, the array will be saved in a JLD2 file named `G_ensemble.jld2` in the iteration folder of the output directory.
 
 As an example, in `observation_map(iteration)` in the `sphere_held_suarez_rhoe_equilmoist` experiment, we have the following sequence:
 

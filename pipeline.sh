@@ -13,6 +13,7 @@ fi
 init_id=$(sbatch --parsable \
                  --output=$logfile \
                  --partition=$partition \
+                 --export=generate_data=$generate_data \
                  slurm/initialize.sbatch $experiment_id)
 echo -e "Initialization job_id: $init_id\n"
 
@@ -21,7 +22,6 @@ dependency="afterok:$init_id"
 for i in $(seq 0 $((n_iterations - 1)))
 do
     echo "Scheduling iteration $i"
-
     ensemble_array_id=$(
         sbatch --dependency=$dependency --kill-on-invalid-dep=yes --parsable \
                 --job=model-$i \
