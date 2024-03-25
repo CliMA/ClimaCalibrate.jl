@@ -34,6 +34,26 @@ function get_prior(param_dict::AbstractDict; names = nothing)
 end
 
 """
+    get_ekp_config(experiment_id)
+
+Load the EKP configuration for a given `experiment_id`
+"""
+get_ekp_config(experiment_id) =
+    YAML.load_file(joinpath("experiments", experiment_id, "ekp_config.yml"))
+
+"""
+    save_G_ensemble(experiment_id, iteration, G_ensemble)
+
+Save an ensemble's observation map output to the correct folder.
+"""
+function save_G_ensemble(experiment_id, iteration, G_ensemble)
+    config = get_ekp_config(experiment_id)
+    iter_path =
+        path_to_iteration(config["output_dir"], iteration)
+    JLD2.save_object(joinpath(iter_path, "G_ensemble.jld2"), G_ensemble)
+end
+
+"""
     initialize(
         experiment_id;
         config = YAML.load_file("experiments/\$experiment_id/ekp_config.yml"),
@@ -109,7 +129,7 @@ function update_ensemble(
     eki = JLD2.load_object(eki_path)
 
     # Load data from the ensemble
-    G_ens = JLD2.load_object(joinpath(iter_path, "observation_map.jld2"))
+    G_ens = JLD2.load_object(joinpath(iter_path, "G_ensemble.jld2"))
 
     # Update
     EKP.update_ensemble!(eki, G_ens)
@@ -154,8 +174,7 @@ eki = CalibrateAtmos.calibrate(experiment_id)
 ```
 """
 function calibrate(experiment_id; device = ClimaComms.device())
-    ekp_config =
-        YAML.load_file(joinpath("experiments", experiment_id, "ekp_config.yml"))
+    ekp_config = get_ekp_config(experiment_id)
     # initialize the CalibrateAtmos
     initialize(experiment_id)
 
@@ -179,10 +198,7 @@ function calibrate(experiment_id; device = ClimaComms.device())
 
         # update EKP with the ensemble output and update calibrated parameters
         G_ensemble = observation_map(Val(Symbol(experiment_id)), i)
-        JLD2.save_object(
-            joinpath(path_to_iteration(output_dir, i), "observation_map.jld2"),
-            G_ensemble,
-        )
+        save_G_ensemble(experiment_id, i, G_ensemble)
         eki = update_ensemble(experiment_id, i)
     end
     return eki

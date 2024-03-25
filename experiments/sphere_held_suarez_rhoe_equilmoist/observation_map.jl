@@ -3,17 +3,15 @@ using Statistics
 import YAML
 import EnsembleKalmanProcesses: TOMLInterface
 import JLD2
-import CalibrateAtmos: observation_map
+import CalibrateAtmos: observation_map, get_ekp_config
 using ClimaAnalysis
 export observation_map
 
 function observation_map(::Val{:sphere_held_suarez_rhoe_equilmoist}, iteration)
     experiment_id = "sphere_held_suarez_rhoe_equilmoist"
-    config =
-        YAML.load_file(joinpath("experiments", experiment_id, "ekp_config.yml"))
+    config = get_ekp_config(experiment_id)
     output_dir = config["output_dir"]
     ensemble_size = config["ensemble_size"]
-    model_output = "ta_60d_average.nc"
 
     dims = 1
     G_ensemble = Array{Float64}(undef, dims..., ensemble_size)

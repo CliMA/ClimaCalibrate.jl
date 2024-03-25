@@ -1,7 +1,5 @@
 # generate_truth: generate true y, noise and x_inputs
-using Pkg
 experiment_id = "surface_fluxes_perfect_model"
-Pkg.activate("experiments/$experiment_id")
 
 import SurfaceFluxes as SF
 import SurfaceFluxes.Parameters as SFPP
