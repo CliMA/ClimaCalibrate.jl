@@ -3,11 +3,6 @@ agents:
   modules: climacommon/2024_03_18
 
 steps:
-  - label: "test"
-    parallelism: 2
-    command: julia -e 'println(ENV["MEMBER_ID"])'
-    env:
-      MEMBER_ID: "${BUILDKITE_PARALLEL_JOB}"
   - label: Initialize
     key: init
     command: |
@@ -31,9 +26,11 @@ steps:
     parallelism: 10
     command: |
       srun julia --project=experiments/surface_fluxes_perfect_model -e '
+        import Pkg; Pkg.status();
+        @show Base.active_project()
         import CalibrateAtmos as CAL
         experiment_id = "surface_fluxes_perfect_model"
-        i = 0; member = ${BUILDKITE_PARALLEL_JOB} + 1
+        i = 0; member = parse(Int, ENV["BUILDKITE_PARALLEL_JOB"]) + 1
         include("experiments/surface_fluxes_perfect_model/model_interface.jl")
         physical_model = CAL.get_forward_model(Val(Symbol(experiment_id)))
         config = CAL.get_config(physical_model, member, i, experiment_id)
@@ -68,9 +65,11 @@ steps:
     parallelism: 10
     command: |
       srun julia --project=experiments/surface_fluxes_perfect_model -e '
+        import Pkg; Pkg.status();
+        @show Base.active_project()
         import CalibrateAtmos as CAL
         experiment_id = "surface_fluxes_perfect_model"
-        i = 1; member = ${BUILDKITE_PARALLEL_JOB} + 1
+        i = 1; member = parse(Int, ENV["BUILDKITE_PARALLEL_JOB"]) + 1
         include("experiments/surface_fluxes_perfect_model/model_interface.jl")
         physical_model = CAL.get_forward_model(Val(Symbol(experiment_id)))
         config = CAL.get_config(physical_model, member, i, experiment_id)
@@ -105,9 +104,11 @@ steps:
     parallelism: 10
     command: |
       srun julia --project=experiments/surface_fluxes_perfect_model -e '
+        import Pkg; Pkg.status();
+        @show Base.active_project()
         import CalibrateAtmos as CAL
         experiment_id = "surface_fluxes_perfect_model"
-        i = 2; member = ${BUILDKITE_PARALLEL_JOB} + 1
+        i = 2; member = parse(Int, ENV["BUILDKITE_PARALLEL_JOB"]) + 1
         include("experiments/surface_fluxes_perfect_model/model_interface.jl")
         physical_model = CAL.get_forward_model(Val(Symbol(experiment_id)))
         config = CAL.get_config(physical_model, member, i, experiment_id)

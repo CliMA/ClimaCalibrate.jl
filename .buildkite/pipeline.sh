@@ -45,6 +45,8 @@ cat << EOM
     parallelism: $ensemble_size
     command: |
       srun julia --project=experiments/$experiment_id -e '
+        import Pkg; Pkg.status();
+        @show Base.active_project()
         import CalibrateAtmos as CAL
         experiment_id = "$experiment_id"
         i = $i; member = parse(Int, ENV["BUILDKITE_PARALLEL_JOB"]) + 1
