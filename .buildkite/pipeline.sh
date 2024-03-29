@@ -16,6 +16,11 @@ agents:
   modules: climacommon/2024_03_18
 
 steps:
+  - label: "test"
+    parallelism: 2
+    command: julia -e 'ENV["MEMBER_ID"]'
+    env:
+        MEMBER_ID: "\${BUILDKITE_PARALLEL_JOB}"
   - label: Initialize
     key: init
     command: |
@@ -40,7 +45,7 @@ cat << EOM
 
   - wait
 
-  - label: Iter $i
+  - label: ":abacus: iter $i"
     key: iter_$i
     parallelism: $ensemble_size
     command: |
@@ -60,7 +65,7 @@ cat << EOM
 
   - wait
   
-  - label: Iter $i Update
+  - label: ":recycling_symbol: update"
     key: iter_${i}_update
     depends_on: iter_$i
     command: |
