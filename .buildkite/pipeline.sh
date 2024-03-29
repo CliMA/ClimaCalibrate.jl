@@ -7,15 +7,13 @@ ensemble_size=10
 n_iterations=3
 ntasks=1
 cpus_per_task=1
-time=5
+time_limit=5
 
 # Initialize pipeline, project and calibration
 cat << EOM
 agents:
   queue: new-central
-  modules: climacommon/2024_03_18 
-env:
-  experiment: experiments/$experiment_id
+  modules: climacommon/2024_03_18
 
 steps:
   - label: Initialize
@@ -58,7 +56,7 @@ cat << EOM
     agents:
       slurm_cpus_per_task: $cpus_per_task
       slurm_ntasks: $ntasks
-      slurm_time: $time
+      slurm_time: $time_limit
 
   - wait
   
