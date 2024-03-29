@@ -7,6 +7,47 @@ using EnsembleKalmanProcesses.ParameterDistributions
 using EnsembleKalmanProcesses.TOMLInterface
 import ClimaComms
 
+export ExperimentConfig
+
+struct ExperimentConfig
+    id
+    n_iterations
+    ensemble_size
+    observations
+    noise
+    prior
+    output_dir
+end
+
+"""
+    ExperimentConfig(experiment_id; 
+        n_iterations,
+        ensemble_size,
+        observations,
+        noise,
+        prior,
+        output_dir,
+    )
+
+ExperimentConfig constructor. If an individual keyword argument is not given, 
+default is obtained from the YAML at `get_ekp_yaml(experiment_id)`.
+"""
+function ExperimentConfig(experiment_id; kwargs...)
+    # load from YAML, use kwargs to override
+    config = YAML.load_file(get_ekp_yaml(experiment_id))
+    default_output = haskey(ENV, "CI") ? experiment_id : joinpath("output", experiment_id)
+    output_dir = get(config, "output_dir", default_output)
+    return ExperimentConfig(
+        experiment_id,
+        get(kwargs, :n_iterations, config["n_iterations"]),
+        get(kwargs, :ensemble_size, config["ensemble_size"]),
+        get(kwargs, :observations, JLD2.load_object(config["truth_data"])),
+        get(kwargs, :noise, JLD2.load_object(config["truth_noise"])),
+        get(kwargs, :prior, get_prior(config["prior_path"])),
+        get(kwargs, :output_dir, output_dir)
+    )
+end
+
 """
     path_to_iteration(output_dir, iteration)
 Returns the path to the iteration folder within `output_dir` for the given iteration number.
@@ -34,11 +75,11 @@ function get_prior(param_dict::AbstractDict; names = nothing)
 end
 
 """
-    get_ekp_config(experiment_id)
+    get_ekp_yaml(experiment_id)
 
 Load the EKP configuration for a given `experiment_id`
 """
-get_ekp_config(experiment_id) =
+get_ekp_yaml(experiment_id) =
     YAML.load_file(joinpath("experiments", experiment_id, "ekp_config.yml"))
 
 """
@@ -47,51 +88,35 @@ get_ekp_config(experiment_id) =
 Save an ensemble's observation map output to the correct folder.
 """
 function save_G_ensemble(experiment_id, iteration, G_ensemble)
-    config = get_ekp_config(experiment_id)
-    iter_path = path_to_iteration(config["output_dir"], iteration)
+    config = ExperimentConfig(experiment_id)
+    iter_path = path_to_iteration(config.output_dir, iteration)
     JLD2.save_object(joinpath(iter_path, "G_ensemble.jld2"), G_ensemble)
 end
 
 """
+    initialize(config::ExperimentConfig)
     initialize(
-        experiment_id;
-        config = YAML.load_file("experiments/\$experiment_id/ekp_config.yml"),
-        Γ = JLD2.load(config["truth_noise"]),
-        y = JLD2.load(config["truth_data"]),
-        rng_seed = 1234,
+        experiment_id::AbstractString;
+        kwargs...
     )
-Initializes the EKP object and the model ensemble.
-
-Takes in
- - `experiment_id`: the name of the experiment, which corresponds to the name of the subfolder in `experiments/`
- - `config`: a dictionary of configuration values
+Initializes the EKP object and the model ensemble. See ExperimentConfig for a full list of keyword arguments.
 """
-function initialize(
-    experiment_id;
-    config = YAML.load_file(
-        joinpath("experiments", experiment_id, "ekp_config.yml"),
-    ),
-    Γ = JLD2.load_object(config["truth_noise"]),
-    y = JLD2.load_object(config["truth_data"]),
-    rng_seed = 1234,
-)
+initialize(
+    experiment_id::AbstractString; kwargs...
+) = initialize(ExperimentConfig(experiment_id; kwargs...))
+
+function initialize(config::ExperimentConfig)
     Random.seed!(rng_seed)
     rng_ekp = Random.MersenneTwister(rng_seed)
 
-    output_dir = config["output_dir"]
-    ensemble_size = config["ensemble_size"]
-    # Save in EKI object in iteration_000 folder
-    eki_path = joinpath(output_dir, "iteration_000", "eki_file.jld2")
-
-    param_dict = TOML.parsefile(config["prior_path"])
-    prior = get_prior(param_dict)
+    (; observations, noise, prior, output_dir) = config
 
     initial_ensemble =
         EKP.construct_initial_ensemble(rng_ekp, prior, ensemble_size)
     eki = EKP.EnsembleKalmanProcess(
         initial_ensemble,
-        y,
-        Γ,
+        observations,
+        noise,
         EKP.Inversion();
         rng = rng_ekp,
         failure_handler_method = EKP.SampleSuccGauss(),
@@ -105,6 +130,9 @@ function initialize(
         "parameters.toml",
         0,  # Initial iteration = 0
     )
+
+    # Save in EKI object in iteration_000 folder
+    eki_path = joinpath(output_dir, "iteration_000", "eki_file.jld2")
     JLD2.save_object(eki_path, eki)
     return eki
 end
@@ -118,16 +146,17 @@ end
 Updates the EKI object and saves parameters for the next iteration.
 Assumes that the observation map has been run and saved in the current iteration folder.
 """
+update_ensemble(experiment_id, iteration) =
+update_ensemble(ExperimentConfig(experiment_id), iteration)
+
 function update_ensemble(
-    experiment_id,
+    configuration::ExperimentConfig,
     iteration;
-    config = YAML.load_file("experiments/$experiment_id/ekp_config.yml"),
 )
-    output_dir = config["output_dir"]
+    (; prior, output_dir) = configuration
     # Load EKI object from iteration folder
     iter_path = path_to_iteration(output_dir, iteration)
-    eki_path = joinpath(iter_path, "eki_file.jld2")
-    eki = JLD2.load_object(eki_path)
+    eki = JLD2.load_object(joinpath(iter_path, "eki_file.jld2"))
 
     # Load data from the ensemble
     G_ens = JLD2.load_object(joinpath(iter_path, "G_ensemble.jld2"))
@@ -135,10 +164,6 @@ function update_ensemble(
     # Update
     EKP.update_ensemble!(eki, G_ens)
     iteration += 1
-
-    # Update and save parameters for next iteration
-    param_dict = TOML.parsefile(config["prior_path"])
-    prior = get_prior(param_dict)
 
     save_parameter_ensemble(
         EKP.get_u_final(eki),  # constraints applied when saving
@@ -174,20 +199,19 @@ include(joinpath(experiment_path, "generate_data.jl"))
 eki = CalibrateAtmos.calibrate(experiment_id)
 ```
 """
-function calibrate(experiment_id; device = ClimaComms.device())
-    ekp_config = get_ekp_config(experiment_id)
+function calibrate(experiment_id; device = ClimaComms.device(), kwargs...)
+    configuration = ExperimentConfig(experiment_id; kwargs...)
     # initialize the CalibrateAtmos
     initialize(experiment_id)
 
     # run experiment with CalibrateAtmos for N_iter iterations
-    N_iter = ekp_config["n_iterations"]
-    N_mem = ekp_config["ensemble_size"]
-    output_dir = ekp_config["output_dir"]
+    (; n_iterations, ensemble_size) = configuration
+
     eki = nothing
     physical_model = get_forward_model(Val(Symbol(experiment_id)))
     lk = ReentrantLock()
-    for i in 0:(N_iter - 1)
-        ClimaComms.@threaded device for m in 1:N_mem
+    for i in 0:(n_iterations - 1)
+        ClimaComms.@threaded device for m in 1:ensemble_size
             # model run for each ensemble member
             run_forward_model(
                 physical_model,

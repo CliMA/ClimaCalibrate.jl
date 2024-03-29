@@ -148,8 +148,8 @@ Pseudocode for `observation_map(iteration)`:
 function observation_map(::Val{:sphere_held_suarez_rhoe_equilmoist}, iteration)
     # Get Configuration
     experiment_id = "sphere_held_suarez_rhoe_equilmoist"
-    config = load_config(experiment_id)
-    ensemble_size = config["ensemble_size"]
+    config = ExperimentConfig(experiment_id)
+    ensemble_size = config.ensemble_size
 
     # Setup output array
     # dims = size of individual member observation map output

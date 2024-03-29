@@ -2,7 +2,7 @@ using Statistics
 import YAML
 import EnsembleKalmanProcesses: TOMLInterface
 import JLD2
-import CalibrateAtmos: observation_map, get_ekp_config
+import CalibrateAtmos: observation_map
 
 """
     observation_map(::Val{:surface_fluxes_perfect_model}, iteration)
@@ -12,9 +12,8 @@ as specified by process_member_data, for the given iteration.
 """
 function observation_map(::Val{:surface_fluxes_perfect_model}, iteration)
     experiment_id = "surface_fluxes_perfect_model"
-    config = get_ekp_config(experiment_id)
-    output_dir = config["output_dir"]
-    ensemble_size = config["ensemble_size"]
+    config = ExperimentConfig(experiment_id)
+    (; output_dir, ensemble_size) = config
     model_output = "model_ustar_array.jld2"
 
     dims = 1

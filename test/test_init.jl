@@ -9,15 +9,12 @@ FT = Float64
 output_dir = "test_init"
 prior_path = joinpath("test_case_inputs", "prior.toml")
 param_names = ["one", "two"]
-config = Dict(
-    "output_dir" => output_dir,
-    "prior_path" => prior_path,
-    "ensemble_size" => 1,
-)
-Γ = 0.1 * I
-y = zeros(Float64, 1)
 
-CalibrateAtmos.initialize("test"; config, Γ, y, rng_seed = 4444)
+prior = CalibrateAtmos.get_prior(prior_path)
+noise = 0.1 * I
+observations = zeros(Float64, 1)
+
+CalibrateAtmos.initialize("test"; prior, ensemble_size, output_dir, noise, observations, rng_seed = 4444)
 
 override_file =
     joinpath(output_dir, "iteration_000", "member_001", "parameters.toml")
