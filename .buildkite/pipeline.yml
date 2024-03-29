@@ -10,8 +10,9 @@ steps:
   - label: init
     command: |
       echo $$experiment
-      julia --project=$$experiment -e 'import Pkg; Pkg.instantiate(;verbose=true)'
-      julia --project=$$experiment -e 'import CalibrateAtmos; include("$$experiment/generate_truth.jl"); CalibrateAtmos.initialize("surface_fluxes_perfect_model")'
+      julia --project=$$experiment -e 'import Pkg; Pkg.build("CalibrateAtmos"); Pkg.instantiate(;verbose=true)'
+      julia --project=$$experiment $$experiment/generate_truth.jl
+      julia --project=$$experiment -e 'import CalibrateAtmos; CalibrateAtmos.initialize("surface_fluxes_perfect_model")'
     agents:
       slurm_cpus_per_task: 8
     env:
