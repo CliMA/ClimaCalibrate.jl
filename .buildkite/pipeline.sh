@@ -18,7 +18,7 @@ agents:
 steps:
   - label: "test"
     parallelism: 2
-    command: julia -e 'ENV["MEMBER_ID"]'
+    command: julia -e 'println(ENV["MEMBER_ID"])'
     env:
         MEMBER_ID: "$${BUILDKITE_PARALLEL_JOB}"
   - label: Initialize
@@ -65,7 +65,7 @@ cat << EOM
 
   - wait
   
-  - label: ":recycling_symbol: update"
+  - label: ":recycle: update"
     key: iter_${i}_update
     depends_on: iter_$i
     command: |
