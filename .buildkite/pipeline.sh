@@ -20,7 +20,7 @@ steps:
     parallelism: 2
     command: julia -e 'ENV["MEMBER_ID"]'
     env:
-        MEMBER_ID: "\${BUILDKITE_PARALLEL_JOB}"
+        MEMBER_ID: "$${BUILDKITE_PARALLEL_JOB}"
   - label: Initialize
     key: init
     command: |
