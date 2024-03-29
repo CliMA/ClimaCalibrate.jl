@@ -11,7 +11,7 @@ steps:
     key: init
     command: |
       echo $$experiment
-      julia --project=$$experiment -e 'import Pkg; Pkg.build("CalibrateAtmos"); Pkg.instantiate(;verbose=true)'
+      julia --project=$$experiment -e 'import Pkg; Pkg.instantiate(;verbose=true)'
       julia --project=$$experiment $$experiment/generate_truth.jl
       julia --project=$$experiment -e 'import CalibrateAtmos; CalibrateAtmos.initialize("surface_fluxes_perfect_model")'
     agents:
@@ -30,7 +30,7 @@ steps:
         
         experiment_id = "surface_fluxes_perfect_model"
         i = 0
-        member = %N
+        member = $BUILDKITE_PARALLEL_JOB + 1
 
         include("experiments/\$experiment_id/model_interface.jl")
 
