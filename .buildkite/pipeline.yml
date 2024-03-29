@@ -3,6 +3,11 @@ agents:
   modules: climacommon/2024_03_18
 
 steps:
+  - label: "test"
+    parallelism: 2
+    command: julia -e 'println($$MEMBER_ID)'
+    env:
+        MEMBER_ID: "${BUILDKITE_PARALLEL_JOB}"
   - label: Initialize
     key: init
     command: |
@@ -21,7 +26,7 @@ steps:
 
   - wait
 
-  - label: Iter 0
+  - label: ":abacus: iter 0"
     key: iter_0
     parallelism: 10
     command: |
@@ -41,7 +46,7 @@ steps:
 
   - wait
   
-  - label: Iter 0 Update
+  - label: ":recycle: update"
     key: iter_0_update
     depends_on: iter_0
     command: |
@@ -58,7 +63,7 @@ steps:
 
   - wait
 
-  - label: Iter 1
+  - label: ":abacus: iter 1"
     key: iter_1
     parallelism: 10
     command: |
@@ -78,7 +83,7 @@ steps:
 
   - wait
   
-  - label: Iter 1 Update
+  - label: ":recycle: update"
     key: iter_1_update
     depends_on: iter_1
     command: |
@@ -95,7 +100,7 @@ steps:
 
   - wait
 
-  - label: Iter 2
+  - label: ":abacus: iter 2"
     key: iter_2
     parallelism: 10
     command: |
@@ -115,7 +120,7 @@ steps:
 
   - wait
   
-  - label: Iter 2 Update
+  - label: ":recycle: update"
     key: iter_2_update
     depends_on: iter_2
     command: |
