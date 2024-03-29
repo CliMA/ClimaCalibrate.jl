@@ -49,7 +49,7 @@ cat << EOM
       srun julia --project=experiments/$experiment_id -e '
         import CalibrateAtmos as CAL
         experiment_id = "$experiment_id"
-        i = $i; member = \$\$BUILDKITE_PARALLEL_JOB + 1
+        i = $i; member = \${BUILDKITE_PARALLEL_JOB} + 1
         include("experiments/$experiment_id/model_interface.jl")
         physical_model = CAL.get_forward_model(Val(Symbol(experiment_id)))
         config = CAL.get_config(physical_model, member, i, experiment_id)
