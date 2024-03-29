@@ -18,9 +18,9 @@ agents:
 steps:
   - label: "test"
     parallelism: 2
-    command: julia -e "\$\${MEMBER_ID}"
+    command: julia -e 'println(ENV["MEMBER_ID"])'
     env:
-        MEMBER_ID: "\${BUILDKITE_PARALLEL_JOB}"
+      MEMBER_ID: "\${BUILDKITE_PARALLEL_JOB}"
   - label: Initialize
     key: init
     command: |
