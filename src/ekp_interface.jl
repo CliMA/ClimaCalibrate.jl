@@ -68,11 +68,13 @@ Takes in
 """
 function initialize(
     experiment_id;
-    config = YAML.load_file(joinpath("experiments", experiment_id, "ekp_config.yml")),
+    config = YAML.load_file(
+        joinpath("experiments", experiment_id, "ekp_config.yml"),
+    ),
     Γ = JLD2.load_object(config["truth_noise"]),
     y = JLD2.load_object(config["truth_data"]),
     rng_seed = 1234,
-    generate_data = config["generate_data"]
+    generate_data = config["generate_data"],
 )
     Random.seed!(rng_seed)
     rng_ekp = Random.MersenneTwister(rng_seed)
