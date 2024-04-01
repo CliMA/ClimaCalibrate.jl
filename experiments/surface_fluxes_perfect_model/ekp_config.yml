@@ -2,6 +2,6 @@ output_dir: output/surface_fluxes_perfect_model
 prior_path: experiments/surface_fluxes_perfect_model/prior.toml
 ensemble_size: 10
 n_iterations: 10
-truth_data: experiments/surface_fluxes_perfect_model/data/obs_mean.jld2
-truth_noise: experiments/surface_fluxes_perfect_model/data/obs_noise_cov.jld2
+observations: experiments/surface_fluxes_perfect_model/data/obs_mean.jld2
+noise: experiments/surface_fluxes_perfect_model/data/obs_noise_cov.jld2
 generate_data: true

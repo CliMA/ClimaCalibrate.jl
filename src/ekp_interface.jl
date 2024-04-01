@@ -10,13 +10,13 @@ import ClimaComms
 export ExperimentConfig
 
 struct ExperimentConfig
-    id
-    n_iterations
-    ensemble_size
-    observations
-    noise
-    prior
-    output_dir
+    id::Any
+    n_iterations::Any
+    ensemble_size::Any
+    observations::Any
+    noise::Any
+    prior::Any
+    output_dir::Any
 end
 
 """
@@ -33,18 +33,36 @@ ExperimentConfig constructor. If an individual keyword argument is not given,
 default is obtained from the YAML at `get_ekp_yaml(experiment_id)`.
 """
 function ExperimentConfig(experiment_id; kwargs...)
-    # load from YAML, use kwargs to override
-    config = YAML.load_file(get_ekp_yaml(experiment_id))
-    default_output = haskey(ENV, "CI") ? experiment_id : joinpath("output", experiment_id)
-    output_dir = get(config, "output_dir", default_output)
+    # TODO: Rewrite this to cleanly grab config dict paths and process them,
+    #  then merge with kwargs.
+    config_dict = get_ekp_yaml(experiment_id)
+
+    default_output =
+        haskey(ENV, "CI") ? experiment_id : joinpath("output", experiment_id)
+    config_dict["output_dir"] = get(config_dict, "output_dir", default_output)
+
+    config_dict["prior"] =
+        haskey(config_dict, "prior_path") ?
+        get_prior(config_dict["prior_path"]) :
+        error("Prior distribution not provided.")
+
+    for key in ["observations", "noise"]
+        config_dict[key] =
+        haskey(config_dict, key) ?
+        JLD2.load_object(config_dict[key]) :
+        error("Observations or noise not provided.")
+    end
+    config_tuple = (;[ Symbol(k) => v for (k, v) in config_dict]...)
+    kwargs = (; config_dict..., kwargs...)
+
     return ExperimentConfig(
         experiment_id,
-        get(kwargs, :n_iterations, config["n_iterations"]),
-        get(kwargs, :ensemble_size, config["ensemble_size"]),
-        get(kwargs, :observations, JLD2.load_object(config["truth_data"])),
-        get(kwargs, :noise, JLD2.load_object(config["truth_noise"])),
-        get(kwargs, :prior, get_prior(config["prior_path"])),
-        get(kwargs, :output_dir, output_dir)
+        kwargs.n_iterations,
+        kwargs.ensemble_size,
+        kwargs.observations,
+        kwargs.noise,
+        kwargs.prior,
+        kwargs.output_dir,
     )
 end
 
@@ -77,11 +95,12 @@ end
 """
     get_ekp_yaml(experiment_id)
 
-Load the EKP configuration for a given `experiment_id`
+Load the EKP configuration for a given `experiment_id`. If no file is found, return an empty Dict()
 """
-get_ekp_yaml(experiment_id) =
-    YAML.load_file(joinpath("experiments", experiment_id, "ekp_config.yml"))
-
+function get_ekp_yaml(experiment_id)
+    config_yaml = joinpath("experiments", experiment_id, "ekp_config.yml")
+    return isfile(config_yaml) ? Dict() : YAML.load_file(config_yaml)
+end
 """
     save_G_ensemble(experiment_id, iteration, G_ensemble)
 
@@ -101,9 +120,8 @@ end
     )
 Initializes the EKP object and the model ensemble. See ExperimentConfig for a full list of keyword arguments.
 """
-initialize(
-    experiment_id::AbstractString; kwargs...
-) = initialize(ExperimentConfig(experiment_id; kwargs...))
+initialize(experiment_id::AbstractString; kwargs...) =
+    initialize(ExperimentConfig(experiment_id; kwargs...))
 
 function initialize(config::ExperimentConfig)
     Random.seed!(rng_seed)
@@ -147,12 +165,9 @@ Updates the EKI object and saves parameters for the next iteration.
 Assumes that the observation map has been run and saved in the current iteration folder.
 """
 update_ensemble(experiment_id, iteration) =
-update_ensemble(ExperimentConfig(experiment_id), iteration)
+    update_ensemble(ExperimentConfig(experiment_id), iteration)
 
-function update_ensemble(
-    configuration::ExperimentConfig,
-    iteration;
-)
+function update_ensemble(configuration::ExperimentConfig, iteration;)
     (; prior, output_dir) = configuration
     # Load EKI object from iteration folder
     iter_path = path_to_iteration(output_dir, iteration)

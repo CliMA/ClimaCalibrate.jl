@@ -14,7 +14,15 @@ prior = CalibrateAtmos.get_prior(prior_path)
 noise = 0.1 * I
 observations = zeros(Float64, 1)
 
-CalibrateAtmos.initialize("test"; prior, ensemble_size, output_dir, noise, observations, rng_seed = 4444)
+CalibrateAtmos.initialize(
+    "test";
+    prior,
+    ensemble_size,
+    output_dir,
+    noise,
+    observations,
+    rng_seed = 4444,
+)
 
 override_file =
     joinpath(output_dir, "iteration_000", "member_001", "parameters.toml")
