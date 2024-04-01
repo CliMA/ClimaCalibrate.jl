@@ -9,7 +9,6 @@ steps:
       julia --project=experiments/surface_fluxes_perfect_model -e '
         import Pkg; Pkg.build("CalibrateAtmos")
         Pkg.instantiate(;verbose=true)'
-      julia --project=experiments/surface_fluxes_perfect_model experiments/surface_fluxes_perfect_model/generate_truth.jl
       julia --project=experiments/surface_fluxes_perfect_model -e '
         import CalibrateAtmos
         CalibrateAtmos.initialize("surface_fluxes_perfect_model")'
@@ -36,6 +35,7 @@ steps:
         config = CAL.get_config(physical_model, member, i, experiment_id)
         CAL.run_forward_model(physical_model, config)
       '
+    artifact_paths: output/surface_fluxes_perfect_model
     agents:
       slurm_cpus_per_task: 1
       slurm_ntasks: 1
@@ -57,6 +57,7 @@ steps:
         CAL.save_G_ensemble(experiment_id, i, G_ensemble)
         CAL.update_ensemble(experiment_id, i)
       '
+    artifact_paths: output/surface_fluxes_perfect_model
 
   - wait
 
@@ -75,6 +76,7 @@ steps:
         config = CAL.get_config(physical_model, member, i, experiment_id)
         CAL.run_forward_model(physical_model, config)
       '
+    artifact_paths: output/surface_fluxes_perfect_model
     agents:
       slurm_cpus_per_task: 1
       slurm_ntasks: 1
@@ -96,6 +98,7 @@ steps:
         CAL.save_G_ensemble(experiment_id, i, G_ensemble)
         CAL.update_ensemble(experiment_id, i)
       '
+    artifact_paths: output/surface_fluxes_perfect_model
 
   - wait
 
@@ -114,6 +117,7 @@ steps:
         config = CAL.get_config(physical_model, member, i, experiment_id)
         CAL.run_forward_model(physical_model, config)
       '
+    artifact_paths: output/surface_fluxes_perfect_model
     agents:
       slurm_cpus_per_task: 1
       slurm_ntasks: 1
@@ -135,3 +139,10 @@ steps:
         CAL.save_G_ensemble(experiment_id, i, G_ensemble)
         CAL.update_ensemble(experiment_id, i)
       '
+    artifact_paths: output/surface_fluxes_perfect_model
+
+  - wait
+
+  - label: "plot"
+    command: julia --project=experiments/surface_fluxes_perfect_model experiments/surface_fluxes_perfect_model/plot.jl
+    artifact_paths: output/surface_fluxes_perfect_model

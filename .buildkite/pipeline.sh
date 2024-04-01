@@ -2,12 +2,15 @@
 set -euo pipefail
 
 experiment_id="surface_fluxes_perfect_model"
+exp_dir="experiments/$experiment_id"
 # Need way of reading this info from EKP config
 ensemble_size=10
 n_iterations=3
 ntasks=1
 cpus_per_task=1
 time_limit=5
+
+plot="true"
 
 # Initialize pipeline, project and calibration
 cat << EOM
@@ -19,11 +22,13 @@ steps:
   - label: Initialize
     key: init
     command: |
-      julia --project=experiments/$experiment_id -e '
+      julia --project=$exp_dir -e '
         import Pkg; Pkg.build("CalibrateAtmos")
         Pkg.instantiate(;verbose=true)'
-      julia --project=experiments/$experiment_id experiments/$experiment_id/generate_truth.jl
-      julia --project=experiments/$experiment_id -e '
+EOM
+
+cat << EOM
+      julia --project=$exp_dir -e '
         import CalibrateAtmos
         CalibrateAtmos.initialize("surface_fluxes_perfect_model")'
     agents:
@@ -44,17 +49,18 @@ cat << EOM
     key: iter_$i
     parallelism: $ensemble_size
     command: |
-      srun julia --project=experiments/$experiment_id -e '
+      srun julia --project=$exp_dir -e '
         import Pkg; Pkg.status();
         @show Base.active_project()
         import CalibrateAtmos as CAL
         experiment_id = "$experiment_id"
         i = $i; member = parse(Int, ENV["BUILDKITE_PARALLEL_JOB"]) + 1
-        include("experiments/$experiment_id/model_interface.jl")
+        include("$exp_dir/model_interface.jl")
         physical_model = CAL.get_forward_model(Val(Symbol(experiment_id)))
         config = CAL.get_config(physical_model, member, i, experiment_id)
         CAL.run_forward_model(physical_model, config)
       '
+    artifact_paths: output/$experiment_id
     agents:
       slurm_cpus_per_task: $cpus_per_task
       slurm_ntasks: $ntasks
@@ -66,15 +72,29 @@ cat << EOM
     key: iter_${i}_update
     depends_on: iter_$i
     command: |
-      julia --project=experiments/$experiment_id -e '
+      julia --project=$exp_dir -e '
         import CalibrateAtmos as CAL
 
         experiment_id = "$experiment_id"
         i = $i
-        include("experiments/$experiment_id/model_interface.jl")
+        include("$exp_dir/model_interface.jl")
         G_ensemble = CAL.observation_map(Val(Symbol(experiment_id)), i)
         CAL.save_G_ensemble(experiment_id, i, G_ensemble)
         CAL.update_ensemble(experiment_id, i)
       '
+    artifact_paths: output/$experiment_id
 EOM
 done
+
+if [ "$plot" == "true" ] ; then
+
+cat << EOM
+
+  - wait
+
+  - label: "plot"
+    command: julia --project=$exp_dir $exp_dir/plot.jl
+    artifact_paths: output/$experiment_id
+EOM
+
+fi
