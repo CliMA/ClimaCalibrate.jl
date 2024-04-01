@@ -28,7 +28,7 @@ steps:
         Pkg.instantiate(;verbose=true)'
 EOM
 
-if [ "$plot" == "true" ] ; then
+if [ "$generate_data" == "true" ] ; then
     echo "      julia --project=$exp_dir $exp_dir/generate_data.jl"
 fi
 
@@ -55,8 +55,6 @@ cat << EOM
     parallelism: $ensemble_size
     command: |
       srun julia --project=$exp_dir -e '
-        import Pkg; Pkg.status();
-        @show Base.active_project()
         import CalibrateAtmos as CAL
         experiment_id = "$experiment_id"
         i = $i; member = parse(Int, ENV["BUILDKITE_PARALLEL_JOB"]) + 1
@@ -97,7 +95,7 @@ cat << EOM
 
   - wait
 
-  - label: "plot"
+  - label: ":artist_palette: plot"
     command: julia --project=$exp_dir $exp_dir/plot.jl
     artifact_paths: output/$experiment_id
 EOM
