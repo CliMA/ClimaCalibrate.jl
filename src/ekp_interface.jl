@@ -10,13 +10,13 @@ import ClimaComms
 export ExperimentConfig
 
 struct ExperimentConfig
-    id::Any
-    n_iterations::Any
-    ensemble_size::Any
-    observations::Any
-    noise::Any
-    prior::Any
-    output_dir::Any
+    id
+    n_iterations
+    ensemble_size
+    observations
+    noise
+    prior
+    output_dir
 end
 
 """
@@ -33,36 +33,34 @@ ExperimentConfig constructor. If an individual keyword argument is not given,
 default is obtained from the YAML at `get_ekp_yaml(experiment_id)`.
 """
 function ExperimentConfig(experiment_id; kwargs...)
-    # TODO: Rewrite this to cleanly grab config dict paths and process them,
-    #  then merge with kwargs.
+    # config_dict is a Dict read from a YAML file
     config_dict = get_ekp_yaml(experiment_id)
 
     default_output =
         haskey(ENV, "CI") ? experiment_id : joinpath("output", experiment_id)
     config_dict["output_dir"] = get(config_dict, "output_dir", default_output)
 
-    config_dict["prior"] =
-        haskey(config_dict, "prior_path") ?
-        get_prior(config_dict["prior_path"]) :
-        error("Prior distribution not provided.")
-
     for key in ["observations", "noise"]
-        config_dict[key] =
-        haskey(config_dict, key) ?
-        JLD2.load_object(config_dict[key]) :
-        error("Observations or noise not provided.")
+        if haskey(config_dict, key)
+            config_dict[key] = JLD2.load_object(config_dict[key])
+        end
     end
-    config_tuple = (;[ Symbol(k) => v for (k, v) in config_dict]...)
-    kwargs = (; config_dict..., kwargs...)
+
+    if haskey(config_dict, "prior_path") 
+        config_dict["prior"] = get_prior(config_dict["prior_path"])
+    end
+
+    config_kwargs = Dict(Symbol(key) => config_dict[key] for key in keys(config_dict))
+    merged_kwargs = merge(config_kwargs, kwargs)
 
     return ExperimentConfig(
         experiment_id,
-        kwargs.n_iterations,
-        kwargs.ensemble_size,
-        kwargs.observations,
-        kwargs.noise,
-        kwargs.prior,
-        kwargs.output_dir,
+        merged_kwargs[:n_iterations],
+        merged_kwargs[:ensemble_size],
+        merged_kwargs[:observations],
+        merged_kwargs[:noise],
+        merged_kwargs[:prior],
+        merged_kwargs[:output_dir],
     )
 end
 
