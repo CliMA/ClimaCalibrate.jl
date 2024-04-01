@@ -74,14 +74,9 @@ function initialize(
     Γ = JLD2.load_object(config["truth_noise"]),
     y = JLD2.load_object(config["truth_data"]),
     rng_seed = 1234,
-    generate_data = config["generate_data"],
 )
     Random.seed!(rng_seed)
     rng_ekp = Random.MersenneTwister(rng_seed)
-
-    if generate_data
-        include(joinpath("experiments", experiment_id, "generate_data.jl"))
-    end
 
     output_dir = config["output_dir"]
     ensemble_size = config["ensemble_size"]

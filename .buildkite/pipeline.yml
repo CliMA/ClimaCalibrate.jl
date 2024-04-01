@@ -9,6 +9,7 @@ steps:
       julia --project=experiments/surface_fluxes_perfect_model -e '
         import Pkg; Pkg.build("CalibrateAtmos")
         Pkg.instantiate(;verbose=true)'
+      julia --project=experiments/surface_fluxes_perfect_model experiments/surface_fluxes_perfect_model/generate_data.jl
       julia --project=experiments/surface_fluxes_perfect_model -e '
         import CalibrateAtmos
         CalibrateAtmos.initialize("surface_fluxes_perfect_model")'

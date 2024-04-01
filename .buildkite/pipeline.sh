@@ -11,6 +11,7 @@ cpus_per_task=1
 time_limit=5
 
 plot="true"
+generate_data="true"
 
 # Initialize pipeline, project and calibration
 cat << EOM
@@ -26,6 +27,10 @@ steps:
         import Pkg; Pkg.build("CalibrateAtmos")
         Pkg.instantiate(;verbose=true)'
 EOM
+
+if [ "$plot" == "true" ] ; then
+    echo "      julia --project=$exp_dir $exp_dir/generate_data.jl"
+fi
 
 cat << EOM
       julia --project=$exp_dir -e '
