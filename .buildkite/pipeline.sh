@@ -28,7 +28,6 @@ steps:
   - label: Initialize
     key: init
     command: |
-    #   julia --project -e 'import Pkg; Pkg.instantiate(;verbose=true)'
       julia --project=$exp_dir -e 'import Pkg; Pkg.build("CalibrateAtmos"); Pkg.instantiate(;verbose=true)'
 EOM
 
