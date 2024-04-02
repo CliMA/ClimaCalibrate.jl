@@ -67,7 +67,7 @@ cat << EOM
         config = CAL.get_config(physical_model, member, i, experiment_id)
         CAL.run_forward_model(physical_model, config)
       '
-    artifact_paths: output/$experiment_id/*
+    artifact_paths: "output/$experiment_id/*"
     agents:
       slurm_cpus_per_task: $cpus_per_task
       slurm_ntasks: $ntasks
@@ -89,7 +89,7 @@ cat << EOM
         CAL.save_G_ensemble(experiment_id, i, G_ensemble)
         CAL.update_ensemble(experiment_id, i)
       '
-    artifact_paths: output/$experiment_id/*
+    artifact_paths: "output/$experiment_id/*"
 EOM
 done
 
@@ -101,7 +101,7 @@ cat << EOM
 
   - label: ":artist palette: plot"
     command: julia --project=$exp_dir $exp_dir/plot.jl
-    artifact_paths: output/$experiment_id/*
+    artifact_paths: "output/$experiment_id/*"
 EOM
 
 fi
