@@ -13,10 +13,10 @@ For the example experiment, `sphere_held_suarez_rhoe_equilmoist`, this is done b
 `sbatch experiments/sphere_held_suarez_rhoe_equilmoist/generate_observations.sbatch`. This script runs the model, passes the output through the observation map, and saves the result.
 
 Once the observations have been processed and saved, the actual calibration pipeline can be run via
-`bash pipeline.sh sphere_held_suarez_rhoe_equilmoist -n 10 -c 8`.
+`bash calibrate.sh sphere_held_suarez_rhoe_equilmoist -n 10 -c 8`.
 
 !!! note
-    The command line interface for `pipeline.sh` will change. For now, the first entry is the experiment id and the second is the number of tasks to use per ensemble member.
+    The command line interface for `calibrate.sh` will change. To obtain detailed usage information, run `bash calibrate.sh --help`.
 
 This consists of three `sbatch` scripts:
 - `initialize.sbatch` initializes the Julia project and the ensemble
