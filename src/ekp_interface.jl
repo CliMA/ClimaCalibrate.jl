@@ -169,7 +169,7 @@ import CalibrateAtmos
 experiment_id = "surface_fluxes_perfect_model"
 experiment_path = joinpath(pkgdir(CalibrateAtmos), "experiments", experiment_id)
 include(joinpath(experiment_path, "model_interface.jl"))
-include(joinpath(experiment_path, "generate_truth.jl"))
+include(joinpath(experiment_path, "generate_data.jl"))
 
 eki = CalibrateAtmos.calibrate(experiment_id)
 ```

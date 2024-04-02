@@ -1,4 +1,4 @@
-# generate_truth: generate true y, noise and x_inputs
+# generate_data: generate true y, noise and x_inputs
 experiment_id = "surface_fluxes_perfect_model"
 
 import SurfaceFluxes as SF

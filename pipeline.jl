@@ -8,7 +8,7 @@ using CalibrateAtmos
 pkg_dir = pkgdir(CalibrateAtmos)
 experiment_path = "$pkg_dir/experiments/$experiment_id"
 include("$experiment_path/model_interface.jl")
-include("$experiment_path/generate_truth.jl")
+include("$experiment_path/generate_data.jl")
 
 CalibrateAtmos.calibrate(experiment_id)
 
