@@ -100,12 +100,12 @@ function convergence_plot(
 end
 
 
-pkg_dir = joinpath(dirname(pathof(CalibrateAtmos)), "..")
+pkg_dir = pkgdir(CalibrateAtmos)
 model_config = YAML.load_file(
-    joinpath(pkg_dir, "experiments/$experiment_id/model_config.yml"),
+    joinpath(pkg_dir, "experiments", experiment_id, "model_config.yml"),
 )
 ekp_config = YAML.load_file(
-    joinpath(pkg_dir, "experiments/$experiment_id/ekp_config.yml"),
+    joinpath(pkg_dir, "experiments", experiment_id, "ekp_config.yml"),
 )
 N_iter = ekp_config["n_iterations"]
 N_mem = ekp_config["ensemble_size"]
@@ -133,7 +133,9 @@ convergence_plot(
 # Plot the convergence of the model observable: ustar
 using Pkg
 FT = Float32
-include(joinpath("experiments", "$experiment_id", "model_interface.jl"))
+include(
+    joinpath(pkg_dir, "experiments", experiment_id, "model_interface.jl"),
+)
 
 f = Makie.Figure()
 ax = Makie.Axis(f[1, 1], xlabel = "Iteration", ylabel = "Model Ustar")
