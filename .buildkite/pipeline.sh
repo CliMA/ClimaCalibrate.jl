@@ -13,12 +13,17 @@ time_limit=5
 plot="true"
 generate_data="true"
 
-# Initialize pipeline, project and calibration
-cat << EOM
+# Overall pipeline configuration
+cat << 'EOM'
 agents:
   queue: new-central
   modules: climacommon/2024_03_18
+env:
+  JULIA_DEPOT_PATH: "${BUILDKITE_BUILD_PATH}/${BUILDKITE_PIPELINE_SLUG}/depot/default"
+EOM
 
+# Initialization
+cat << EOM
 steps:
   - label: Initialize
     key: init
