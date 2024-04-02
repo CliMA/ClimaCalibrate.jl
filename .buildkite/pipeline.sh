@@ -5,7 +5,7 @@ experiment_id="surface_fluxes_perfect_model"
 exp_dir="experiments/$experiment_id"
 # Need way of reading this info from EKP config
 ensemble_size=10
-n_iterations=3
+n_iterations=10
 ntasks=1
 cpus_per_task=1
 time_limit=5
@@ -28,8 +28,8 @@ steps:
   - label: Initialize
     key: init
     command: |
-      julia --project -e 'import Pkg; Pkg.instantiate(;verbose=true)'
-      julia --project=$exp_dir -e 'import Pkg; Pkg.instantiate(;verbose=true)'
+    #   julia --project -e 'import Pkg; Pkg.instantiate(;verbose=true)'
+      julia --project=$exp_dir -e 'import Pkg; Pkg.build("CalibrateAtmos"); Pkg.instantiate(;verbose=true)'
 EOM
 
 if [ "$generate_data" == "true" ] ; then
@@ -67,7 +67,7 @@ cat << EOM
         config = CAL.get_config(physical_model, member, i, experiment_id)
         CAL.run_forward_model(physical_model, config)
       '
-    artifact_paths: output/$experiment_id
+    artifact_paths: output/$experiment_id/*
     agents:
       slurm_cpus_per_task: $cpus_per_task
       slurm_ntasks: $ntasks
@@ -89,7 +89,7 @@ cat << EOM
         CAL.save_G_ensemble(experiment_id, i, G_ensemble)
         CAL.update_ensemble(experiment_id, i)
       '
-    artifact_paths: output/$experiment_id
+    artifact_paths: output/$experiment_id/*
 EOM
 done
 
@@ -99,9 +99,9 @@ cat << EOM
 
   - wait
 
-  - label: ":artist_palette: plot"
+  - label: ":artist palette: plot"
     command: julia --project=$exp_dir $exp_dir/plot.jl
-    artifact_paths: output/$experiment_id
+    artifact_paths: output/$experiment_id/*
 EOM
 
 fi
