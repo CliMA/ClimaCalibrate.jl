@@ -98,7 +98,7 @@ cat << EOM
 
   - wait
 
-  - label: ":artist palette: plot"
+  - label: ":art: plot"
     command: julia --project=$exp_dir $exp_dir/plot.jl
     artifact_paths: "output/$experiment_id/*"
 EOM
