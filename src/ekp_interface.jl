@@ -112,8 +112,8 @@ end
     )
 Initializes the EKP object and the model ensemble. See ExperimentConfig for a full list of keyword arguments.
 """
-initialize(experiment_id::AbstractString; kwargs...) =
-    initialize(ExperimentConfig(experiment_id; kwargs...))
+initialize(experiment_id::AbstractString) =
+    initialize(ExperimentConfig(experiment_id))
 
 function initialize(config::ExperimentConfig)
     Random.seed!(rng_seed)
