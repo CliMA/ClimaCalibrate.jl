@@ -15,7 +15,7 @@ julia --color=no --project=experiments/$experiment_id -e '
 
 if [ "$generate_data" = true ] ; then
     echo "Generating observations"
-    julia --project=experiments/$experiment_id experiments/$experiment_id/generate_truth.jl
+    julia --project=experiments/$experiment_id experiments/$experiment_id/generate_data.jl
 fi
 
 julia --color=no --project=experiments/$experiment_id -e '

@@ -5,7 +5,7 @@ slurm_cpus_per_task="1"
 slurm_gpus_per_task="0"
 generate_data=false
 help_message="Usage:
-    ./pipeline.sh [options] experiment_id
+    ./calibrate.sh [options] experiment_id
 
 Options:
     -t, --time=HH:MM:SS: Set max wallclock time (default: 2:00:00).

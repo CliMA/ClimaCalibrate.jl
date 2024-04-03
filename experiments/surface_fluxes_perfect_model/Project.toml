@@ -1,5 +1,4 @@
 [deps]
-CLIMAParameters = "6eacf6c3-8458-43b9-ae03-caf5306d3d53"
 CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
 CalibrateAtmos = "4347a170-ebd6-470c-89d3-5c705c0cacc2"
 ClimaComms = "3a4d1b5c-c61d-41fd-a00a-5873ba7a1b0d"

@@ -68,7 +68,9 @@ Takes in
 """
 function initialize(
     experiment_id;
-    config = YAML.load_file("experiments/$experiment_id/ekp_config.yml"),
+    config = YAML.load_file(
+        joinpath("experiments", experiment_id, "ekp_config.yml"),
+    ),
     Γ = JLD2.load_object(config["truth_noise"]),
     y = JLD2.load_object(config["truth_data"]),
     rng_seed = 1234,
@@ -167,7 +169,7 @@ import CalibrateAtmos
 experiment_id = "surface_fluxes_perfect_model"
 experiment_path = joinpath(pkgdir(CalibrateAtmos), "experiments", experiment_id)
 include(joinpath(experiment_path, "model_interface.jl"))
-include(joinpath(experiment_path, "generate_truth.jl"))
+include(joinpath(experiment_path, "generate_data.jl"))
 
 eki = CalibrateAtmos.calibrate(experiment_id)
 ```
