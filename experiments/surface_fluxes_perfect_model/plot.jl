@@ -133,9 +133,7 @@ convergence_plot(
 # Plot the convergence of the model observable: ustar
 using Pkg
 FT = Float32
-include(
-    joinpath(pkg_dir, "experiments", experiment_id, "model_interface.jl"),
-)
+include(joinpath(pkg_dir, "experiments", experiment_id, "model_interface.jl"))
 
 f = Makie.Figure()
 ax = Makie.Axis(f[1, 1], xlabel = "Iteration", ylabel = "Model Ustar")
