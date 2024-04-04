@@ -69,11 +69,7 @@ Runs the atmosphere model with the given an AtmosConfig object.
 Currently only has basic error handling.
 """
 
-function run_forward_model(
-    ::ClimaAtmosModel,
-    atmos_config::CA.AtmosConfig;
-    lk = nothing,
-)
+function run_forward_model(::ClimaAtmosModel, atmos_config::CA.AtmosConfig)
     simulation = CA.get_simulation(atmos_config)
     sol_res = CA.solve_atmos!(simulation)
     if sol_res.ret_code == :simulation_crashed

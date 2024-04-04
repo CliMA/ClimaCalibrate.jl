@@ -11,8 +11,7 @@ Returns the observation map (from the raw model output to the observable y),
 as specified by process_member_data, for the given iteration.
 """
 function observation_map(::Val{:surface_fluxes_perfect_model}, iteration)
-    experiment_id = "surface_fluxes_perfect_model"
-    config = ExperimentConfig(experiment_id)
+    config = ExperimentConfig("surface_fluxes_perfect_model")
     (; output_dir, ensemble_size) = config
     model_output = "model_ustar_array.jld2"
 
