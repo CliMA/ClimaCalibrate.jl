@@ -55,7 +55,7 @@ function ExperimentConfig(experiment_id)
     ensemble_size = config_dict["ensemble_size"]
     observations = JLD2.load_object(config_dict["observations"])
     noise = JLD2.load_object(config_dict["noise"])
-    prior = get_prior(config_dict["prior"])
+    prior = get_prior(config_dict["prior_path"])
 
     return ExperimentConfig(
         experiment_id,
@@ -144,7 +144,6 @@ function initialize(config::ExperimentConfig; rng_seed = 1234)
     rng_ekp = Random.MersenneTwister(rng_seed)
 
     (; observations, ensemble_size, noise, prior, output_dir) = config
-    @show prior
     initial_ensemble =
         EKP.construct_initial_ensemble(rng_ekp, prior, ensemble_size)
     eki = EKP.EnsembleKalmanProcess(
@@ -253,11 +252,9 @@ function calibrate(
 
     eki = nothing
     physical_model = get_forward_model(Val(Symbol(id)))
-    @show physical_model
     for i in 0:(n_iterations - 1)
         @info "Running iteration $i"
         for m in 1:ensemble_size
-            @show get_config(physical_model, m, i, id)
             # model run for each ensemble member
             run_forward_model(
                 physical_model,
