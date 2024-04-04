@@ -24,12 +24,8 @@ If given an experiment id string, it will load the config from the corresponding
 Turns off default diagnostics and sets the TOML parameter file to the member's path.
 This assumes that the config dictionary has `output_dir` and `restart_file` keys.
 """
-get_config(
-    physical_model::AbstractPhysicalModel,
-    member,
-    iteration,
-    _,
-) = error("get_config not implemented for $physical_model")
+get_config(physical_model::AbstractPhysicalModel, member, iteration, _) =
+    error("get_config not implemented for $physical_model")
 
 """
     run_forward_model(physical_model, config)

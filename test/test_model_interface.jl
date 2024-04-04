@@ -1,10 +1,14 @@
 import CalibrateAtmos
+
+using EnsembleKalmanProcesses.ParameterDistributions
 using Test
 
 # Tests for ensuring CalibrateAtmos has protected interfaces. The API tested below must be defined for each model,
 # otherwise CalibrateAtmos will throw an error.
 
 struct TestPhysicalModel <: CalibrateAtmos.AbstractPhysicalModel end
+
+@testset "Model Interface stubs" begin
 
 @testset "get_config" begin
     @test_throws ErrorException(
@@ -30,12 +34,21 @@ end
     ) CalibrateAtmos.observation_map(Val(:test), 1)
 end
 
-# This test depends on `surface_fluxes_perfect_model` in the `experiments/` folder 
 @testset "calibrate func" begin
-    dir = pwd()
-    cd(pkgdir(CalibrateAtmos))
-    @test_throws ErrorException CalibrateAtmos.calibrate(
-        "surface_fluxes_perfect_model",
+    experiment_config = CalibrateAtmos.ExperimentConfig(
+        "test",
+        1,
+        1,
+        [20.0],
+        [0.01;;],
+        constrained_gaussian("test_param", 10, 5, 0, Inf),
+        joinpath("test", "e2e_test_output"),
+        false,
+        false,
     )
-    cd(dir)
+    @test_throws ErrorException CalibrateAtmos.calibrate(
+        experiment_config
+    )
+end
+
 end

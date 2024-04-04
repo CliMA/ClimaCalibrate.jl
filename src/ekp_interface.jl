@@ -9,20 +9,12 @@ import ClimaComms
 
 export ExperimentConfig
 
-struct ExperimentConfig
-    id::AbstractString
-    n_iterations::Integer
-    ensemble_size::Integer
-    observations::Any
-    noise::Any
-    prior::Any
-    output_dir::Any
-    generate_plots::Bool
-    emulate_sample::Bool
-end
 
 """
-    ExperimentConfig(experiment_id;
+    ExperimentConfig(experiment_id)
+
+    ExperimentConfig(
+        experiment_id,
         n_iterations,
         ensemble_size,
         observations,
@@ -37,34 +29,35 @@ ExperimentConfig stores the configuration for a specific experiment.
 If kwargs are not passed in, they will be loaded from
 `experiments/experiment_id/ekp_config.yml`
 """
-function ExperimentConfig(
-    experiment_id;
-    n_iterations = nothing,
-    ensemble_size = nothing,
-    observations = nothing,
-    noise = nothing,
-    prior = nothing,
-    output_dir = nothing,
-    generate_plots = false,
-    emulate_sample = false,
-)
+struct ExperimentConfig
+    id::AbstractString
+    n_iterations::Integer
+    ensemble_size::Integer
+    observations::Any
+    noise::Any
+    prior::ParameterDistribution
+    output_dir::Any
+    generate_plots::Bool
+    emulate_sample::Bool
+
+end
+
+function ExperimentConfig(experiment_id)
+
     config_file =
         joinpath("experiments", experiment_id, "ekp_config.yml")
-    config_dict = isfile(config_file) ? YAML.load_file(config_file) : Dict()
+    config_dict = YAML.load_file(config_file)
+
     default_output =
         haskey(ENV, "CI") ? experiment_id : joinpath("output", experiment_id)
-    output_dir = 
-        isnothing(output_dir) ?
-        get(config_dict, "output_dir", default_output) : output_dir
-    n_iterations =
-        isnothing(n_iterations) ? config_dict["n_iterations"] : n_iterations
-    ensemble_size =
-        isnothing(ensemble_size) ? config_dict["ensemble_size"] : ensemble_size
-    observations =
-        isnothing(observations) ?
-        JLD2.load_object(config_dict["observations"]) : observations
-    noise = isnothing(noise) ? JLD2.load_object(config_dict["noise"]) : noise
-    prior = isnothing(prior) ? get_prior(config_dict["prior_path"]) : prior
+    output_dir = get(config_dict, "output_dir", default_output)
+
+    n_iterations = config_dict["n_iterations"]
+    ensemble_size = config_dict["ensemble_size"]
+    observations = JLD2.load_object(config_dict["observations"])
+    noise = JLD2.load_object(config_dict["noise"])
+    prior = get_prior(config_dict["prior"])
+
     return ExperimentConfig(
         experiment_id,
         n_iterations,
@@ -77,6 +70,7 @@ function ExperimentConfig(
         get(config_dict, "emulate_sample", false),
     )
 end
+
 
 """
     path_to_iteration(output_dir, iteration)
@@ -151,6 +145,7 @@ function initialize(config::ExperimentConfig; rng_seed = 1234)
     rng_ekp = Random.MersenneTwister(rng_seed)
 
     (; observations, ensemble_size, noise, prior, output_dir) = config
+    @show prior
     initial_ensemble =
         EKP.construct_initial_ensemble(rng_ekp, prior, ensemble_size)
     eki = EKP.EnsembleKalmanProcess(

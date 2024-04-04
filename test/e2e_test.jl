@@ -24,16 +24,18 @@ n_iterations = 1
 ensemble_size = 10
 observations = [20.0]
 noise = [0.01;;]
-output_dir = joinpath("test",  "e2e_test_output")
+output_dir = joinpath("test", "e2e_test_output")
 
 experiment_config = ExperimentConfig(
-    id;
-    prior,
+    id,
     n_iterations,
     ensemble_size,
     observations,
     noise,
+    prior,
     output_dir,
+    false,
+    false,
 )
 
 # Model interface
@@ -84,8 +86,10 @@ end
 ekp = calibrate(experiment_config)
 
 @testset "Test dummy end-to-end calibration" begin
-    parameter_values = [EKP.get_ϕ_mean(prior, ekp, it) for it in 1:n_iterations+1]
+    parameter_values =
+        [EKP.get_ϕ_mean(prior, ekp, it) for it in 1:(n_iterations + 1)]
     @test parameter_values[1][1] ≈ 9.779 rtol = 0.01
     @test parameter_values[end][1] ≈ 19.63 rtol = 0.01
 end
 
+rm(output_dir; recursive=true)
