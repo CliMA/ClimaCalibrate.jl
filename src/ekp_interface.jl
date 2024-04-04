@@ -44,8 +44,7 @@ end
 
 function ExperimentConfig(experiment_id)
 
-    config_file =
-        joinpath("experiments", experiment_id, "ekp_config.yml")
+    config_file = joinpath("experiments", experiment_id, "ekp_config.yml")
     config_dict = YAML.load_file(config_file)
 
     default_output =

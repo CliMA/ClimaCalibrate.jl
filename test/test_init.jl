@@ -30,8 +30,12 @@ config = CalibrateAtmos.ExperimentConfig(
 
 CalibrateAtmos.initialize(config)
 
-override_file =
-    joinpath(config.output_dir, "iteration_000", "member_001", "parameters.toml")
+override_file = joinpath(
+    config.output_dir,
+    "iteration_000",
+    "member_001",
+    "parameters.toml",
+)
 td = CP.create_toml_dict(FT; override_file)
 params = CP.get_parameter_values(td, param_names)
 

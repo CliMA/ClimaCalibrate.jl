@@ -92,4 +92,4 @@ ekp = calibrate(experiment_config)
     @test parameter_values[end][1] ≈ 19.63 rtol = 0.01
 end
 
-rm(output_dir; recursive=true)
+rm(output_dir; recursive = true)
