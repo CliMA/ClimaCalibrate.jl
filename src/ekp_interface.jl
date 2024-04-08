@@ -101,6 +101,7 @@ end
     get_param_dict(distribution; names)
 
 Generate a parameter dictionary for use in `EKP.TOMLInterface.save_parameter_ensemble`.
+Assumes that all variables in the distribution are floating-point types.
 """
 function get_param_dict(
     distribution::PD;
