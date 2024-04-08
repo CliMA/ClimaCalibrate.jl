@@ -148,8 +148,8 @@ Pseudocode for `observation_map(iteration)`:
 function observation_map(::Val{:sphere_held_suarez_rhoe_equilmoist}, iteration)
     # Get Configuration
     experiment_id = "sphere_held_suarez_rhoe_equilmoist"
-    config = load_config(experiment_id)
-    ensemble_size = config["ensemble_size"]
+    config = ExperimentConfig(experiment_id)
+    ensemble_size = config.ensemble_size
 
     # Setup output array
     # dims = size of individual member observation map output
@@ -215,8 +215,8 @@ The EKP configuration file must contain the following:
 - `n_iterations`, the number of iterations to run
 - `ensemble_size`, the ensemble size
 - `prior_path`, the path to the TOML file with the prior parameter distributions
-- `truth_data`, the truth data
-- `truth_noise`, the covariance of the truth data
+- `observations`, the observational data
+- `noise`, the covariance of the observational data
 - `output_dir`, the folder where you want calibration data and logs to be output. This must be the same as the `output_dir` in the model configuration file.
 Example:
 ```
@@ -224,8 +224,8 @@ output_dir: output/sphere_held_suarez_rhoe_equilmoist
 prior_path: experiments/sphere_held_suarez_rhoe_equilmoist/prior.toml
 ensemble_size: 10
 n_iterations: 3
-truth_data: experiments/sphere_held_suarez_rhoe_equilmoist/obs_mean.jld2
-truth_noise: experiments/sphere_held_suarez_rhoe_equilmoist/obs_noise_cov.jld2
+observations: experiments/sphere_held_suarez_rhoe_equilmoist/obs_mean.jld2
+noise: experiments/sphere_held_suarez_rhoe_equilmoist/obs_noise_cov.jld2
 ```
 
 ## Plotting Results

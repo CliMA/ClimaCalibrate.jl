@@ -104,11 +104,9 @@ pkg_dir = pkgdir(CalibrateAtmos)
 model_config = YAML.load_file(
     joinpath(pkg_dir, "experiments", experiment_id, "model_config.yml"),
 )
-ekp_config = YAML.load_file(
-    joinpath(pkg_dir, "experiments", experiment_id, "ekp_config.yml"),
-)
-N_iter = ekp_config["n_iterations"]
-N_mem = ekp_config["ensemble_size"]
+ekp_config = ExperimentConfig(experiment_id)
+N_iter = ekp_config.n_iterations
+N_mem = ekp_config.ensemble_size
 eki_path = joinpath(
     joinpath(pkg_dir, model_config["output_dir"]),
     "iteration_$(lpad(N_iter, 3, '0'))",
@@ -116,8 +114,7 @@ eki_path = joinpath(
 );
 eki = JLD2.load_object(eki_path);
 EKP.get_u(eki)
-prior_path = joinpath(pkg_dir, ekp_config["prior_path"])
-prior = CalibrateAtmos.get_prior(prior_path)
+prior = ekp_config.prior
 
 theta_star_vec =
     (; coefficient_a_m_businger = 4.7, coefficient_a_h_businger = 4.7)

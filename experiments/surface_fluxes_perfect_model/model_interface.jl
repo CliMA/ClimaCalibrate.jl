@@ -1,7 +1,11 @@
 import EnsembleKalmanProcesses as EKP
 using CalibrateAtmos
 import CalibrateAtmos:
-    AbstractPhysicalModel, get_config, run_forward_model, get_forward_model
+    AbstractPhysicalModel,
+    get_config,
+    run_forward_model,
+    get_forward_model,
+    ExperimentConfig
 import YAML
 
 """
@@ -43,13 +47,12 @@ function get_config(
     iteration,
     experiment_id::AbstractString,
 )
-    config_dict = YAML.load_file("experiments/$experiment_id/model_config.yml")
-    return get_config(model, member, iteration, config_dict)
+    return get_config(model, member, iteration, ExperimentConfig(experiment_id))
 end
 
 """
     get_config(member, iteration, experiment_id::AbstractString)
-    get_config(member, iteration, config_dict::AbstractDict)
+    get_config(member, iteration, experiment_config::ExperimentConfig)
 
 Returns an config dictionary object for the given member and iteration.
 If given an experiment id string, it will load the config from the corresponding YAML file.
@@ -60,22 +63,29 @@ function get_config(
     ::SurfaceFluxModel,
     member,
     iteration,
-    config_dict::AbstractDict,
+    experiment_config::ExperimentConfig,
 )
     # Specify member path for output_dir
-    output_dir = config_dict["output_dir"]
+    model_config = YAML.load_file(
+        joinpath(
+            "experiments",
+            "surface_fluxes_perfect_model",
+            "model_config.yml",
+        ),
+    )
+    output_dir = (experiment_config.output_dir)
     # Set TOML to use EKP parameter(s)
     member_path =
         EKP.TOMLInterface.path_to_ensemble_member(output_dir, iteration, member)
-    config_dict["output_dir"] = member_path
+    model_config["output_dir"] = member_path
     parameter_path = joinpath(member_path, "parameters.toml")
-    if haskey(config_dict, "toml")
-        push!(config_dict["toml"], parameter_path)
+    if haskey(model_config, "toml")
+        push!(model_config["toml"], parameter_path)
     else
-        config_dict["toml"] = [parameter_path]
+        model_config["toml"] = [parameter_path]
     end
 
-    return config_dict
+    return model_config
 end
 
 """
@@ -84,18 +94,8 @@ end
 Runs the model with the given an AbstractDict object.
 """
 
-function run_forward_model(
-    ::SurfaceFluxModel,
-    config::AbstractDict;
-    lk = nothing,
-)
-    x_inputs = if isnothing(lk)
-        load_profiles(config["x_data_file"])
-    else
-        lock(lk) do
-            load_profiles(config["x_data_file"])
-        end
-    end
+function run_forward_model(::SurfaceFluxModel, config::AbstractDict)
+    x_inputs = load_profiles(config["x_data_file"])
     FT = typeof(x_inputs.profiles_int[1].T)
     obtain_ustar(FT, x_inputs, config)
 end

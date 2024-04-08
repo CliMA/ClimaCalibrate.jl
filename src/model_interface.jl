@@ -8,35 +8,31 @@ function get_config(
     physical_model::AbstractPhysicalModel,
     member,
     iteration,
-    experiment_id::AbstractString,
+    experiment_id::AbstractString;
+    kwargs...,
 )
-    config_dict = YAML.load_file("experiments/$experiment_id/model_config.yml")
-    return get_config(physical_model, member, iteration, config_dict)
+    experiment_config = ExperimentConfig(experiment_id; kwargs...)
+    return get_config(physical_model, member, iteration, experiment_config)
 end
 
 """
     get_config(member, iteration, experiment_id::AbstractString)
-    get_config(member, iteration, config_dict::AbstractDict)
+    get_config(member, iteration, experiment_config::AbstractDict)
 
 Returns an AtmosConfig object for the given member and iteration.
 If given an experiment id string, it will load the config from the corresponding YAML file.
 Turns off default diagnostics and sets the TOML parameter file to the member's path.
 This assumes that the config dictionary has `output_dir` and `restart_file` keys.
 """
-get_config(
-    physical_model::AbstractPhysicalModel,
-    member,
-    iteration,
-    config_dict::AbstractDict,
-) = error("get_config not implemented for $physical_model")
+get_config(physical_model::AbstractPhysicalModel, member, iteration, _) =
+    error("get_config not implemented for $physical_model")
 
 """
-    run_forward_model(config::AbstractDict)
+    run_forward_model(physical_model, config)
 
-Runs the atmosphere model with the given an AtmosConfig object.
-Currently only has basic error handling.
+Runs the forward model with the given configuration, returned by `get_config`.
 """
-run_forward_model(physical_model::AbstractPhysicalModel, config::AbstractDict) =
+run_forward_model(physical_model::AbstractPhysicalModel, config) =
     error("run_forward_model not implemented for $physical_model")
 
 """

@@ -8,9 +8,10 @@ include(joinpath(experiment_path, "model_interface.jl"))
 include(joinpath(experiment_path, "generate_data.jl"))
 
 prior = CalibrateAtmos.get_prior(joinpath(experiment_path, "prior.toml"))
+
 eki = CalibrateAtmos.calibrate(experiment_id)
 
-@testset "Test pure Julia calibration (surface fluxes perfect model)" begin
+@testset "End to end test using file config (surface fluxes perfect model)" begin
     parameter_values = get_ϕ_mean_final(prior, eki)
     test_parameter_values = [4.8684152849621976, 5.2022848059758875]
     @test all(isapprox.(parameter_values, test_parameter_values; rtol = 1e-3))
