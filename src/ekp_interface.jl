@@ -9,7 +9,6 @@ import ClimaComms
 
 export ExperimentConfig
 
-
 """
     ExperimentConfig(experiment_id)
 
@@ -26,8 +25,9 @@ export ExperimentConfig
     )
 
 ExperimentConfig stores the configuration for a specific experiment.
-If kwargs are not passed in, they will be loaded from
-`experiments/experiment_id/ekp_config.yml`
+If just the experiment ID string is passed in, the config will be constructed from the 
+file `experiments/experiment_id/ekp_config.yml`.
+For customizable interactive experiments, arguments can be passed in directly.
 """
 struct ExperimentConfig
     id::AbstractString
@@ -233,8 +233,6 @@ include(joinpath(experiment_path, "generate_data.jl"))
 eki = CalibrateAtmos.calibrate(experiment_id)
 ```
 """
-
-
 function calibrate(experiment_id; device = ClimaComms.device(), kwargs...)
     configuration = ExperimentConfig(experiment_id; kwargs...)
     return calibrate(configuration; device, kwargs...)
