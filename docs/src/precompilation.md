@@ -16,8 +16,8 @@ import ClimaAtmos as CA
 import YAML
 
 @setup_workload begin
-    job_id = "your configuration"
-    ExperimentConfig(job_id; output_dir = "precompilation")
+    config_file = "your experiment dir"
+    ExperimentConfig(config_file; output_dir = "precompilation")
     @compile_workload begin
         initialize(job_id)
         config = CA.AtmosConfig(config_dict)

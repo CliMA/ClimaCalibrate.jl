@@ -8,6 +8,12 @@ CalibrateAtmos.get_forward_model
 CalibrateAtmos.observation_map
 ```
 
+## Slurm Interface
+```@docs
+CalibrateAtmos.slurm_calibration
+CalibrateAtmos.srun_model
+```
+
 ## EnsembleKalmanProcesses Interface
 ```@docs
 CalibrateAtmos.calibrate

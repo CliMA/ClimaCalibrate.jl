@@ -12,8 +12,7 @@ using CalibrateAtmos
 pkg_dir = pkgdir(CalibrateAtmos)
 experiment_path = "$pkg_dir/experiments/$experiment_id"
 data_path = "$experiment_path/data"
-include("$experiment_path/model_interface.jl")
-include("$experiment_path/observation_map.jl")
+include(joinpath(experiment_path, "model_interface.jl"))
 
 FT = Float32
 

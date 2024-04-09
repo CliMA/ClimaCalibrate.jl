@@ -34,21 +34,26 @@ We need to follow the following steps for the calibration:
 """
 struct SurfaceFluxModel <: AbstractPhysicalModel end
 
-include("sf_model.jl")
-include("observation_map.jl")
+experiment_dir = joinpath(
+    pkgdir(CalibrateAtmos),
+    "experiments",
+    "surface_fluxes_perfect_model",
+)
+include(joinpath(experiment_dir, "sf_model.jl"))
+include(joinpath(experiment_dir, "observation_map.jl"))
 
 function get_forward_model(::Val{:surface_fluxes_perfect_model})
     return SurfaceFluxModel()
 end
 
-function get_config(
-    model::SurfaceFluxModel,
-    member,
-    iteration,
-    experiment_id::AbstractString,
-)
-    return get_config(model, member, iteration, ExperimentConfig(experiment_id))
-end
+# function get_config(
+#     model::SurfaceFluxModel,
+#     member,
+#     iteration,
+#     experiment_id::AbstractString,
+# )
+#     return get_config(model, member, iteration, ExperimentConfig(experiment_id))
+# end
 
 """
     get_config(member, iteration, experiment_id::AbstractString)

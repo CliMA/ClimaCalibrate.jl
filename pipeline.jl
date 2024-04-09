@@ -7,9 +7,9 @@ Pkg.instantiate()
 using CalibrateAtmos
 pkg_dir = pkgdir(CalibrateAtmos)
 experiment_path = "$pkg_dir/experiments/$experiment_id"
-include("$experiment_path/model_interface.jl")
-include("$experiment_path/generate_data.jl")
 
-CalibrateAtmos.calibrate(experiment_id)
+include(joinpath(experiment_path, "model_interface.jl"))
+include(joinpath(experiment_path, "generate_data.jl"))
 
-include("$pkg_dir/plot/convergence_$experiment_id.jl")
+CalibrateAtmos.calibrate(experiment_path)
+include(joinpath(experiment_path, "postprocessing.jl"))

@@ -35,7 +35,6 @@ experiment_config = ExperimentConfig(
     prior,
     output_dir,
     false,
-    false,
 )
 
 # Model interface
@@ -49,7 +48,7 @@ function get_config(
     physical_model::TestModel,
     member,
     iteration,
-    experiment_id::AbstractString,
+    experiment_config::ExperimentConfig,
 )
     model_config = Dict()
     output_dir = (experiment_config.output_dir)
@@ -85,7 +84,7 @@ end
 # Test!
 ekp = calibrate(experiment_config)
 
-@testset "Test dummy end-to-end calibration" begin
+@testset "Test simple end-to-end calibration" begin
     parameter_values =
         [EKP.get_ϕ_mean(prior, ekp, it) for it in 1:(n_iterations + 1)]
     @test parameter_values[1][1] ≈ 9.779 rtol = 0.01

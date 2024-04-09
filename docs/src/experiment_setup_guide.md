@@ -147,8 +147,8 @@ Pseudocode for `observation_map(iteration)`:
 ```julia
 function observation_map(::Val{:sphere_held_suarez_rhoe_equilmoist}, iteration)
     # Get Configuration
-    experiment_id = "sphere_held_suarez_rhoe_equilmoist"
-    config = ExperimentConfig(experiment_id)
+    config_file = joinpath("calibration", "sphere_held_suarez_rhoe_equilmoist")
+    config = ExperimentConfig(config_file)
     ensemble_size = config.ensemble_size
 
     # Setup output array

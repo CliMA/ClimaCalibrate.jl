@@ -8,21 +8,17 @@ function get_config(
     physical_model::AbstractPhysicalModel,
     member,
     iteration,
-    experiment_id::AbstractString;
-    kwargs...,
+    experiment_path::AbstractString,
 )
-    experiment_config = ExperimentConfig(experiment_id; kwargs...)
+    experiment_config = ExperimentConfig(experiment_path)
     return get_config(physical_model, member, iteration, experiment_config)
 end
 
 """
-    get_config(member, iteration, experiment_id::AbstractString)
+    get_config(member, iteration, experiment_path::AbstractString)
     get_config(member, iteration, experiment_config::AbstractDict)
 
-Returns an AtmosConfig object for the given member and iteration.
-If given an experiment id string, it will load the config from the corresponding YAML file.
-Turns off default diagnostics and sets the TOML parameter file to the member's path.
-This assumes that the config dictionary has `output_dir` and `restart_file` keys.
+Returns an model configuration for the given member and iteration.
 """
 get_config(physical_model::AbstractPhysicalModel, member, iteration, _) =
     error("get_config not implemented for $physical_model")
