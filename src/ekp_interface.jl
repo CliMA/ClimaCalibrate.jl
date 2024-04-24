@@ -31,20 +31,25 @@ function ExperimentConfig(filepath::AbstractString; kwargs...)
     if endswith(filepath, ".yml") && isfile(filepath)
         config_dict = YAML.load_file(filepath)
         experiment_dir = dirname(filepath)
-    elseif isdir(filepath) && isfile(filepath_extension) && endswith(filepath_extension, ".yml")
+    elseif isdir(filepath) &&
+           isfile(filepath_extension) &&
+           endswith(filepath_extension, ".yml")
         config_dict = YAML.load_file(filepath_extension)
         experiment_dir = filepath
     else
         error("Invalid experiment configuration filepath: `$filepath`")
     end
 
-    experiment_id = get(config_dict, "experiment_id", last(splitdir(experiment_dir)))
-    default_output = haskey(ENV, "CI") ? experiment_id : joinpath("output", experiment_id)
+    experiment_id =
+        get(config_dict, "experiment_id", last(splitdir(experiment_dir)))
+    default_output =
+        haskey(ENV, "CI") ? experiment_id : joinpath("output", experiment_id)
     output_dir = get(config_dict, "output_dir", default_output)
 
     n_iterations = config_dict["n_iterations"]
     ensemble_size = config_dict["ensemble_size"]
-    observations = JLD2.load_object(joinpath(experiment_dir, config_dict["observations"]))
+    observations =
+        JLD2.load_object(joinpath(experiment_dir, config_dict["observations"]))
     noise = JLD2.load_object(joinpath(experiment_dir, config_dict["noise"]))
     prior = get_prior(joinpath(experiment_dir, config_dict["prior_path"]))
 
