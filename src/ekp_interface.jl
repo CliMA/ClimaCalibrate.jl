@@ -5,29 +5,15 @@ using Distributions
 import EnsembleKalmanProcesses as EKP
 using EnsembleKalmanProcesses.ParameterDistributions
 using EnsembleKalmanProcesses.TOMLInterface
-import ClimaComms
 
 export ExperimentConfig
 
 """
-    ExperimentConfig(experiment_dir)
-    ExperimentConfig(experiment_config_file)
+    ExperimentConfig(filepath::AbstractString; kwargs...)
 
-    ExperimentConfig(
-        experiment_id,
-        n_iterations,
-        ensemble_size,
-        observations,
-        noise,
-        prior,
-        output_dir,
-        emulate_sample,
-    )
-
-ExperimentConfig stores the configuration for a calibration experiment.
-If a .yml file is given, it will be used to construct the ExperimentConfig.
-If a folder is given, the ExperimentConfig will be constructed from a nested file `ekp_config.yml`. 
-For customizable interactive experiments, arguments can be passed in directly.
+Constructs an ExperimentConfig from a given YAML file or directory containing 'ekp_config.yml'.
+ExperimentConfig holds the configuration for a calibration experiment.
+This can be constructed from a YAML configuration file or directly using individual parameters.
 """
 struct ExperimentConfig
     id::AbstractString
@@ -45,25 +31,20 @@ function ExperimentConfig(filepath::AbstractString; kwargs...)
     if endswith(filepath, ".yml") && isfile(filepath)
         config_dict = YAML.load_file(filepath)
         experiment_dir = dirname(filepath)
-    elseif isdir(filepath) &&
-           isfile(filepath_extension) &&
-           endswith(filepath_extension, ".yml")
+    elseif isdir(filepath) && isfile(filepath_extension) && endswith(filepath_extension, ".yml")
         config_dict = YAML.load_file(filepath_extension)
         experiment_dir = filepath
     else
         error("Invalid experiment configuration filepath: `$filepath`")
     end
-    # If no ID is given, use name of folder containing config file as the ID
-    experiment_id =
-        get(config_dict, "experiment_id", last(splitdir(experiment_dir)))
-    default_output =
-        haskey(ENV, "CI") ? experiment_id : joinpath("output", experiment_id)
+
+    experiment_id = get(config_dict, "experiment_id", last(splitdir(experiment_dir)))
+    default_output = haskey(ENV, "CI") ? experiment_id : joinpath("output", experiment_id)
     output_dir = get(config_dict, "output_dir", default_output)
 
     n_iterations = config_dict["n_iterations"]
     ensemble_size = config_dict["ensemble_size"]
-    observations =
-        JLD2.load_object(joinpath(experiment_dir, config_dict["observations"]))
+    observations = JLD2.load_object(joinpath(experiment_dir, config_dict["observations"]))
     noise = JLD2.load_object(joinpath(experiment_dir, config_dict["noise"]))
     prior = get_prior(joinpath(experiment_dir, config_dict["prior_path"]))
 
@@ -83,34 +64,36 @@ end
 """
     path_to_ensemble_member(output_dir, iteration, member)
 
-Returns the path to an ensemble member's folder within the `output_dir`
-for the given iteration and member number.
-Internally runs `EnsembleKalmanProcess.TOMLInterface.path_to_ensemble_member`
+Constructs the path to an ensemble member's directory for a given iteration and member number.
 """
 path_to_ensemble_member(output_dir, iteration, member) =
     EKP.TOMLInterface.path_to_ensemble_member(output_dir, iteration, member)
 
 """
     path_to_iteration(output_dir, iteration)
-Returns the path to the iteration folder within the `output_dir` for the given iteration number.
+
+Creates the path to the directory for a specific iteration within the specified output directory.
 """
 path_to_iteration(output_dir, iteration) =
     joinpath(output_dir, join(["iteration", lpad(iteration, 3, "0")], "_"))
 
 """
-    get_prior(prior_pathAbstractString; names = nothing)
-    get_prior(param_dict::AbstractDict; names = nothing)
+    get_prior(prior_path::AbstractString; names = nothing)
 
-Constructs the combined prior distribution from the TOML file at the `prior_path`.
-If no parameter names are passed in, all parameters in the TOML are used in the distribution.
+Constructs the combined prior distribution from a TOML configuration file specified by `prior_path`.
 """
 function get_prior(prior_path::AbstractString; names = nothing)
     param_dict = TOML.parsefile(prior_path)
     return get_prior(param_dict; names)
 end
 
-function get_prior(param_dict::AbstractDict; names = nothing)
-    names = isnothing(names) ? keys(param_dict) : names
+"""
+    get_prior(param_dict::AbstractDict; names = nothing)
+
+Constructs a prior distribution from a parameter dictionary.
+If `names` is provided, only those parameters are used.
+"""
+function get_prior(param_dict::AbstractDict; names = keys(param_dict))
     prior_vec = [get_parameter_distribution(param_dict, n) for n in names]
     prior = combine_distributions(prior_vec)
     return prior
@@ -119,8 +102,8 @@ end
 """
     get_param_dict(distribution; names)
 
-Generate a parameter dictionary for use in `EKP.TOMLInterface.save_parameter_ensemble`.
-Assumes that all variables in the distribution are floating-point types.
+Generates a dictionary for parameters based on the specified distribution, assumed to be of floating-point type.
+If `names` is not provided, the distribution's names will be used.
 """
 function get_param_dict(
     distribution::PD;
@@ -132,9 +115,11 @@ function get_param_dict(
 end
 
 """
-    save_G_ensemble(experiment_id, iteration, G_ensemble)
+    save_G_ensemble(config::ExperimentConfig, iteration, G_ensemble)
+    save_G_ensemble(filepath, iteration, G_ensemble)
 
-Save an ensemble's observation map output to the correct folder.
+Saves the ensemble's observation map output to the correct directory based on the provided configuration.
+Takes either an `ExperimentConfig` or a string used to construct an `ExperimentConfig`.
 """
 function save_G_ensemble(filepath, iteration, G_ensemble)
     config = ExperimentConfig(filepath)
@@ -175,7 +160,9 @@ end
     initialize(config::ExperimentConfig; rng_seed = 1234)
     initialize(filepath::AbstractString; rng_seed = 1234)
 
-Initializes the EKP object and the model ensemble.
+Initializes the calibration process by setting up the EnsembleKalmanProcess object
+and parameter files with a given seed for random number generation.
+Takes either an `ExperimentConfig` or a string used to construct an `ExperimentConfig`.
 """
 initialize(filepath::AbstractString; kwargs...) =
     initialize(ExperimentConfig(filepath); kwargs...)
@@ -207,7 +194,7 @@ function initialize(config::ExperimentConfig; rng_seed = 1234)
         0,  # Initial iteration = 0
     )
 
-    # Save in EKI object in iteration_000 folder
+    # Save the EKI object in the 'iteration_000' folder
     eki_path = joinpath(output_dir, "iteration_000", "eki_file.jld2")
     JLD2.save_object(eki_path, eki)
     return eki
@@ -217,8 +204,7 @@ end
     update_ensemble(config_file, iteration)
     update_ensemble(ExperimentConfig, iteration)
 
-Updates the EKI object and saves parameters for the next iteration.
-Assumes that the observation map has been run and saved in the current iteration folder.
+Updates the Ensemble Kalman Process object and saves the parameters for the next iteration.
 """
 update_ensemble(config_file, iteration) =
     update_ensemble(ExperimentConfig(config_file), iteration)
@@ -254,22 +240,35 @@ function update_ensemble(configuration::ExperimentConfig, iteration)
 end
 
 """
-    calibrate(experiment_id)
+    calibrate(configuration::ExperimentConfig)
 
-Convenience function for running a full calibration experiment for the given
-`experiment_id`. 
-This function requires the relevant experiment project and model interface to be loaded:
+Conducts a full calibration experiment using the Ensemble Kalman Process (EKP). 
+This function initializes the calibration, runs the forward model across all 
+ensemble members for each iteration, and updates the ensemble based on observations.
 
+# Arguments
+- `configuration::ExperimentConfig`: Configuration object containing all necessary settings for the calibration experiment
+
+# Usage
+This function is intended to be used in a larger workflow where the 
+`ExperimentConfig` is set up with the necessary experiment parameters. 
+It assumes that all related model interfaces and data generation scripts
+are properly aligned with the configuration.
+
+# Example
 ```julia
 import CalibrateAtmos
 
+# Assume `CalibrateAtmos` is a module containing the model interfaces and data paths.
 experiment_id = "surface_fluxes_perfect_model"
 experiment_path = joinpath(pkgdir(CalibrateAtmos), "experiments", experiment_id)
+
+# Load necessary modules and configuration scripts.
 include(joinpath(pkgdir(CalibrateAtmos), "model_interface.jl"))
 include(joinpath(experiment_path, "generate_data.jl"))
 
+# Initialize and run the calibration
 eki = CalibrateAtmos.calibrate(experiment_path)
-```
 """
 calibrate(experiment_path) = calibrate(ExperimentConfig(experiment_path))
 

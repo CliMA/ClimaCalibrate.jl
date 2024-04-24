@@ -1,9 +1,18 @@
 import EnsembleKalmanProcesses as EKP
-
 import YAML
 
+"""
+    AbstractPhysicalModel
+
+Abstract type to define the interface for physical models.
+"""
 abstract type AbstractPhysicalModel end
 
+"""
+    get_config(physical_model::AbstractPhysicalModel, member, iteration, experiment_path::AbstractString)
+
+Fetch the configuration for a specific ensemble member and iteration based on a provided path.
+"""
 function get_config(
     physical_model::AbstractPhysicalModel,
     member,
@@ -15,18 +24,19 @@ function get_config(
 end
 
 """
-    get_config(member, iteration, experiment_path::AbstractString)
-    get_config(member, iteration, experiment_config::AbstractDict)
+    get_config(physical_model::AbstractPhysicalModel, member, iteration, experiment_config::AbstractDict)
 
-Returns an model configuration for the given member and iteration.
+Returns a model configuration for the specified member and iteration.
+This function should be implemented by the user to specify how configuration is fetched.
 """
 get_config(physical_model::AbstractPhysicalModel, member, iteration, _) =
     error("get_config not implemented for $physical_model")
 
 """
-    run_forward_model(physical_model, config)
+    run_forward_model(physical_model::AbstractPhysicalModel, config)
 
-Runs the forward model with the given configuration, returned by `get_config`.
+Executes the forward model simulation with the given configuration.
+This function should be overridden with model-specific implementation details.
 """
 run_forward_model(physical_model::AbstractPhysicalModel, config) =
     error("run_forward_model not implemented for $physical_model")
@@ -34,18 +44,18 @@ run_forward_model(physical_model::AbstractPhysicalModel, config) =
 """
     get_forward_model(experiment_id::Val)
 
-Returns the custom physical model objet for the given experiment id. An error is thrown if the experiment id is not recognized.
+Retrieves a custom physical model object for the specified experiment ID.
+Throws an error if the experiment ID is unrecognized.
 """
 function get_forward_model(experiment_id::Val)
     error("get_forward_model not implemented for $experiment_id")
 end
 
 """
-    observation_map(physical_model::AbstractPhysicalModel, iteration)
+    observation_map(val:Vall, iteration)
 
-Returns the observation for the given case id Value and iteration.
-
-NB: ensure that the model output is sufficiently sensitive to the input parameters.
+Runs the observation map for the specified iteration.
+This function must be implemented for each calibration experiment.
 """
 function observation_map(val::Val, iteration)
     error(

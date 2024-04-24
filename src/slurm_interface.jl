@@ -1,29 +1,21 @@
 
 """
-    slurm_calibration(;
-        experiment_dir = dirname(Base.active_project()),
-        model_interface = joinpath(experiment_dir, "..", "..", "model_interface.jl"),
-        time_limit = "1:00:00",
-        ntasks = 1,
-        cpus_per_task = 1,
-        gpus_per_task = 0,
-        verbose = false,
-    )
+    slurm_calibration(; kwargs...)
 
-Runs a full calibration, scheduling forward model runs on the slurm cluster using `srun_model`.
-This function makes heavy assumptions and requires some setup.
- - The correct project must be selected, and the observation map has already been `include`d
- - The session is not running in an existing slurm job, and is running on the Resnick central cluster.
+Runs a full calibration using the Ensemble Kalman Process (EKP), scheduling the forward model runs on a Slurm cluster.
 
-Input arguments:
- - `experiment_dir`: The directory storing relevant experiment information. (Default: dirname(Base.active_project()))
- - `model_interface`: Model interface file to be included during the model run. (Default: joinpath(experiment_dir, "..", "..", "model_interface.jl"))
- - `time_limit`: Slurm time limit
- - `ntasks`: Slurm ntasks
- - `cpus_per_task`: Slurm CPUs per task
- - `gpus_per_task`: Slurm GPUs per task
- - `partition`: Slurm partition. (Default: gpus_per_task > 0 ? "gpu" : "expansion")
- - `verbose`: Turn on verbose model logging
+# Keyword Arguments
+- `experiment_dir::AbstractString`: Directory containing experiment configurations.
+- `model_interface::AbstractString`: Path to the model interface file.
+- `time_limit::AbstractString`: Time limit for Slurm jobs.
+- `ntasks::Int`: Number of tasks to run in parallel.
+- `cpus_per_task::Int`: Number of CPUs per Slurm task.
+- `gpus_per_task::Int`: Number of GPUs per Slurm task.
+- `partition::AbstractString`: Slurm partition to use.
+- `verbose::Bool`: Enable verbose output for debugging.
+
+# Usage
+This function is designed for use with a Slurm-managed cluster, ensuring that computational tasks are distributed efficiently.
 """
 function slurm_calibration(;
     experiment_dir = dirname(Base.active_project()),
@@ -37,8 +29,7 @@ function slurm_calibration(;
     partition = gpus_per_task > 0 ? "gpu" : "expansion",
     verbose = false,
 )
-
-    # Experiment config is created from a YAML file within the experiment_dir
+    # ExperimentConfig is created from a YAML file within the experiment_dir
     config = ExperimentConfig(experiment_dir)
     (; n_iterations, output_dir, ensemble_size, prior) = config
 
@@ -77,30 +68,26 @@ end
     handle_ensemble_procs(procs, iteration, output_dir, verbose)
 
 Helper function for `slurm_calibration`.
-    Handles the ensemble of processes running the forward model via slurm.
+Handles the ensemble of processes running the forward model via Slurm.
 """
 function handle_ensemble_procs(procs, iteration, output_dir, verbose)
-    # Initial try handles InterruptException
+    # Initial `try` handles InterruptException
     try
         asyncmap(enumerate(procs)) do (member, p)
-            member_log = joinpath(
-                path_to_ensemble_member(output_dir, iteration, member),
-                "model_log.txt",
-            )
             try
                 wait(p)
                 if p.exitcode != 0
-                    warn_on_member_error(member, member_log, verbose)
+                    log_member_error(output_dir, iteration, member, verbose)
                 end
             catch e
-                warn_on_member_error(member, member_log, verbose)
+                log_member_error(output_dir, iteration, member, verbose)
             end
         end
     catch e
         foreach(kill, procs)
         e isa InterruptException || rethrow()
     end
-    # Wait for processes to be killed
+    # Wait for member error logs to be printed
     sleep(0.5)
     exit_codes = map(x -> getproperty(x, :exitcode), procs)
     if !any(x -> x == 0, exit_codes)
@@ -112,7 +99,17 @@ function handle_ensemble_procs(procs, iteration, output_dir, verbose)
     end
 end
 
-function warn_on_member_error(member, member_log, verbose = false)
+"""
+    log_member_error(output_dir, iteration, member, verbose = false)
+
+Logs a warning message when an error occurs in a specific ensemble member during a model run in a Slurm environment. 
+If verbose, includes the ensemble member's output.
+"""
+function log_member_error(output_dir, iteration, member, verbose = false)
+    member_log = joinpath(
+        path_to_ensemble_member(output_dir, iteration, member),
+        "model_log.txt",
+    )
     warn_str = "Ensemble member $member raised an error. See model log at $member_log for stacktrace"
     if verbose
         stacktrace = replace(readchomp(member_log), "\\n" => "\n")
@@ -136,8 +133,7 @@ end
         verbose,
     )
 
-Runs a single forward model ensemble member. Constructs the `srun` command, then 
-runs it in a separate process.
+Constructs and executes a command to run a model simulation on a Slurm cluster for a single ensemble member.
 """
 function srun_model(;
     output_dir,
