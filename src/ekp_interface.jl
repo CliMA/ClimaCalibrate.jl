@@ -78,22 +78,19 @@ path_to_iteration(output_dir, iteration) =
     joinpath(output_dir, join(["iteration", lpad(iteration, 3, "0")], "_"))
 
 """
+    get_prior(param_dict::AbstractDict; names = nothing)
     get_prior(prior_path::AbstractString; names = nothing)
 
-Constructs the combined prior distribution from a TOML configuration file specified by `prior_path`.
+Constructs the combined prior distribution from a `param_dict` or a TOML configuration file specified by `prior_path`.
+If `names` is provided, only those parameters are used.
 """
 function get_prior(prior_path::AbstractString; names = nothing)
     param_dict = TOML.parsefile(prior_path)
     return get_prior(param_dict; names)
 end
 
-"""
-    get_prior(param_dict::AbstractDict; names = nothing)
-
-Constructs a prior distribution from a parameter dictionary.
-If `names` is provided, only those parameters are used.
-"""
-function get_prior(param_dict::AbstractDict; names = keys(param_dict))
+function get_prior(param_dict::AbstractDict; names = nothing)
+    names = isnothing(names) ? keys(param_dict) : names
     prior_vec = [get_parameter_distribution(param_dict, n) for n in names]
     prior = combine_distributions(prior_vec)
     return prior
