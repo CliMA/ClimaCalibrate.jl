@@ -4,6 +4,8 @@ abstract type AbstractBackend end
 struct JuliaBackend <: AbstractBackend end
 
 """
+    calibrate(::AbstractBackend, configuration::ExperimentConfig; kwargs...)
+    calibrate(::AbstractBackend, experiment_dir::AbstractString; kwargs...)
     calibrate(configuration::ExperimentConfig)
 
 Conducts a full calibration experiment using the Ensemble Kalman Process (EKP). 
