@@ -24,13 +24,17 @@ function get_config(
 end
 
 """
-    get_config(physical_model::AbstractPhysicalModel, member, iteration, experiment_config::AbstractDict)
+    get_config(physical_model::AbstractPhysicalModel, member, iteration, experiment_config)
 
 Returns a model configuration for the specified member and iteration.
 This function should be implemented by the user to specify how configuration is fetched.
 """
-get_config(physical_model::AbstractPhysicalModel, member, iteration, _) =
-    error("get_config not implemented for $physical_model")
+get_config(
+    physical_model::AbstractPhysicalModel,
+    member,
+    iteration,
+    experiment_config,
+) = error("get_config not implemented for $physical_model")
 
 """
     run_forward_model(physical_model::AbstractPhysicalModel, config)
@@ -38,7 +42,7 @@ get_config(physical_model::AbstractPhysicalModel, member, iteration, _) =
 Executes the forward model simulation with the given configuration.
 This function should be overridden with model-specific implementation details.
 """
-run_forward_model(physical_model::AbstractPhysicalModel, config) =
+run_forward_model(physical_model::AbstractPhysicalModel, model_config) =
     error("run_forward_model not implemented for $physical_model")
 
 """

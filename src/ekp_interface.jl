@@ -135,26 +135,34 @@ function save_G_ensemble(config::ExperimentConfig, iteration, G_ensemble)
 end
 
 function env_experiment_dir(env = ENV)
-    key = "EXPERIMENT_DIR"
-    haskey(env, key) || error("Experiment dir not found in environment")
+    key = "CALIBRATION_EXPERIMENT_DIR"
+    haskey(env, key) || error(
+        "Experiment dir not found in environment. Ensure that env variable \"CALIBRATION_EXPERIMENT_DIR\" is set.",
+    )
     return string(env[key])
 end
 
 function env_model_interface(env = ENV)
-    key = "MODEL_INTERFACE"
-    haskey(env, key) || error("Model interface file not found in environment")
+    key = "CALIBRATION_MODEL_INTERFACE"
+    haskey(env, key) || error(
+        "Model interface file not found in environment. Ensure that env variable \"CALIBRATION_MODEL_INTERFACE\" is set.",
+    )
     return string(env[key])
 end
 
 function env_iter_number(env = ENV)
-    key = "ITER_NUMBER"
-    haskey(env, key) || error("Iteration number not found in environment")
+    key = "CALIBRATION_ITER_NUMBER"
+    haskey(env, key) || error(
+        "Iteration number not found in environment. Ensure that env variable \"CALIBRATION_ITER_NUMBER\" is set.",
+    )
     return parse(Int, env[key])
 end
 
 function env_member_number(env = ENV)
-    key = "MEMBER_NUMBER"
-    haskey(env, key) || error("Member number not found in environment")
+    key = "CALIBRATION_MEMBER_NUMBER"
+    haskey(env, key) || error(
+        "Member number not found in environment. Ensure that env variable \"CALIBRATION_MEMBER_NUMBER\" is set.",
+    )
     return parse(Int, env[key])
 end
 
@@ -238,66 +246,5 @@ function update_ensemble(configuration::ExperimentConfig, iteration)
     iter_path = path_to_iteration(output_dir, iteration)
     eki_path = joinpath(iter_path, "eki_file.jld2")
     JLD2.save_object(eki_path, eki)
-    return eki
-end
-
-"""
-    calibrate(configuration::ExperimentConfig)
-
-Conducts a full calibration experiment using the Ensemble Kalman Process (EKP). 
-This function initializes the calibration, runs the forward model across all 
-ensemble members for each iteration, and updates the ensemble based on observations.
-
-# Arguments
-- `configuration::ExperimentConfig`: Configuration object containing all necessary settings for the calibration experiment
-
-# Usage
-This function is intended to be used in a larger workflow where the 
-`ExperimentConfig` is set up with the necessary experiment parameters. 
-It assumes that all related model interfaces and data generation scripts
-are properly aligned with the configuration.
-
-# Example
-```julia
-import CalibrateAtmos
-
-# Assume `CalibrateAtmos` is a module containing the model interfaces and data paths.
-experiment_id = "surface_fluxes_perfect_model"
-experiment_path = joinpath(pkgdir(CalibrateAtmos), "experiments", experiment_id)
-
-# Load necessary modules and configuration scripts.
-include(joinpath(pkgdir(CalibrateAtmos), "model_interface.jl"))
-include(joinpath(experiment_path, "generate_data.jl"))
-
-# Initialize and run the calibration
-eki = CalibrateAtmos.calibrate(experiment_path)
-"""
-calibrate(experiment_path) = calibrate(ExperimentConfig(experiment_path))
-
-function calibrate(configuration::ExperimentConfig)
-    # initialize the CalibrateAtmos
-    initialize(configuration)
-
-    # run experiment with CalibrateAtmos for N_iter iterations
-    (; n_iterations, id, ensemble_size) = configuration
-
-    eki = nothing
-    physical_model = get_forward_model(Val(Symbol(id)))
-    for i in 0:(n_iterations - 1)
-        @info "Running iteration $i"
-        for m in 1:ensemble_size
-            # model run for each ensemble member
-            run_forward_model(
-                physical_model,
-                get_config(physical_model, m, i, configuration),
-            )
-            @info "Completed member $m"
-        end
-
-        # update EKP with the ensemble output and update calibrated parameters
-        G_ensemble = observation_map(Val(Symbol(id)), i)
-        save_G_ensemble(configuration, i, G_ensemble)
-        eki = update_ensemble(configuration, i)
-    end
     return eki
 end

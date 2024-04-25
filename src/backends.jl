@@ -1,4 +1,70 @@
 
+abstract type AbstractBackend end
+
+struct JuliaBackend <: AbstractBackend end
+
+"""
+    calibrate(configuration::ExperimentConfig)
+
+Conducts a full calibration experiment using the Ensemble Kalman Process (EKP). 
+This function initializes the calibration, runs the forward model across all 
+ensemble members for each iteration, and updates the ensemble based on observations.
+
+# Arguments
+- `configuration::ExperimentConfig`: Configuration object containing all necessary settings for the calibration experiment
+
+# Usage
+This function is intended to be used in a larger workflow where the 
+`ExperimentConfig` is set up with the necessary experiment parameters. 
+It assumes that all related model interfaces and data generation scripts
+are properly aligned with the configuration.
+
+# Example
+```julia
+import CalibrateAtmos
+
+# Assume `CalibrateAtmos` is a module containing the model interfaces and data paths.
+experiment_id = "surface_fluxes_perfect_model"
+experiment_path = joinpath(pkgdir(CalibrateAtmos), "experiments", experiment_id)
+
+# Load necessary modules and configuration scripts.
+include(joinpath(pkgdir(CalibrateAtmos), "model_interface.jl"))
+include(joinpath(experiment_path, "generate_data.jl"))
+
+# Initialize and run the calibration
+eki = CalibrateAtmos.calibrate(experiment_path)
+"""
+calibrate(config::ExperimentConfig) = calibrate(JuliaBackend(), config)
+
+calibrate(experiment_path::AbstractString) =
+    calibrate(JuliaBackend(), ExperimentConfig(experiment_path))
+
+function calibrate(::JuliaBackend, configuration::ExperimentConfig)
+    initialize(configuration)
+
+    (; n_iterations, id, ensemble_size) = configuration
+
+    eki = nothing
+    physical_model = get_forward_model(Val(Symbol(id)))
+    for i in 0:(n_iterations - 1)
+        @info "Running iteration $i"
+        for m in 1:ensemble_size
+            run_forward_model(
+                physical_model,
+                get_config(physical_model, m, i, configuration),
+            )
+            @info "Completed member $m"
+        end
+
+        G_ensemble = observation_map(Val(Symbol(id)), i)
+        save_G_ensemble(configuration, i, G_ensemble)
+        eki = update_ensemble(configuration, i)
+    end
+    return eki
+end
+
+struct CaltechHPC <: AbstractBackend end
+
 """
     slurm_calibration(; kwargs...)
 
@@ -17,7 +83,13 @@ Runs a full calibration using the Ensemble Kalman Process (EKP), scheduling the 
 # Usage
 This function is designed for use with a Slurm-managed cluster, ensuring that computational tasks are distributed efficiently.
 """
-function slurm_calibration(;
+function calibrate(b::CaltechHPC, experiment_dir::AbstractString; kwargs...)
+    calibrate(b, ExperimentConfig(experiment_dir); kwargs...)
+end
+
+function calibrate(
+    ::CaltechHPC,
+    config::ExperimentConfig;
     experiment_dir = dirname(Base.active_project()),
     model_interface = abspath(
         joinpath(experiment_dir, "..", "..", "model_interface.jl"),
@@ -30,8 +102,7 @@ function slurm_calibration(;
     verbose = false,
 )
     # ExperimentConfig is created from a YAML file within the experiment_dir
-    config = ExperimentConfig(experiment_dir)
-    (; n_iterations, output_dir, ensemble_size, prior) = config
+    (; n_iterations, output_dir, ensemble_size) = config
 
     @info "Initializing calibration" n_iterations ensemble_size output_dir
     initialize(config)
@@ -78,6 +149,8 @@ function handle_ensemble_procs(procs, iteration, output_dir, verbose)
                 wait(p)
                 if p.exitcode != 0
                     log_member_error(output_dir, iteration, member, verbose)
+                else
+                    @info "Ensemble member $member ran successfully"
                 end
             catch e
                 log_member_error(output_dir, iteration, member, verbose)
@@ -95,7 +168,7 @@ function handle_ensemble_procs(procs, iteration, output_dir, verbose)
             "Full ensemble for iteration $iteration has failed. See model logs in $(path_to_iteration(output_dir, iteration)) for details.",
         )
     elseif !all(x -> x == 0, exit_codes)
-        @warn "Failed ensemble members: $(findall(x -> x == 0, exit_codes))"
+        @warn "Failed ensemble members: $(findall(x -> x != 0, exit_codes))"
     end
 end
 
@@ -180,4 +253,30 @@ function srun_model(;
             stderr = member_log,
         ),
     )
+end
+
+function format_slurm_time(minutes::Int)
+    # Calculate the number of days, hours, and minutes
+    days = minutes ÷ (60 * 24)
+    hours = (minutes ÷ 60) % 24
+    remaining_minutes = minutes % 60
+
+    # Format the string according to Slurm's time format
+    if days > 0
+        return string(
+            days,
+            "-",
+            lpad(hours, 2, '0'),
+            ":",
+            lpad(remaining_minutes, 2, '0'),
+            ":00",
+        )
+    else
+        return string(
+            lpad(hours, 2, '0'),
+            ":",
+            lpad(remaining_minutes, 2, '0'),
+            ":00",
+        )
+    end
 end
