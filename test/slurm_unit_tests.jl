@@ -75,6 +75,7 @@ jobid = submit_cmd_helper()
 _status = CAL.job_status(jobid)
 @test _status == "RUNNING"
 @test CAL.job_running(_status)
+# Ensure job finishes
 sleep(60)
 _status = CAL.job_status(jobid)
 @test _status == "COMPLETED"
@@ -90,8 +91,8 @@ _status = CAL.job_status(jobid)
 @test CAL.job_completed(_status)
 @test CAL.job_failed(_status)
 
-jobids = ntuple(x-> submit_cmd_helper(), 5)
-    
+jobids = ntuple(x -> submit_cmd_helper(), 5)
+
 CAL.kill_all_jobs(jobids)
 
 for jobid in jobids
