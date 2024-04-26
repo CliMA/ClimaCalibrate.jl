@@ -258,7 +258,6 @@ function wait_for_jobs(jobids, output_dir, iter, verbose)
                     push!(completed_members, m)
                 end
             end
-            @show statuses
             all_done = all(job_completed, statuses)
             sleep(5)
         end

@@ -1,6 +1,6 @@
 using Test
 
-include("test_init.jl")
-include("test_model_interface.jl")
-include("test_emulate_sample.jl")
-include("e2e_test.jl")
+include("initialization.jl")
+include("model_interface.jl")
+include("emulate_sample.jl")
+include("pure_julia_e2e.jl")

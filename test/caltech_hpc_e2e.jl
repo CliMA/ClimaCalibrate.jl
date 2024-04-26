@@ -1,5 +1,6 @@
 # Script for running the SurfaceFluxes calibration on slurm. Used in buildkite testing
-# To run: julia --project=experiments/surface_fluxes_perfect_model test/slurm.jl
+# To run, open the REPL: julia --project=experiments/surface_fluxes_perfect_model
+# And include this file
 
 import CalibrateAtmos: CaltechHPC, calibrate, get_prior
 using Test
