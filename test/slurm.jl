@@ -31,9 +31,17 @@ function test_sf_calibration_output(eki, prior)
     end
 end
 
-eki = calibrate(CaltechHPC(), experiment_dir; time_limit = "3", model_interface)
+# Test Caltech HPC backend
+eki = calibrate(
+    CaltechHPC(),
+    experiment_dir;
+    time_limit = "3",
+    model_interface,
+    verbose = true,
+)
 test_sf_calibration_output(eki, prior)
 
+# Pure Julia Backend
 eki = calibrate(experiment_dir)
 test_sf_calibration_output(eki, prior)
 

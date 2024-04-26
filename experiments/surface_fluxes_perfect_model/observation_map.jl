@@ -25,8 +25,14 @@ function observation_map(::Val{:surface_fluxes_perfect_model}, iteration)
     G_ensemble = Array{Float64}(undef, dims..., ensemble_size)
     for m in 1:ensemble_size
         member_path = path_to_ensemble_member(output_dir, iteration, m)
-        ustar = JLD2.load_object(joinpath(member_path, model_output))
-        G_ensemble[:, m] = process_member_data(ustar)
+
+        try
+            ustar = JLD2.load_object(joinpath(member_path, model_output))
+            G_ensemble[:, m] = process_member_data(ustar)
+        catch e
+            @info "An error occured in the observation map for member $m"
+            G_ensemble[:, m] .= NaN
+        end
     end
     return G_ensemble
 end

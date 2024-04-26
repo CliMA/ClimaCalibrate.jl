@@ -126,7 +126,7 @@ function calibrate(
     eki = nothing
     for iter in 0:(n_iterations - 1)
         @info "Iteration $iter"
-        procs = asyncmap(1:ensemble_size; ntasks = ensemble_size) do j
+        jobids = map(1:ensemble_size) do j
             srun_model(;
                 output_dir,
                 member = j,
@@ -141,8 +141,8 @@ function calibrate(
                 verbose,
             )
         end
-
-        handle_ensemble_procs(procs, iter, output_dir, verbose)
+        statuses = wait_for_jobs(jobids, output_dir, iter, verbose)
+        report_ensemble_exit_status(statuses, output_dir, iter)
         @info "Completed iteration $iter, updating ensemble"
         G_ensemble = observation_map(Val(Symbol(config.id)), iter)
         save_G_ensemble(config, iter, G_ensemble)
@@ -152,46 +152,9 @@ function calibrate(
 end
 
 """
-    handle_ensemble_procs(procs, iteration, output_dir, verbose)
-
-Helper function for `slurm_calibration`.
-Handles the ensemble of processes running the forward model via Slurm.
-"""
-function handle_ensemble_procs(procs, iteration, output_dir, verbose)
-    # Initial `try` handles InterruptException
-    try
-        asyncmap(enumerate(procs)) do (member, p)
-            try
-                wait(p)
-                if p.exitcode != 0
-                    log_member_error(output_dir, iteration, member, verbose)
-                else
-                    @info "Ensemble member $member ran successfully"
-                end
-            catch e
-                log_member_error(output_dir, iteration, member, verbose)
-            end
-        end
-    catch e
-        foreach(kill, procs)
-        e isa InterruptException || rethrow()
-    end
-    # Wait for member error logs to be printed
-    sleep(0.5)
-    exit_codes = map(x -> getproperty(x, :exitcode), procs)
-    if !any(x -> x == 0, exit_codes)
-        error(
-            "Full ensemble for iteration $iteration has failed. See model logs in $(path_to_iteration(output_dir, iteration)) for details.",
-        )
-    elseif !all(x -> x == 0, exit_codes)
-        @warn "Failed ensemble members: $(findall(x -> x != 0, exit_codes))"
-    end
-end
-
-"""
     log_member_error(output_dir, iteration, member, verbose = false)
 
-Logs a warning message when an error occurs in a specific ensemble member during a model run in a Slurm environment. 
+Log a warning message when an error occurs in a specific ensemble member during a model run in a Slurm environment. 
 If verbose, includes the ensemble member's output.
 """
 function log_member_error(output_dir, iteration, member, verbose = false)
@@ -222,7 +185,7 @@ end
         verbose,
     )
 
-Constructs and executes a command to run a model simulation on a Slurm cluster for a single ensemble member.
+Construct and execute a command to run a model simulation on a Slurm cluster for a single ensemble member.
 """
 function srun_model(;
     output_dir,
@@ -241,40 +204,134 @@ function srun_model(;
         path_to_ensemble_member(output_dir, iter, member),
         "model_log.txt",
     )
-    fwd_model_cmd = `
-        srun 
-        --job-name=run_$(iter)_$(member) \
-        --time=$time_limit \
-        --ntasks=$ntasks \
-        --partition=$partition \
-        --cpus-per-task=$cpus_per_task \
-        --gpus-per-task=$gpus_per_task \
-        julia --project=$experiment_dir -e "
-    import CalibrateAtmos as CAL
-    iteration = $iter; member = $member
-    model_interface = \"$model_interface\"; include(model_interface)
 
-    experiment_dir = \"$experiment_dir\"
-    experiment_config = CAL.ExperimentConfig(experiment_dir)
-    experiment_id = experiment_config.id
-    physical_model = CAL.get_forward_model(Val(Symbol(experiment_id)))
-    CAL.run_forward_model(physical_model, CAL.get_config(physical_model, member, iteration, experiment_dir))
-    @info \"Forward Model Run Completed\" experiment_id physical_model iteration member"
-    `
+    sbatch_contents = """
+#!/bin/bash
+#SBATCH --job-name=run_$(iter)_$(member)
+#SBATCH --time=$time_limit
+#SBATCH --ntasks=$ntasks
+#SBATCH --partition=$partition
+#SBATCH --cpus-per-task=$cpus_per_task
+#SBATCH --gpus-per-task=$gpus_per_task
+#SBATCH --output=$member_log
+
+export MODULEPATH=/groups/esm/modules:\$MODULEPATH
+module purge
+module load climacommon/2024_04_05
+
+srun --output=$member_log --open-mode=append julia --project=$experiment_dir -e '
+import CalibrateAtmos as CAL
+iteration = $iter; member = $member
+model_interface = "$model_interface"; include(model_interface)
+
+experiment_dir = "$experiment_dir"
+experiment_config = CAL.ExperimentConfig(experiment_dir)
+experiment_id = experiment_config.id
+physical_model = CAL.get_forward_model(Val(Symbol(experiment_id)))
+CAL.run_forward_model(physical_model, CAL.get_config(physical_model, member, iteration, experiment_dir))
+@info "Forward Model Run Completed" experiment_id physical_model iteration member'
+"""
+
+    sbatch_filepath, io = mktemp(output_dir)
+    write(io, sbatch_contents)
+    close(io)
+
     @info "Running ensemble member $member"
-    return open(
-        pipeline(
-            detach(fwd_model_cmd);
-            stdout = member_log,
-            stderr = member_log,
-        ),
-    )
+    return submit_job(sbatch_filepath)
 end
+
+function wait_for_jobs(jobids, output_dir, iter, verbose)
+    try
+        all_done = false
+        statuses = map(job_status, jobids)
+        failed_members = []
+        completed_members = []
+        while !all_done
+            statuses = map(job_status, jobids)
+
+            for (m, status) in enumerate(statuses)
+                if status == "FAILED" && !(m in failed_members)
+                    log_member_error(output_dir, iter, m, verbose)
+                    push!(failed_members, m)
+                elseif status == "COMPLETED" && !(m in completed_members)
+                    @info "Ensemble member $m complete"
+                    push!(completed_members, m)
+                end
+            end
+            @show statuses
+            all_done = all(job_completed, statuses)
+            sleep(5)
+        end
+        return statuses
+    catch e
+        kill_all_jobs(jobids)
+        e isa InterruptException || rethrow()
+        return map(job_status, jobids)
+    end
+end
+
+function report_ensemble_exit_status(statuses, output_dir, iter)
+    all(job_completed.(statuses)) || error("Some jobs are not complete")
+    if all(job_failed, statuses)
+        error(
+            "Full ensemble for iteration $iter has failed. See model logs in $(path_to_iteration(output_dir, iter)) for details.",
+        )
+    elseif any(job_failed, statuses)
+        @warn "Failed ensemble members: $(findall(job_failed, statuses))"
+    end
+end
+
+function submit_job(sbatch_filepath; debug = false)
+    jobid = readchomp(`sbatch --parsable $sbatch_filepath`)
+    debug || rm(sbatch_filepath)
+    return string(jobid)
+end
+
+job_running(status) = status == "RUNNING"
+job_success(status) = status == "COMPLETED"
+job_failed(status) = status == "FAILED"
+job_completed(status) = job_failed(status) || job_success(status)
+
+"""
+    job_status(jobid)
+
+Parse the slurm jobid's state and return one of three status strings: "COMPLETED", "FAILED", or "RUNNING"
+"""
+function job_status(jobid)
+    failure_statuses = ("FAILED", "CANCELLED+", "CANCELLED")
+    output = readchomp(`sacct -j $jobid --format=State --noheader`)
+    statuses = strip.(split(output, "\n"))
+    if all(s -> s == "COMPLETED", statuses)
+        return "COMPLETED"
+    elseif any(s -> s in failure_statuses, statuses)
+        return "FAILED"
+    else
+        return "RUNNING"
+    end
+end
+
+"""
+    kill_all_jobs(jobids)
+
+Takes a list of slurm job IDs and runs `scancel` on them.
+"""
+function kill_all_jobs(jobids)
+    for jobid in jobids
+        try
+            kill_slurm_job(jobid)
+            println("Killed slurm job $jobid")
+        catch e
+            println("Failed to kill slurm job $jobid: ", e)
+        end
+    end
+end
+
+kill_slurm_job(jobid) = run(`scancel $jobid`)
 
 function format_slurm_time(minutes::Int)
     # Calculate the number of days, hours, and minutes
-    days = minutes ÷ (60 * 24)
-    hours = (minutes ÷ 60) % 24
+    days = minutes / (60 * 24)
+    hours = (minutes / 60) % 24
     remaining_minutes = minutes % 60
 
     # Format the string according to Slurm's time format

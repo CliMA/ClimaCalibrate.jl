@@ -119,7 +119,7 @@ function obtain_ustar(FT, x_inputs, model_config; return_ustar = false)
             end
         end
     end
-
+    @info "Saving ustar" ustar_array
     # save ustar_array to file
     JLD2.save_object(
         joinpath(model_config["output_dir"], "model_ustar_array.jld2"),
