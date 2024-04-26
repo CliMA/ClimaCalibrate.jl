@@ -15,7 +15,7 @@ steps:
     command:
       - echo "--- Instantiate SurfaceFluxes calibration project"
       - julia --project=experiments/surface_fluxes_perfect_model -e 'using Pkg; Pkg.precompile()'
-      - julia --project=test -e 'using Pkg; Pkg.develop("."); Pkg.precompile()'
+      - julia --project=test -e 'using Pkg; Pkg.develop(path="."); Pkg.precompile()'
 
 
   - wait
