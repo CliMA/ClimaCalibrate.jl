@@ -40,6 +40,7 @@ get_config(
     run_forward_model(physical_model::AbstractPhysicalModel, config)
 
 Executes the forward model simulation with the given configuration.
+The `config` should be obtained from `get_config`. 
 This function should be overridden with model-specific implementation details.
 """
 run_forward_model(physical_model::AbstractPhysicalModel, model_config) =
@@ -48,7 +49,7 @@ run_forward_model(physical_model::AbstractPhysicalModel, model_config) =
 """
     get_forward_model(experiment_id::Val)
 
-Retrieves a custom physical model object for the specified experiment ID.
+Retrieves a custom physical model struct for the specified experiment ID.
 Throws an error if the experiment ID is unrecognized.
 """
 function get_forward_model(experiment_id::Val)

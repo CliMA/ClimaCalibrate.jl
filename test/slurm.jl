@@ -5,8 +5,8 @@ import CalibrateAtmos: CaltechHPC, calibrate, get_prior
 using Test
 import EnsembleKalmanProcesses: get_ϕ_mean_final, get_g_mean_final
 
-experiment_dir = dirname(Base.active_project());
-model_interface = joinpath(experiment_dir, "model_interface.jl");
+experiment_dir = dirname(Base.active_project())
+model_interface = joinpath(experiment_dir, "model_interface.jl")
 
 # Generate observational data and include observational map 
 include(joinpath(experiment_dir, "generate_data.jl"))
@@ -31,7 +31,7 @@ function test_sf_calibration_output(eki, prior)
     end
 end
 
-eki = calibrate(CaltechHPC(), experiment_dir; time_limit = "3", model_interface);
+eki = calibrate(CaltechHPC(), experiment_dir; time_limit = "3", model_interface)
 test_sf_calibration_output(eki, prior)
 
 eki = calibrate(experiment_dir)

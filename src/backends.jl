@@ -13,6 +13,7 @@ This function initializes the calibration, runs the forward model across all
 ensemble members for each iteration, and updates the ensemble based on observations.
 
 # Arguments
+- `backend::AbstractBackend`: Backend to run the calibration on. If not provided, default is `JuliaBackend`
 - `configuration::ExperimentConfig`: Configuration object containing all necessary settings for the calibration experiment
 
 # Usage
@@ -22,16 +23,15 @@ It assumes that all related model interfaces and data generation scripts
 are properly aligned with the configuration.
 
 # Example
+Run: `julia --project=experiments/surface_fluxes_perfect_model`
 ```julia
 import CalibrateAtmos
 
-# Assume `CalibrateAtmos` is a module containing the model interfaces and data paths.
-experiment_id = "surface_fluxes_perfect_model"
-experiment_path = joinpath(pkgdir(CalibrateAtmos), "experiments", experiment_id)
-
-# Load necessary modules and configuration scripts.
-include(joinpath(pkgdir(CalibrateAtmos), "model_interface.jl"))
+# Generate observational data and load interface
+experiment_path = dirname(Base.active_project())
 include(joinpath(experiment_path, "generate_data.jl"))
+include(joinpath(experiment_path, "observation_map.jl"))
+include(joinpath(experiment_path, "model_interface.jl"))
 
 # Initialize and run the calibration
 eki = CalibrateAtmos.calibrate(experiment_path)
@@ -68,7 +68,8 @@ end
 struct CaltechHPC <: AbstractBackend end
 
 """
-    slurm_calibration(; kwargs...)
+    calibrate(::CaltechHPC; experiment_dir; kwargs...)
+    calibrate(::CaltechHPC; config::ExperimentConfig; kwargs...)
 
 Runs a full calibration using the Ensemble Kalman Process (EKP), scheduling the forward model runs on a Slurm cluster.
 
@@ -83,7 +84,20 @@ Runs a full calibration using the Ensemble Kalman Process (EKP), scheduling the 
 - `verbose::Bool`: Enable verbose output for debugging.
 
 # Usage
-This function is designed for use with a Slurm-managed cluster, ensuring that computational tasks are distributed efficiently.
+Open julia: `julia --project=experiments/surface_fluxes_perfect_model`
+```julia
+import CalibrateAtmos: CaltechHPC, calibrate
+
+experiment_dir = dirname(Base.active_project())
+model_interface = joinpath(experiment_dir, "model_interface.jl")
+
+# Generate observational data and load interface
+include(joinpath(experiment_dir, "generate_data.jl"))
+include(joinpath(experiment_dir, "observation_map.jl"))
+include(model_interface)
+
+eki = calibrate(CaltechHPC(), experiment_dir; time_limit = "3", model_interface);
+```
 """
 function calibrate(b::CaltechHPC, experiment_dir::AbstractString; kwargs...)
     calibrate(b, ExperimentConfig(experiment_dir); kwargs...)
