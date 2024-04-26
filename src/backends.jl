@@ -1,26 +1,18 @@
-
 abstract type AbstractBackend end
 
 struct JuliaBackend <: AbstractBackend end
+struct CaltechHPC <: AbstractBackend end
 
+# calibrate function for the JuliaBackend
 """
-    calibrate(::AbstractBackend, configuration::ExperimentConfig; kwargs...)
-    calibrate(::AbstractBackend, experiment_dir::AbstractString; kwargs...)
-    calibrate(configuration::ExperimentConfig)
+    calibrate(config::ExperimentConfig)
+    calibrate(experiment_path::AbstractString)
 
-Conducts a full calibration experiment using the Ensemble Kalman Process (EKP). 
-This function initializes the calibration, runs the forward model across all 
-ensemble members for each iteration, and updates the ensemble based on observations.
-
-# Arguments
-- `backend::AbstractBackend`: Backend to run the calibration on. If not provided, default is `JuliaBackend`
-- `configuration::ExperimentConfig`: Configuration object containing all necessary settings for the calibration experiment
+Calibrate on a `JuliaBackend`.
 
 # Usage
-This function is intended to be used in a larger workflow where the 
-`ExperimentConfig` is set up with the necessary experiment parameters. 
-It assumes that all related model interfaces and data generation scripts
-are properly aligned with the configuration.
+This function is intended for use in a larger workflow, assuming that all related 
+model interfaces and data generation scripts are properly aligned with the configuration.
 
 # Example
 Run: `julia --project=experiments/surface_fluxes_perfect_model`
@@ -35,17 +27,15 @@ include(joinpath(experiment_path, "model_interface.jl"))
 
 # Initialize and run the calibration
 eki = CalibrateAtmos.calibrate(experiment_path)
+```
 """
 calibrate(config::ExperimentConfig) = calibrate(JuliaBackend(), config)
-
 calibrate(experiment_path::AbstractString) =
     calibrate(JuliaBackend(), ExperimentConfig(experiment_path))
 
-function calibrate(::JuliaBackend, configuration::ExperimentConfig)
-    initialize(configuration)
-
-    (; n_iterations, id, ensemble_size) = configuration
-
+function calibrate(::JuliaBackend, config::ExperimentConfig)
+    initialize(config)
+    (; n_iterations, id, ensemble_size) = config
     eki = nothing
     physical_model = get_forward_model(Val(Symbol(id)))
     for i in 0:(n_iterations - 1)
@@ -53,25 +43,22 @@ function calibrate(::JuliaBackend, configuration::ExperimentConfig)
         for m in 1:ensemble_size
             run_forward_model(
                 physical_model,
-                get_config(physical_model, m, i, configuration),
+                get_config(physical_model, m, i, config),
             )
             @info "Completed member $m"
         end
-
         G_ensemble = observation_map(Val(Symbol(id)), i)
-        save_G_ensemble(configuration, i, G_ensemble)
-        eki = update_ensemble(configuration, i)
+        save_G_ensemble(config, i, G_ensemble)
+        eki = update_ensemble(config, i)
     end
     return eki
 end
-
-struct CaltechHPC <: AbstractBackend end
 
 """
     calibrate(::CaltechHPC; experiment_dir; kwargs...)
     calibrate(::CaltechHPC; config::ExperimentConfig; kwargs...)
 
-Runs a full calibration using the Ensemble Kalman Process (EKP), scheduling the forward model runs on a Slurm cluster.
+Runs a full calibration, scheduling the forward model runs on Caltech's HPC cluster.
 
 # Keyword Arguments
 - `experiment_dir::AbstractString`: Directory containing experiment configurations.
@@ -119,7 +106,6 @@ function calibrate(
 )
     # ExperimentConfig is created from a YAML file within the experiment_dir
     (; n_iterations, output_dir, ensemble_size) = config
-
     @info "Initializing calibration" n_iterations ensemble_size output_dir
     initialize(config)
 
@@ -127,10 +113,10 @@ function calibrate(
     for iter in 0:(n_iterations - 1)
         @info "Iteration $iter"
         jobids = map(1:ensemble_size) do j
-            srun_model(;
+            sbatch_model_run(;
                 output_dir,
-                member = j,
                 iter,
+                member = j,
                 time_limit,
                 ntasks,
                 partition,
@@ -141,6 +127,7 @@ function calibrate(
                 verbose,
             )
         end
+
         statuses = wait_for_jobs(jobids, output_dir, iter, verbose)
         report_ensemble_exit_status(statuses, output_dir, iter)
         @info "Completed iteration $iter, updating ensemble"
@@ -170,24 +157,7 @@ function log_member_error(output_dir, iteration, member, verbose = false)
     @warn warn_str
 end
 
-"""
-    srun_model(;
-        output_dir,
-        iter,
-        member,
-        time_limit,
-        ntasks,
-        partition,
-        cpus_per_task,
-        gpus_per_task,
-        experiment_dir,
-        model_interface,
-        verbose,
-    )
-
-Construct and execute a command to run a model simulation on a Slurm cluster for a single ensemble member.
-"""
-function srun_model(;
+function generate_sbatch_file_contents(;
     output_dir,
     iter,
     member,
@@ -198,13 +168,11 @@ function srun_model(;
     gpus_per_task,
     experiment_dir,
     model_interface,
-    verbose,
 )
     member_log = joinpath(
         path_to_ensemble_member(output_dir, iter, member),
         "model_log.txt",
     )
-
     sbatch_contents = """
 #!/bin/bash
 #SBATCH --job-name=run_$(iter)_$(member)
@@ -231,6 +199,51 @@ physical_model = CAL.get_forward_model(Val(Symbol(experiment_id)))
 CAL.run_forward_model(physical_model, CAL.get_config(physical_model, member, iteration, experiment_dir))
 @info "Forward Model Run Completed" experiment_id physical_model iteration member'
 """
+    return sbatch_contents
+end
+
+"""
+    sbatch_model_run(;
+        output_dir,
+        iter,
+        member,
+        time_limit,
+        ntasks,
+        partition,
+        cpus_per_task,
+        gpus_per_task,
+        experiment_dir,
+        model_interface,
+        verbose,
+    )
+
+Construct and execute a command to run a model simulation on a Slurm cluster for a single ensemble member.
+"""
+function sbatch_model_run(;
+    output_dir,
+    iter,
+    member,
+    time_limit,
+    ntasks,
+    partition,
+    cpus_per_task,
+    gpus_per_task,
+    experiment_dir,
+    model_interface,
+    verbose,
+)
+    sbatch_contents = generate_sbatch_file_contents(;
+        output_dir,
+        iter,
+        member,
+        time_limit,
+        ntasks,
+        partition,
+        cpus_per_task,
+        gpus_per_task,
+        experiment_dir,
+        model_interface,
+    )
 
     sbatch_filepath, io = mktemp(output_dir)
     write(io, sbatch_contents)
@@ -281,9 +294,9 @@ function report_ensemble_exit_status(statuses, output_dir, iter)
 end
 
 function submit_job(sbatch_filepath; debug = false)
-    jobid = readchomp(`sbatch --parsable $sbatch_filepath`)
+    jobid = string(readchomp(`sbatch --parsable $sbatch_filepath`))
     debug || rm(sbatch_filepath)
-    return string(jobid)
+    return parse(Int, jobid)
 end
 
 job_running(status) = status == "RUNNING"

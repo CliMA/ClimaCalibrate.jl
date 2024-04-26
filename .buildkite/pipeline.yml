@@ -15,6 +15,8 @@ steps:
     command:
       - echo "--- Instantiate SurfaceFluxes calibration project"
       - julia --project=experiments/surface_fluxes_perfect_model -e 'using Pkg; Pkg.precompile()'
+      - julia --project=test -e 'using Pkg; Pkg.dev("."); Pkg.precompile()'
+
 
   - wait
   - label: "SurfaceFluxes perfect model calibration"
@@ -22,3 +24,6 @@ steps:
     artifact_paths: output/surface_fluxes_perfect_model/*
     agents:
       slurm_ntasks: 10
+    
+  - label: "Slurm job controller unit tests"
+    command: julia --project=test test/slurm_unit_tests.jl
