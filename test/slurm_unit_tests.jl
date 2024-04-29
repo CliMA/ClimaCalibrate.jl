@@ -20,7 +20,6 @@ model_interface = "model_interface.jl"
 @test CAL.format_slurm_time(60) == "01:00:00"
 @test CAL.format_slurm_time(1440) == "1-00:00:00"
 
-
 sbatch_file = CAL.generate_sbatch_file_contents(;
     output_dir,
     iter,
@@ -47,7 +46,6 @@ test_string = """
 export MODULEPATH=/groups/esm/modules:\$MODULEPATH
 module purge
 module load climacommon/2024_04_05
-
 
 srun --output=test/iteration_001/member_001/model_log.txt --open-mode=append julia --project=exp/dir -e '
 import CalibrateAtmos as CAL

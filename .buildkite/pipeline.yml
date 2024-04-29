@@ -1,8 +1,7 @@
 agents:
   queue: new-central
-  slurm_mem: 8G
   modules: climacommon/2024_04_05
-
+   
 env:
   OPENBLAS_NUM_THREADS: 1
   SLURM_KILL_BAD_EXIT: 1
@@ -16,7 +15,6 @@ steps:
       - echo "--- Instantiate SurfaceFluxes calibration project"
       - julia --project=experiments/surface_fluxes_perfect_model -e 'using Pkg; Pkg.precompile()'
       - julia --project=test -e 'using Pkg; Pkg.develop(path="."); Pkg.precompile()'
-
 
   - wait
   - label: "SurfaceFluxes perfect model calibration"

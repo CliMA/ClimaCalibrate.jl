@@ -11,7 +11,7 @@ CalibrateAtmos.observation_map
 ## Backend Interface
 ```@docs
 CalibrateAtmos.calibrate
-CalibrateAtmos.submit_job
+CalibrateAtmos.sbatch_model_run
 ```
 
 ## EnsembleKalmanProcesses Interface

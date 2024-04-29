@@ -307,8 +307,8 @@ function report_ensemble_exit_status(statuses, output_dir, iter)
     end
 end
 
-function submit_job(sbatch_filepath; debug = false)
-    jobid = string(readchomp(`sbatch --parsable $sbatch_filepath`))
+function submit_job(sbatch_filepath; debug = false, env = ENV)
+    jobid = readchomp(setenv(`sbatch --parsable $sbatch_filepath`, env))
     debug || rm(sbatch_filepath)
     return parse(Int, jobid)
 end
