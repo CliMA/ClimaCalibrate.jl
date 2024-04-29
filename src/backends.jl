@@ -98,7 +98,11 @@ include(model_interface)
 eki = calibrate(CaltechHPC, experiment_dir; time_limit = 3, model_interface);
 ```
 """
-function calibrate(b::Type{CaltechHPC}, experiment_dir::AbstractString; kwargs...)
+function calibrate(
+    b::Type{CaltechHPC},
+    experiment_dir::AbstractString;
+    kwargs...,
+)
     calibrate(b, ExperimentConfig(experiment_dir); kwargs...)
 end
 
@@ -184,7 +188,7 @@ function generate_sbatch_file_contents(;
     export MODULEPATH=/groups/esm/modules:\$MODULEPATH
     module purge
     module load climacommon/2024_04_05
-    """
+    """,
 )
     member_log = joinpath(
         path_to_ensemble_member(output_dir, iter, member),
@@ -277,7 +281,7 @@ function wait_for_jobs(jobids, output_dir, iter, verbose)
         while !all_done
             statuses = map(job_status, jobids)
             for (m, status) in enumerate(statuses)
-                if job_failed(status) && !in(m,failed_jobs)
+                if job_failed(status) && !in(m, failed_jobs)
                     log_member_error(output_dir, iter, m, verbose)
                     push!(failed_jobs, m)
                 elseif job_success(status) && !in(m, completed_jobs)

@@ -24,7 +24,7 @@ sbatch_file = CAL.generate_sbatch_file_contents(;
     output_dir,
     iter,
     member,
-    time_limit,
+    time_limit = CAL.format_slurm_time(time_limit),
     ntasks,
     partition,
     cpus_per_task,
@@ -36,7 +36,7 @@ sbatch_file = CAL.generate_sbatch_file_contents(;
 test_string = """
 #!/bin/bash
 #SBATCH --job-name=run_1_1
-#SBATCH --time=90
+#SBATCH --time=01:30:00
 #SBATCH --ntasks=1
 #SBATCH --partition=expansion
 #SBATCH --cpus-per-task=16
@@ -46,6 +46,7 @@ test_string = """
 export MODULEPATH=/groups/esm/modules:\$MODULEPATH
 module purge
 module load climacommon/2024_04_05
+
 
 srun --output=test/iteration_001/member_001/model_log.txt --open-mode=append julia --project=exp/dir -e '
 import CalibrateAtmos as CAL
@@ -60,8 +61,9 @@ CAL.run_forward_model(physical_model, CAL.get_config(physical_model, member, ite
 @info "Forward Model Run Completed" experiment_id physical_model iteration member'
 """
 
-for (generated, test_str) in zip(split(sbatch_file, "\n"), split(test_string, "\n"))
-    @test generated == test_str
+for (generated_str, test_str) in
+    zip(split(sbatch_file, "\n"), split(test_string, "\n"))
+    @test generated_str == test_str
 end
 
 # Test job status

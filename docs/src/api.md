@@ -1,6 +1,7 @@
 # API
 
 ## Model Interface
+
 ```@docs
 CalibrateAtmos.get_config
 CalibrateAtmos.run_forward_model
@@ -9,12 +10,14 @@ CalibrateAtmos.observation_map
 ```
 
 ## Backend Interface
+
 ```@docs
 CalibrateAtmos.calibrate
 CalibrateAtmos.sbatch_model_run
 ```
 
 ## EnsembleKalmanProcesses Interface
+
 ```@docs
 CalibrateAtmos.initialize
 CalibrateAtmos.save_G_ensemble
