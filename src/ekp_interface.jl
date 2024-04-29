@@ -11,7 +11,7 @@ export ExperimentConfig
 """
     ExperimentConfig(filepath::AbstractString; kwargs...)
 
-Constructs an ExperimentConfig from a given YAML file or directory containing 'ekp_config.yml'.
+Constructs an ExperimentConfig from a given YAML file or directory containing 'experiment_config.yml'.
 ExperimentConfig holds the configuration for a calibration experiment.
 This can be constructed from a YAML configuration file or directly using individual parameters.
 """
@@ -27,7 +27,7 @@ struct ExperimentConfig
 end
 
 function ExperimentConfig(filepath::AbstractString; kwargs...)
-    filepath_extension = joinpath(filepath, "ekp_config.yml")
+    filepath_extension = joinpath(filepath, "experiment_config.yml")
     if endswith(filepath, ".yml") && isfile(filepath)
         config_dict = YAML.load_file(filepath)
         experiment_dir = dirname(filepath)

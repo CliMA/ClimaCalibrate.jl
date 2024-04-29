@@ -8,9 +8,8 @@ struct CaltechHPC <: AbstractBackend end
     calibrate(config::ExperimentConfig)
     calibrate(experiment_path::AbstractString)
 
-Calibrate on a `JuliaBackend`.
+Run a calibration in Julia. Takes an ExperimentConfig or an experiment folder.
 
-# Usage
 This function is intended for use in a larger workflow, assuming that all related 
 model interfaces and data generation scripts are properly aligned with the configuration.
 
@@ -55,10 +54,12 @@ function calibrate(::JuliaBackend, config::ExperimentConfig)
 end
 
 """
-    calibrate(::CaltechHPC; experiment_dir; kwargs...)
-    calibrate(::CaltechHPC; config::ExperimentConfig; kwargs...)
+    calibrate(::CaltechHPC, config::ExperimentConfig; kwargs...)
+    calibrate(::CaltechHPC, experiment_dir; kwargs...)
 
 Runs a full calibration, scheduling the forward model runs on Caltech's HPC cluster.
+
+Takes either an ExperimentConfig for an experiment folder.
 
 # Keyword Arguments
 - `experiment_dir::AbstractString`: Directory containing experiment configurations.
@@ -168,6 +169,11 @@ function generate_sbatch_file_contents(;
     gpus_per_task,
     experiment_dir,
     model_interface,
+    env_commands = """
+    export MODULEPATH=/groups/esm/modules:\$MODULEPATH
+    module purge
+    module load climacommon/2024_04_05
+    """
 )
     member_log = joinpath(
         path_to_ensemble_member(output_dir, iter, member),
@@ -183,9 +189,7 @@ function generate_sbatch_file_contents(;
 #SBATCH --gpus-per-task=$gpus_per_task
 #SBATCH --output=$member_log
 
-export MODULEPATH=/groups/esm/modules:\$MODULEPATH
-module purge
-module load climacommon/2024_04_05
+$env_commands
 
 srun --output=$member_log --open-mode=append julia --project=$experiment_dir -e '
 import CalibrateAtmos as CAL
@@ -257,18 +261,17 @@ function wait_for_jobs(jobids, output_dir, iter, verbose)
     try
         all_done = false
         statuses = map(job_status, jobids)
-        failed_members = []
-        completed_members = []
+        failed_jobs = []
+        completed_jobs = []
         while !all_done
             statuses = map(job_status, jobids)
-
             for (m, status) in enumerate(statuses)
-                if status == "FAILED" && !(m in failed_members)
+                if job_failed(status) && !in(m,failed_jobs)
                     log_member_error(output_dir, iter, m, verbose)
-                    push!(failed_members, m)
-                elseif status == "COMPLETED" && !(m in completed_members)
+                    push!(failed_jobs, m)
+                elseif job_success(status) && !in(m, completed_jobs)
                     @info "Ensemble member $m complete"
-                    push!(completed_members, m)
+                    push!(completed_jobs, m)
                 end
             end
             all_done = all(job_completed, statuses)
@@ -331,9 +334,9 @@ function kill_all_jobs(jobids)
     for jobid in jobids
         try
             kill_slurm_job(jobid)
-            println("Killed slurm job $jobid")
+            println("Cancelling slurm job $jobid")
         catch e
-            println("Failed to kill slurm job $jobid: ", e)
+            println("Failed to cancel slurm job $jobid: ", e)
         end
     end
 end
