@@ -46,10 +46,10 @@ include(joinpath(experiment_dir, "observation_map.jl"))
 eki = calibrate(
         CaltechHPC(),
         experiment_dir;
-        time_limit = "3",
+        time_limit = 3,
         model_interface)
 
 include(joinpath(experiment_dir, "postprocessing.jl"))
 ```
 
-New experiments should be defined within the component model repos (in this case, `SurfaceFluxes.jl`), so that the internals of `CalibrateAtmos.jl` do not explicitly depend on component models. 
+New experiments should be defined within the component model repos (in this case, `SurfaceFluxes.jl`), so that the internals of `CalibrateAtmos.jl` do not explicitly depend on component models.

@@ -3,7 +3,18 @@ abstract type AbstractBackend end
 struct JuliaBackend <: AbstractBackend end
 struct CaltechHPC <: AbstractBackend end
 
-# calibrate function for the JuliaBackend
+
+function get_backend(env = ENV)
+    backend = JuliaBackend
+    try
+        run(pipeline(`grep -q "Red Hat" /etc/redhat-release`))
+        backend = CaltechHPC
+    catch e
+        e isa ProcessExitedException || rethrow()
+    end
+    return backend
+end
+
 """
     calibrate(config::ExperimentConfig)
     calibrate(experiment_path::AbstractString)
@@ -28,11 +39,11 @@ include(joinpath(experiment_path, "model_interface.jl"))
 eki = CalibrateAtmos.calibrate(experiment_path)
 ```
 """
-calibrate(config::ExperimentConfig) = calibrate(JuliaBackend(), config)
+calibrate(config::ExperimentConfig) = calibrate(JuliaBackend, config)
 calibrate(experiment_path::AbstractString) =
-    calibrate(JuliaBackend(), ExperimentConfig(experiment_path))
+    calibrate(JuliaBackend, ExperimentConfig(experiment_path))
 
-function calibrate(::JuliaBackend, config::ExperimentConfig)
+function calibrate(::Type{JuliaBackend}, config::ExperimentConfig)
     initialize(config)
     (; n_iterations, id, ensemble_size) = config
     eki = nothing
@@ -54,8 +65,8 @@ function calibrate(::JuliaBackend, config::ExperimentConfig)
 end
 
 """
-    calibrate(::CaltechHPC, config::ExperimentConfig; kwargs...)
-    calibrate(::CaltechHPC, experiment_dir; kwargs...)
+    calibrate(::Type{CaltechHPC}, config::ExperimentConfig; kwargs...)
+    calibrate(::Type{CaltechHPC}, experiment_dir; kwargs...)
 
 Runs a full calibration, scheduling the forward model runs on Caltech's HPC cluster.
 
@@ -84,15 +95,15 @@ include(joinpath(experiment_dir, "generate_data.jl"))
 include(joinpath(experiment_dir, "observation_map.jl"))
 include(model_interface)
 
-eki = calibrate(CaltechHPC(), experiment_dir; time_limit = "3", model_interface);
+eki = calibrate(CaltechHPC, experiment_dir; time_limit = 3, model_interface);
 ```
 """
-function calibrate(b::CaltechHPC, experiment_dir::AbstractString; kwargs...)
+function calibrate(b::Type{CaltechHPC}, experiment_dir::AbstractString; kwargs...)
     calibrate(b, ExperimentConfig(experiment_dir); kwargs...)
 end
 
 function calibrate(
-    ::CaltechHPC,
+    ::Type{CaltechHPC},
     config::ExperimentConfig;
     experiment_dir = dirname(Base.active_project()),
     model_interface = abspath(
@@ -240,7 +251,7 @@ function sbatch_model_run(;
         output_dir,
         iter,
         member,
-        time_limit,
+        time_limit = format_slurm_time(time_limit),
         ntasks,
         partition,
         cpus_per_task,
@@ -345,9 +356,8 @@ kill_slurm_job(jobid) = run(`scancel $jobid`)
 
 function format_slurm_time(minutes::Int)
     # Calculate the number of days, hours, and minutes
-    days = minutes / (60 * 24)
-    hours = (minutes / 60) % 24
-    remaining_minutes = minutes % 60
+    days, remaining_minutes = divrem(minutes, (60 * 24))
+    hours, remaining_minutes = divrem(remaining_minutes, 60)
 
     # Format the string according to Slurm's time format
     if days > 0

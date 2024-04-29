@@ -7,7 +7,7 @@ import CalibrateAtmos as CAL
 output_dir = "test"
 iter = 1
 member = 1
-time_limit = "1:30:00"
+time_limit = 90
 ntasks = 1
 partition = "expansion"
 cpus_per_task = 16
@@ -15,7 +15,13 @@ gpus_per_task = 1
 experiment_dir = "exp/dir"
 model_interface = "model_interface.jl"
 
-generated_contents = CAL.generate_sbatch_file_contents(;
+@test CAL.format_slurm_time(time_limit) == "01:30:00"
+@test CAL.format_slurm_time(1) == "00:01:00"
+@test CAL.format_slurm_time(60) == "01:00:00"
+@test CAL.format_slurm_time(1440) == "1-00:00:00"
+
+
+sbatch_file = CAL.generate_sbatch_file_contents(;
     output_dir,
     iter,
     member,
@@ -28,10 +34,10 @@ generated_contents = CAL.generate_sbatch_file_contents(;
     model_interface,
 )
 
-sbatch_contents = """
+test_string = """
 #!/bin/bash
 #SBATCH --job-name=run_1_1
-#SBATCH --time=1:30:00
+#SBATCH --time=90
 #SBATCH --ntasks=1
 #SBATCH --partition=expansion
 #SBATCH --cpus-per-task=16
@@ -41,6 +47,7 @@ sbatch_contents = """
 export MODULEPATH=/groups/esm/modules:\$MODULEPATH
 module purge
 module load climacommon/2024_04_05
+
 
 srun --output=test/iteration_001/member_001/model_log.txt --open-mode=append julia --project=exp/dir -e '
 import CalibrateAtmos as CAL
@@ -55,8 +62,9 @@ CAL.run_forward_model(physical_model, CAL.get_config(physical_model, member, ite
 @info "Forward Model Run Completed" experiment_id physical_model iteration member'
 """
 
-@test generated_contents == sbatch_contents
-
+for (generated, test_str) in zip(split(sbatch_file, "\n"), split(test_string, "\n"))
+    @test generated == test_str
+end
 
 # Test job status
 test_cmd = """
@@ -88,15 +96,13 @@ jobid = submit_cmd_helper()
 CAL.kill_slurm_job(jobid)
 _status = CAL.job_status(jobid)
 @test _status == "FAILED"
-@test CAL.job_completed(_status)
-@test CAL.job_failed(_status)
+@test CAL.job_completed(_status) && CAL.job_failed(_status)
 
 jobids = ntuple(x -> submit_cmd_helper(), 5)
 
 CAL.kill_all_jobs(jobids)
 
 for jobid in jobids
-    _status = CAL.job_status(jobid)
-    @test CAL.job_completed(_status)
-    @test CAL.job_failed(_status)
+    job_status = CAL.job_status(jobid)
+    @test CAL.job_completed(job_status) && CAL.job_failed(job_status)
 end

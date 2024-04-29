@@ -34,9 +34,9 @@ end
 
 # Test Caltech HPC backend
 eki = calibrate(
-    CaltechHPC(),
+    CaltechHPC,
     experiment_dir;
-    time_limit = "3",
+    time_limit = 3,
     model_interface,
     verbose = true,
 )
