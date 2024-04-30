@@ -16,7 +16,7 @@ YAML = "ddb6d928-2868-570f-bddf-ab3f9cf99eb6"
 
 [compat]
 CalibrateEmulateSample = "0.5"
-ClimaComms = "0.5"
+ClimaComms = "0.5, 0.6"
 ClimaParams = "0.10"
 Distributions = "0.25"
 EnsembleKalmanProcesses = "1"
