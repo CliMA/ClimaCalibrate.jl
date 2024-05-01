@@ -46,24 +46,23 @@ function get_forward_model(::Val{:surface_fluxes_perfect_model})
     return SurfaceFluxModel()
 end
 
-# function get_config(
-#     model::SurfaceFluxModel,
-#     member,
-#     iteration,
-#     experiment_id::AbstractString,
-# )
-#     return get_config(model, member, iteration, ExperimentConfig(experiment_id))
-# end
+function get_config(
+    model::SurfaceFluxModel,
+    member,
+    iteration,
+    experiment_dir::AbstractString,
+)
+    return get_config(model, member, iteration, ExperimentConfig(experiment_dir))
+end
 
 """
-    get_config(member, iteration, experiment_id::AbstractString)
+    get_config(member, iteration, experiment_dir::AbstractString)
     get_config(member, iteration, experiment_config::ExperimentConfig)
 
 Returns an config dictionary object for the given member and iteration.
-If given an experiment id string, it will load the config from the corresponding YAML file.
+Given an experiment dir, it will load the ExperimentConfig
 This assumes that the config dictionary has the `output_dir` key.
 """
-
 function get_config(
     ::SurfaceFluxModel,
     member,

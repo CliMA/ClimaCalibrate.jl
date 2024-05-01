@@ -128,11 +128,12 @@ function calibrate(
     eki = nothing
     for iter in 0:(n_iterations - 1)
         @info "Iteration $iter"
-        jobids = map(1:ensemble_size) do j
+        jobids = map(1:ensemble_size) do member
+            @info "Running ensemble member $member"
             sbatch_model_run(;
                 output_dir,
                 iter,
-                member = j,
+                member,
                 time_limit,
                 ntasks,
                 partition,
@@ -140,12 +141,23 @@ function calibrate(
                 gpus_per_task,
                 experiment_dir,
                 model_interface,
-                verbose,
             )
         end
 
-        statuses = wait_for_jobs(jobids, output_dir, iter, verbose)
-        report_ensemble_exit_status(statuses, output_dir, iter)
+        statuses = wait_for_jobs(
+            jobids,
+            output_dir,
+            iter,
+            time_limit,
+            ntasks,
+            partition,
+            cpus_per_task,
+            gpus_per_task,
+            experiment_dir,
+            model_interface,
+            verbose
+        )
+        report_iteration_status(statuses, output_dir, iter)
         @info "Completed iteration $iter, updating ensemble"
         G_ensemble = observation_map(Val(Symbol(config.id)), iter)
         save_G_ensemble(config, iter, G_ensemble)
@@ -173,7 +185,7 @@ function log_member_error(output_dir, iteration, member, verbose = false)
     @warn warn_str
 end
 
-function generate_sbatch_file_contents(;
+function generate_sbatch_file_contents(
     output_dir,
     iter,
     member,
@@ -184,10 +196,10 @@ function generate_sbatch_file_contents(;
     gpus_per_task,
     experiment_dir,
     model_interface,
-    env_commands = """
+    module_load = """
     export MODULEPATH=/groups/esm/modules:\$MODULEPATH
     module purge
-    module load climacommon/2024_04_05
+    module load climacommon/2024_04_30
     """,
 )
     member_log = joinpath(
@@ -195,29 +207,29 @@ function generate_sbatch_file_contents(;
         "model_log.txt",
     )
     sbatch_contents = """
-#!/bin/bash
-#SBATCH --job-name=run_$(iter)_$(member)
-#SBATCH --time=$time_limit
-#SBATCH --ntasks=$ntasks
-#SBATCH --partition=$partition
-#SBATCH --cpus-per-task=$cpus_per_task
-#SBATCH --gpus-per-task=$gpus_per_task
-#SBATCH --output=$member_log
+    #!/bin/bash
+    #SBATCH --job-name=run_$(iter)_$(member)
+    #SBATCH --time=$time_limit
+    #SBATCH --ntasks=$ntasks
+    #SBATCH --partition=$partition
+    #SBATCH --cpus-per-task=$cpus_per_task
+    #SBATCH --gpus-per-task=$gpus_per_task
+    #SBATCH --output=$member_log
 
-$env_commands
+    $module_load
 
-srun --output=$member_log --open-mode=append julia --project=$experiment_dir -e '
-import CalibrateAtmos as CAL
-iteration = $iter; member = $member
-model_interface = "$model_interface"; include(model_interface)
+    srun --output=$member_log --open-mode=append julia --project=$experiment_dir -e '
+    import CalibrateAtmos as CAL
+    iteration = $iter; member = $member
+    model_interface = "$model_interface"; include(model_interface)
 
-experiment_dir = "$experiment_dir"
-experiment_config = CAL.ExperimentConfig(experiment_dir)
-experiment_id = experiment_config.id
-physical_model = CAL.get_forward_model(Val(Symbol(experiment_id)))
-CAL.run_forward_model(physical_model, CAL.get_config(physical_model, member, iteration, experiment_dir))
-@info "Forward Model Run Completed" experiment_id physical_model iteration member'
-"""
+    experiment_dir = "$experiment_dir"
+    experiment_config = CAL.ExperimentConfig(experiment_dir)
+    experiment_id = experiment_config.id
+    physical_model = CAL.get_forward_model(Val(Symbol(experiment_id)))
+    CAL.run_forward_model(physical_model, CAL.get_config(physical_model, member, iteration, experiment_dir))
+    @info "Forward Model Run Completed" experiment_id physical_model iteration member'
+    """
     return sbatch_contents
 end
 
@@ -249,13 +261,12 @@ function sbatch_model_run(;
     gpus_per_task,
     experiment_dir,
     model_interface,
-    verbose,
 )
-    sbatch_contents = generate_sbatch_file_contents(;
+    sbatch_contents = generate_sbatch_file_contents(
         output_dir,
         iter,
         member,
-        time_limit = format_slurm_time(time_limit),
+        format_slurm_time(time_limit),
         ntasks,
         partition,
         cpus_per_task,
@@ -268,29 +279,59 @@ function sbatch_model_run(;
     write(io, sbatch_contents)
     close(io)
 
-    @info "Running ensemble member $member"
-    return submit_job(sbatch_filepath)
+    return submit_sbatch_job(sbatch_filepath)
 end
 
-function wait_for_jobs(jobids, output_dir, iter, verbose)
+function wait_for_jobs(
+        jobids,
+        output_dir,
+        iter,
+        time_limit,
+        ntasks,
+        partition,
+        cpus_per_task,
+        gpus_per_task,
+        experiment_dir,
+        model_interface,
+        verbose
+    )
+    statuses = map(job_status, jobids)
+    rerun_job_count = Dict{Int, Int}()
+    completed_jobs = Set{Int}()
+
     try
-        all_done = false
-        statuses = map(job_status, jobids)
-        failed_jobs = []
-        completed_jobs = []
-        while !all_done
-            statuses = map(job_status, jobids)
+        while !all(job_completed, statuses)
             for (m, status) in enumerate(statuses)
-                if job_failed(status) && !in(m, failed_jobs)
+                m in completed_jobs && continue
+                
+                if job_failed(status)
                     log_member_error(output_dir, iter, m, verbose)
-                    push!(failed_jobs, m)
-                elseif job_success(status) && !in(m, completed_jobs)
+                    if get(rerun_job_count, m, 0) < 1
+                        @info "Rerunning ensemble member $m"
+                        jobid = sbatch_model_run(;
+                            output_dir,
+                            iter,
+                            member = m,
+                            time_limit,
+                            ntasks,
+                            partition,
+                            cpus_per_task,
+                            gpus_per_task,
+                            experiment_dir,
+                            model_interface,
+                        )
+                        jobids[m] = jobid
+                        rerun_job_count[m] = get(rerun_job_count, m, 0) + 1
+                    else
+                        push!(completed_jobs, m)
+                    end
+                elseif job_success(status)
                     @info "Ensemble member $m complete"
                     push!(completed_jobs, m)
                 end
             end
-            all_done = all(job_completed, statuses)
             sleep(5)
+            statuses = map(job_status, jobids)
         end
         return statuses
     catch e
@@ -300,7 +341,7 @@ function wait_for_jobs(jobids, output_dir, iter, verbose)
     end
 end
 
-function report_ensemble_exit_status(statuses, output_dir, iter)
+function report_iteration_status(statuses, output_dir, iter)
     all(job_completed.(statuses)) || error("Some jobs are not complete")
     if all(job_failed, statuses)
         error(
@@ -311,7 +352,7 @@ function report_ensemble_exit_status(statuses, output_dir, iter)
     end
 end
 
-function submit_job(sbatch_filepath; debug = false, env = ENV)
+function submit_sbatch_job(sbatch_filepath; debug = false, env = ENV)
     jobid = readchomp(setenv(`sbatch --parsable $sbatch_filepath`, env))
     debug || rm(sbatch_filepath)
     return parse(Int, jobid)
@@ -359,10 +400,8 @@ end
 kill_slurm_job(jobid) = run(`scancel $jobid`)
 
 function format_slurm_time(minutes::Int)
-    # Calculate the number of days, hours, and minutes
     days, remaining_minutes = divrem(minutes, (60 * 24))
     hours, remaining_minutes = divrem(remaining_minutes, 60)
-
     # Format the string according to Slurm's time format
     if days > 0
         return string(
