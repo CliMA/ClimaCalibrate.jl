@@ -336,7 +336,7 @@ function wait_for_jobs(
         kill_all_jobs(jobids)
         if !(e isa InterruptException)
             @error "Pipeline crashed outside of a model run. Stacktrace for failed simulation" exception =
-            (e, catch_backtrace())
+                (e, catch_backtrace())
         end
         return map(job_status, jobids)
     end
@@ -372,6 +372,7 @@ Parse the slurm jobid's state and return one of three status strings: "COMPLETED
 function job_status(jobid)
     failure_statuses = ("FAILED", "CANCELLED+", "CANCELLED")
     output = readchomp(`sacct -j $jobid --format=State --noheader`)
+    # Jobs usually have multiple statuses
     statuses = strip.(split(output, "\n"))
     if all(s -> s == "COMPLETED", statuses)
         return "COMPLETED"
