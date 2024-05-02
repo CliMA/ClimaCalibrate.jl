@@ -20,11 +20,11 @@ model_interface = "model_interface.jl"
 @test CAL.format_slurm_time(60) == "01:00:00"
 @test CAL.format_slurm_time(1440) == "1-00:00:00"
 
-sbatch_file = CAL.generate_sbatch_file_contents(;
+sbatch_file = CAL.generate_sbatch_file_contents(
     output_dir,
     iter,
     member,
-    time_limit = CAL.format_slurm_time(time_limit),
+    time_limit,
     ntasks,
     partition,
     cpus_per_task,
@@ -45,7 +45,7 @@ test_string = """
 
 export MODULEPATH=/groups/esm/modules:\$MODULEPATH
 module purge
-module load climacommon/2024_04_05
+module load climacommon/2024_04_30
 
 
 srun --output=test/iteration_001/member_001/model_log.txt --open-mode=append julia --project=exp/dir -e '
@@ -76,7 +76,7 @@ function submit_cmd_helper()
     sbatch_filepath, io = mktemp()
     write(io, test_cmd)
     close(io)
-    return CAL.submit_job(sbatch_filepath)
+    return CAL.submit_sbatch_job(sbatch_filepath)
 end
 
 jobid = submit_cmd_helper()

@@ -1,18 +1,19 @@
 agents:
   queue: new-central
-  modules: climacommon/2024_04_05
+  modules: climacommon/2024_04_30
    
 env:
   OPENBLAS_NUM_THREADS: 1
   SLURM_KILL_BAD_EXIT: 1
   JULIA_MAX_NUM_PRECOMPILE_FILES: 100
+  JULIA_DEPOT_PATH: "${BUILDKITE_BUILD_PATH}/${BUILDKITE_PIPELINE_SLUG}/depot/default"
 
 steps:
   - label: "init :computer:"
     key: "init_cpu_env"
     command:
       - echo "--- Instantiate SurfaceFluxes calibration project"
-      - julia --project=experiments/surface_fluxes_perfect_model -e 'using Pkg; Pkg.build("CalibrateAtmos"); Pkg.precompile()'
+      - julia --project=experiments/surface_fluxes_perfect_model -e 'using Pkg; Pkg.precompile()'
       - julia --project=test -e 'using Pkg; Pkg.develop(path="."); Pkg.precompile()'
 
   - wait
