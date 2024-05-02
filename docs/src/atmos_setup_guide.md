@@ -188,7 +188,7 @@ Your EKP configuration file must in YAML format and contain the following:
 
 - `n_iterations`, the number of iterations to run
 - `ensemble_size`, the ensemble size
-- `prior_path`, the TOML file with the prior parameter distributions
+- `prior`, the TOML file with the prior parameter distributions
 - `observations`, the observational data
 - `noise`, the covariance of the observational data
 - `output_dir`, the folder where you want calibration data and logs to be output. This must be the same as the `output_dir` in the model configuration file.
@@ -198,7 +198,7 @@ The filepaths will be treated as relative.
 Example:
 ```
 output_dir: output/sphere_held_suarez_rhoe_equilmoist
-prior_path: prior.toml
+prior: prior.toml
 ensemble_size: 10
 n_iterations: 3
 observations: obs_mean.jld2

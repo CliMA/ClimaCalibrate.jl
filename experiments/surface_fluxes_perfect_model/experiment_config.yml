@@ -1,5 +1,5 @@
 output_dir: output/surface_fluxes_perfect_model
-prior_path: prior.toml
+prior: prior.toml
 ensemble_size: 10
 n_iterations: 6
 observations: data/obs_mean.jld2

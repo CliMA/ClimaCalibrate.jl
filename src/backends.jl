@@ -3,14 +3,11 @@ abstract type AbstractBackend end
 struct JuliaBackend <: AbstractBackend end
 struct CaltechHPC <: AbstractBackend end
 
-
-function get_backend(env = ENV)
+function get_backend()
     backend = JuliaBackend
-    try
-        run(pipeline(`grep -q "Red Hat" /etc/redhat-release`))
+    if isfile("/etc/redhat-release") &&
+       occursin("Red Hat", read("/etc/redhat-release", String))
         backend = CaltechHPC
-    catch e
-        e isa ProcessExitedException || rethrow()
     end
     return backend
 end
@@ -39,9 +36,11 @@ include(joinpath(experiment_path, "model_interface.jl"))
 eki = CalibrateAtmos.calibrate(experiment_path)
 ```
 """
-calibrate(config::ExperimentConfig) = calibrate(JuliaBackend, config)
+calibrate(config::ExperimentConfig; kwargs...) =
+    calibrate(get_backend(), config; kwargs...)
+
 calibrate(experiment_path::AbstractString) =
-    calibrate(JuliaBackend, ExperimentConfig(experiment_path))
+    calibrate(get_backend(), ExperimentConfig(experiment_path))
 
 function calibrate(::Type{JuliaBackend}, config::ExperimentConfig)
     initialize(config)
@@ -155,7 +154,7 @@ function calibrate(
             gpus_per_task,
             experiment_dir,
             model_interface,
-            verbose
+            verbose,
         )
         report_iteration_status(statuses, output_dir, iter)
         @info "Completed iteration $iter, updating ensemble"
@@ -209,7 +208,7 @@ function generate_sbatch_file_contents(
     sbatch_contents = """
     #!/bin/bash
     #SBATCH --job-name=run_$(iter)_$(member)
-    #SBATCH --time=$time_limit
+    #SBATCH --time=$(format_slurm_time(time_limit))
     #SBATCH --ntasks=$ntasks
     #SBATCH --partition=$partition
     #SBATCH --cpus-per-task=$cpus_per_task
@@ -266,7 +265,7 @@ function sbatch_model_run(;
         output_dir,
         iter,
         member,
-        format_slurm_time(time_limit),
+        time_limit,
         ntasks,
         partition,
         cpus_per_task,
@@ -283,32 +282,32 @@ function sbatch_model_run(;
 end
 
 function wait_for_jobs(
-        jobids,
-        output_dir,
-        iter,
-        time_limit,
-        ntasks,
-        partition,
-        cpus_per_task,
-        gpus_per_task,
-        experiment_dir,
-        model_interface,
-        verbose
-    )
+    jobids,
+    output_dir,
+    iter,
+    time_limit,
+    ntasks,
+    partition,
+    cpus_per_task,
+    gpus_per_task,
+    experiment_dir,
+    model_interface,
+    verbose,
+)
     statuses = map(job_status, jobids)
-    rerun_job_count = Dict{Int, Int}()
+    rerun_jobs = Set{Int}()
     completed_jobs = Set{Int}()
 
     try
         while !all(job_completed, statuses)
             for (m, status) in enumerate(statuses)
                 m in completed_jobs && continue
-                
+
                 if job_failed(status)
                     log_member_error(output_dir, iter, m, verbose)
-                    if get(rerun_job_count, m, 0) < 1
+                    if !(m in rerun_jobs)
                         @info "Rerunning ensemble member $m"
-                        jobid = sbatch_model_run(;
+                        jobids[m] = sbatch_model_run(;
                             output_dir,
                             iter,
                             member = m,
@@ -320,8 +319,7 @@ function wait_for_jobs(
                             experiment_dir,
                             model_interface,
                         )
-                        jobids[m] = jobid
-                        rerun_job_count[m] = get(rerun_job_count, m, 0) + 1
+                        push!(rerun_jobs, m)
                     else
                         push!(completed_jobs, m)
                     end
@@ -336,7 +334,10 @@ function wait_for_jobs(
         return statuses
     catch e
         kill_all_jobs(jobids)
-        e isa InterruptException || rethrow()
+        if !(e isa InterruptException)
+            @error "Pipeline crashed outside of a model run. Stacktrace for failed simulation" exception =
+            (e, catch_backtrace())
+        end
         return map(job_status, jobids)
     end
 end

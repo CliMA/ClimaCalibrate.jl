@@ -2,7 +2,8 @@
 # To run, open the REPL: julia --project=experiments/surface_fluxes_perfect_model
 # And include this file
 
-import CalibrateAtmos: CaltechHPC, calibrate, get_prior
+import CalibrateAtmos:
+    get_backend, CaltechHPC, JuliaBackend, calibrate, get_prior
 using Test
 import EnsembleKalmanProcesses: get_ϕ_mean_final, get_g_mean_final
 
@@ -33,8 +34,11 @@ function test_sf_calibration_output(eki, prior)
 end
 
 # Test Caltech HPC backend
+backend = get_backend()
+@test backend == CaltechHPC
+
 eki = calibrate(
-    CaltechHPC,
+    backend,
     experiment_dir;
     time_limit = 3,
     model_interface,
@@ -43,7 +47,7 @@ eki = calibrate(
 test_sf_calibration_output(eki, prior)
 
 # Pure Julia Backend
-eki = calibrate(experiment_dir)
+eki = calibrate(JuliaBackend, experiment_dir)
 test_sf_calibration_output(eki, prior)
 
 include(joinpath(experiment_dir, "postprocessing.jl"))

@@ -52,7 +52,12 @@ function get_config(
     iteration,
     experiment_dir::AbstractString,
 )
-    return get_config(model, member, iteration, ExperimentConfig(experiment_dir))
+    return get_config(
+        model,
+        member,
+        iteration,
+        ExperimentConfig(experiment_dir),
+    )
 end
 
 """

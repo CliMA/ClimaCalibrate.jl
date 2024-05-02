@@ -48,10 +48,21 @@ function ExperimentConfig(filepath::AbstractString; kwargs...)
 
     n_iterations = config_dict["n_iterations"]
     ensemble_size = config_dict["ensemble_size"]
-    observations =
-        JLD2.load_object(joinpath(experiment_dir, config_dict["observations"]))
-    noise = JLD2.load_object(joinpath(experiment_dir, config_dict["noise"]))
-    prior = get_prior(joinpath(experiment_dir, config_dict["prior_path"]))
+
+    observation_path =
+        isabspath(config_dict["observations"]) ? config_dict["observations"] :
+        joinpath(experiment_dir, config_dict["observations"])
+    observations = JLD2.load_object(observation_path)
+
+    noise_path =
+        isabspath(config_dict["noise"]) ? config_dict["noise"] :
+        joinpath(experiment_dir, config_dict["noise"])
+    noise = JLD2.load_object(noise_path)
+
+    prior_path =
+        isabspath(config_dict["prior"]) ? config_dict["prior"] :
+        joinpath(experiment_dir, config_dict["prior"])
+    prior = get_prior(prior_path)
 
     return ExperimentConfig(
         experiment_id,
