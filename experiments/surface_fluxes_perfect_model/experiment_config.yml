@@ -1,0 +1,7 @@
+output_dir: output/surface_fluxes_perfect_model
+prior: prior.toml
+ensemble_size: 10
+n_iterations: 6
+observations: data/obs_mean.jld2
+noise: data/obs_noise_cov.jld2
+generate_data: true

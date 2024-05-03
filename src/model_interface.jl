@@ -1,55 +1,63 @@
 import EnsembleKalmanProcesses as EKP
-
 import YAML
 
+"""
+    AbstractPhysicalModel
+
+Abstract type to define the interface for physical models.
+"""
 abstract type AbstractPhysicalModel end
 
+"""
+    get_config(physical_model::AbstractPhysicalModel, member, iteration, experiment_path::AbstractString)
+    get_config(physical_model::AbstractPhysicalModel, member, iteration, experiment_config)
+
+Fetch the model information for a specific ensemble member and iteration based on a provided path.
+This function must be overriden by a component's model interface and 
+should set things like the parameter path and other member-specific settings.
+"""
 function get_config(
     physical_model::AbstractPhysicalModel,
     member,
     iteration,
-    experiment_id::AbstractString;
-    kwargs...,
+    experiment_path::AbstractString,
 )
-    experiment_config = ExperimentConfig(experiment_id; kwargs...)
+    experiment_config = ExperimentConfig(experiment_path)
     return get_config(physical_model, member, iteration, experiment_config)
 end
 
-"""
-    get_config(member, iteration, experiment_id::AbstractString)
-    get_config(member, iteration, experiment_config::AbstractDict)
-
-Returns an AtmosConfig object for the given member and iteration.
-If given an experiment id string, it will load the config from the corresponding YAML file.
-Turns off default diagnostics and sets the TOML parameter file to the member's path.
-This assumes that the config dictionary has `output_dir` and `restart_file` keys.
-"""
-get_config(physical_model::AbstractPhysicalModel, member, iteration, _) =
-    error("get_config not implemented for $physical_model")
+get_config(
+    physical_model::AbstractPhysicalModel,
+    member,
+    iteration,
+    experiment_config,
+) = error("get_config not implemented for $physical_model")
 
 """
-    run_forward_model(physical_model, config)
+    run_forward_model(physical_model::AbstractPhysicalModel, config)
 
-Runs the forward model with the given configuration, returned by `get_config`.
+Executes the forward model simulation with the given configuration.
+The `config` should be obtained from `get_config`. 
+This function should be overridden with model-specific implementation details.
 """
-run_forward_model(physical_model::AbstractPhysicalModel, config) =
+run_forward_model(physical_model::AbstractPhysicalModel, model_config) =
     error("run_forward_model not implemented for $physical_model")
 
 """
     get_forward_model(experiment_id::Val)
 
-Returns the custom physical model objet for the given experiment id. An error is thrown if the experiment id is not recognized.
+Retrieves a custom physical model struct for the specified experiment ID.
+Throws an error if the experiment ID is unrecognized.
 """
 function get_forward_model(experiment_id::Val)
     error("get_forward_model not implemented for $experiment_id")
 end
 
 """
-    observation_map(physical_model::AbstractPhysicalModel, iteration)
+    observation_map(val:Val, iteration)
 
-Returns the observation for the given case id Value and iteration.
-
-NB: ensure that the model output is sufficiently sensitive to the input parameters.
+Runs the observation map for the specified iteration.
+This function must be implemented for each calibration experiment.
 """
 function observation_map(val::Val, iteration)
     error(

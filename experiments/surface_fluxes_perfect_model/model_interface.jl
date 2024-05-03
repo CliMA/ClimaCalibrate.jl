@@ -34,8 +34,13 @@ We need to follow the following steps for the calibration:
 """
 struct SurfaceFluxModel <: AbstractPhysicalModel end
 
-include("sf_model.jl")
-include("observation_map.jl")
+experiment_dir = joinpath(
+    pkgdir(CalibrateAtmos),
+    "experiments",
+    "surface_fluxes_perfect_model",
+)
+include(joinpath(experiment_dir, "sf_model.jl"))
+include(joinpath(experiment_dir, "observation_map.jl"))
 
 function get_forward_model(::Val{:surface_fluxes_perfect_model})
     return SurfaceFluxModel()
@@ -45,20 +50,24 @@ function get_config(
     model::SurfaceFluxModel,
     member,
     iteration,
-    experiment_id::AbstractString,
+    experiment_dir::AbstractString,
 )
-    return get_config(model, member, iteration, ExperimentConfig(experiment_id))
+    return get_config(
+        model,
+        member,
+        iteration,
+        ExperimentConfig(experiment_dir),
+    )
 end
 
 """
-    get_config(member, iteration, experiment_id::AbstractString)
+    get_config(member, iteration, experiment_dir::AbstractString)
     get_config(member, iteration, experiment_config::ExperimentConfig)
 
 Returns an config dictionary object for the given member and iteration.
-If given an experiment id string, it will load the config from the corresponding YAML file.
+Given an experiment dir, it will load the ExperimentConfig
 This assumes that the config dictionary has the `output_dir` key.
 """
-
 function get_config(
     ::SurfaceFluxModel,
     member,

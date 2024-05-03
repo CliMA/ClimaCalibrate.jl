@@ -7,8 +7,6 @@ import Thermodynamics as TD
 import RootSolvers as RS
 import JLD2
 using LinearAlgebra: I
-using Distributions: MvNormal
-using EnsembleKalmanProcesses: constrained_gaussian, combine_distributions
 
 """
     generate_G_preliminaries()
@@ -119,7 +117,6 @@ function obtain_ustar(FT, x_inputs, model_config; return_ustar = false)
             end
         end
     end
-
     # save ustar_array to file
     JLD2.save_object(
         joinpath(model_config["output_dir"], "model_ustar_array.jld2"),

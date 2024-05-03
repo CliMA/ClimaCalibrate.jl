@@ -11,14 +11,19 @@ using Statistics
 
 using CalibrateAtmos
 
-experiment_id = "surface_fluxes_perfect_model"
+experiment_dir = dirname(Base.active_project())
+experiment_config = CalibrateAtmos.ExperimentConfig(experiment_dir)
+output_dir = experiment_config.output_dir
+experiment_id = experiment_config.id
+N_iter = experiment_config.n_iterations
+N_mem = experiment_config.ensemble_size
 
 function convergence_plot(
     eki,
     prior,
     theta_star_vec,
     param_names,
-    output_dir = "output",
+    output_dir = experiment_config.output_dir,
 )
 
     # per parameter
@@ -92,10 +97,7 @@ function convergence_plot(
         Makie.lines!.(ax, tuple(0.0:(length(phi_series[1]) - 1)), phi_series)
         Makie.hlines!(ax, [theta_star], color = :red, linestyle = :dash)
 
-        Makie.save(
-            joinpath(output_dir, experiment_id, "convergence_$param_name.png"),
-            f,
-        )
+        Makie.save(joinpath(output_dir, "convergence_$param_name.png"), f)
     end
 end
 
@@ -104,17 +106,14 @@ pkg_dir = pkgdir(CalibrateAtmos)
 model_config = YAML.load_file(
     joinpath(pkg_dir, "experiments", experiment_id, "model_config.yml"),
 )
-ekp_config = ExperimentConfig(experiment_id)
-N_iter = ekp_config.n_iterations
-N_mem = ekp_config.ensemble_size
+
 eki_path = joinpath(
-    joinpath(pkg_dir, model_config["output_dir"]),
-    "iteration_$(lpad(N_iter, 3, '0'))",
+    CalibrateAtmos.path_to_iteration(output_dir, N_iter),
     "eki_file.jld2",
 );
 eki = JLD2.load_object(eki_path);
 EKP.get_u(eki)
-prior = ekp_config.prior
+prior = experiment_config.prior
 
 theta_star_vec =
     (; coefficient_a_m_businger = 4.7, coefficient_a_h_businger = 4.7)
@@ -124,13 +123,12 @@ convergence_plot(
     prior,
     theta_star_vec,
     ["coefficient_a_m_businger", "coefficient_a_h_businger"],
-    joinpath(pkg_dir, "output"),
 )
 
 # Plot the convergence of the model observable: ustar
 using Pkg
 FT = Float32
-include(joinpath(pkg_dir, "experiments", experiment_id, "model_interface.jl"))
+include(joinpath(experiment_dir, "model_interface.jl"))
 
 f = Makie.Figure()
 ax = Makie.Axis(f[1, 1], xlabel = "Iteration", ylabel = "Model Ustar")
@@ -148,7 +146,8 @@ for iter in 0:N_iter
         model_config["toml"] = [
             joinpath(
                 pkg_dir,
-                "output/$experiment_id/iteration_$(lpad(iter, 3, '0'))/member_$(lpad(i, 3, '0'))/parameters.toml",
+                CalibrateAtmos.path_to_ensemble_member(output_dir, iter, i),
+                "parameters.toml",
             ),
         ]
         ustar_mod =
@@ -178,6 +177,5 @@ Makie.lines!(
     color = :blue,
     linestyle = :dash,
 )
-output_dir = joinpath(pkg_dir, "output")
 
-Makie.save(joinpath(output_dir, experiment_id, "scatter_iter.png"), f)
+Makie.save(joinpath(output_dir, "scatter_iter.png"), f)

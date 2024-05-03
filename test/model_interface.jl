@@ -47,7 +47,6 @@ struct TestPhysicalModel <: CalibrateAtmos.AbstractPhysicalModel end
             constrained_gaussian("test_param", 10, 5, 0, Inf),
             joinpath("test", "e2e_test_output"),
             false,
-            false,
         )
         @test_throws ErrorException CalibrateAtmos.calibrate(experiment_config)
     end

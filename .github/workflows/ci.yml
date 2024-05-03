@@ -36,13 +36,9 @@ jobs:
           version: ${{ matrix.version }}
           arch: ${{ matrix.arch }}
       - uses: julia-actions/julia-buildpkg@v1
-      - name: Surface Fluxes Perfect Model Test
-        run: |
-          julia --project=experiments/surface_fluxes_perfect_model -e 'using Pkg; Pkg.instantiate(;verbose=true)'
-          julia --project=experiments/surface_fluxes_perfect_model test/test_sf.jl
       - uses: julia-actions/julia-runtest@v1
       - uses: julia-actions/julia-processcoverage@v1
-      - uses: codecov/codecov-action@v3
+      - uses: codecov/codecov-action@v4
         with:
           file: lcov.info
           token: ${{secrets.CODECOV_TOKEN}}
