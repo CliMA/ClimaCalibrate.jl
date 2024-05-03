@@ -1,39 +1,31 @@
 # Unit tests for slurm job control functionality
-
 using Test
-
 import CalibrateAtmos as CAL
 
-output_dir = "test"
-iter = 1
-member = 1
-time_limit = 90
-ntasks = 1
-partition = "expansion"
-cpus_per_task = 16
-gpus_per_task = 1
-experiment_dir = "exp/dir"
-model_interface = "model_interface.jl"
+const OUTPUT_DIR = "test"
+const ITER = 1
+const MEMBER = 1
+const TIME_LIMIT = 90
+const NTASKS = 1
+const PARTITION = "expansion"
+const CPUS_PER_TASK = 16
+const GPUS_PER_TASK = 1
+const EXPERIMENT_DIR = "exp/dir"
+const MODEL_INTERFACE = "model_interface.jl"
 
-@test CAL.format_slurm_time(time_limit) == "01:30:00"
+# Time formatting tests
+@test CAL.format_slurm_time(TIME_LIMIT) == "01:30:00"
 @test CAL.format_slurm_time(1) == "00:01:00"
 @test CAL.format_slurm_time(60) == "01:00:00"
 @test CAL.format_slurm_time(1440) == "1-00:00:00"
 
+# Generate and validate sbatch file contents
 sbatch_file = CAL.generate_sbatch_file_contents(
-    output_dir,
-    iter,
-    member,
-    time_limit,
-    ntasks,
-    partition,
-    cpus_per_task,
-    gpus_per_task,
-    experiment_dir,
-    model_interface,
+    OUTPUT_DIR, ITER, MEMBER, TIME_LIMIT, NTASKS, PARTITION,
+    CPUS_PER_TASK, GPUS_PER_TASK, EXPERIMENT_DIR, MODEL_INTERFACE
 )
 
-test_string = """
+expected_sbatch_contents = """
 #!/bin/bash
 #SBATCH --job-name=run_1_1
 #SBATCH --time=01:30:00
@@ -61,48 +53,46 @@ CAL.run_forward_model(physical_model, CAL.get_config(physical_model, member, ite
 @info "Forward Model Run Completed" experiment_id physical_model iteration member'
 """
 
-for (generated_str, test_str) in
-    zip(split(sbatch_file, "\n"), split(test_string, "\n"))
+for (generated_str, test_str) in zip(split(sbatch_file, "\n"), split(expected_sbatch_contents, "\n"))
     @test generated_str == test_str
 end
 
-# Test job status
+# Helper function for submitting commands and checking job status
+function submit_cmd_helper(cmd)
+    sbatch_filepath, io = mktemp()
+    write(io, cmd)
+    close(io)
+    jobid = CAL.submit_sbatch_job(sbatch_filepath)
+    sleep(1)  # Allow time for the job to start
+    return jobid
+end
+
+# Test job lifecycle
 test_cmd = """
 #!/bin/bash
 #SBATCH --time=00:00:10
-sleep 1"""
+#SBATCH --partition=expansion
+sleep 1
+"""
 
-function submit_cmd_helper()
-    sbatch_filepath, io = mktemp()
-    write(io, test_cmd)
-    close(io)
-    return CAL.submit_sbatch_job(sbatch_filepath)
-end
-
-jobid = submit_cmd_helper()
-_status = CAL.job_status(jobid)
-@test _status == "RUNNING"
-@test CAL.job_running(_status)
-# Ensure job finishes
-sleep(60)
-_status = CAL.job_status(jobid)
-@test _status == "COMPLETED"
-@test CAL.job_completed(_status)
-@test CAL.job_success(_status)
-
-# Test cancellation
-jobid = submit_cmd_helper()
+jobid = submit_cmd_helper(test_cmd)
 @test CAL.job_status(jobid) == "RUNNING"
+@test CAL.job_running(CAL.job_status(jobid))
+
+sleep(180)  # Ensure job finishes. To debug, lower sleep time or comment out the code block
+@test CAL.job_status(jobid) == "COMPLETED"
+@test CAL.job_completed(CAL.job_status(jobid))
+@test CAL.job_success(CAL.job_status(jobid))
+
+# Test job cancellation
+jobid = submit_cmd_helper(test_cmd)
 CAL.kill_slurm_job(jobid)
-_status = CAL.job_status(jobid)
-@test _status == "FAILED"
-@test CAL.job_completed(_status) && CAL.job_failed(_status)
+@test CAL.job_status(jobid) == "FAILED"
+@test CAL.job_completed(CAL.job_status(jobid)) && CAL.job_failed(CAL.job_status(jobid))
 
-jobids = ntuple(x -> submit_cmd_helper(), 5)
-
+# Test batch cancellation
+jobids = ntuple(x -> submit_cmd_helper(test_cmd), 5)
 CAL.kill_all_jobs(jobids)
-
 for jobid in jobids
-    job_status = CAL.job_status(jobid)
-    @test CAL.job_completed(job_status) && CAL.job_failed(job_status)
+    @test CAL.job_completed(CAL.job_status(jobid)) && CAL.job_failed(CAL.job_status(jobid))
 end
