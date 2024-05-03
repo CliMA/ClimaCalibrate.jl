@@ -7,8 +7,6 @@ import Thermodynamics as TD
 import RootSolvers as RS
 import JLD2
 using LinearAlgebra: I
-using Distributions: MvNormal
-using EnsembleKalmanProcesses: constrained_gaussian, combine_distributions
 
 """
     generate_G_preliminaries()

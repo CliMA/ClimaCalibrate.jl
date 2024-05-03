@@ -1,4 +1,4 @@
-# Script for running the SurfaceFluxes calibration on slurm. Used in buildkite testing
+# Tests for SurfaceFluxes example calibration on slurm, used in buildkite testing
 # To run, open the REPL: julia --project=experiments/surface_fluxes_perfect_model
 # And include this file
 

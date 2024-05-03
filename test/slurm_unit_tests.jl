@@ -20,9 +20,17 @@ const MODEL_INTERFACE = "model_interface.jl"
 @test CAL.format_slurm_time(1440) == "1-00:00:00"
 
 # Generate and validate sbatch file contents
-sbatch_file = CAL.generate_sbatch_file_contents(
-    OUTPUT_DIR, ITER, MEMBER, TIME_LIMIT, NTASKS, PARTITION,
-    CPUS_PER_TASK, GPUS_PER_TASK, EXPERIMENT_DIR, MODEL_INTERFACE
+sbatch_file = CAL.generate_sbatch_script(
+    OUTPUT_DIR,
+    ITER,
+    MEMBER,
+    TIME_LIMIT,
+    NTASKS,
+    PARTITION,
+    CPUS_PER_TASK,
+    GPUS_PER_TASK,
+    EXPERIMENT_DIR,
+    MODEL_INTERFACE,
 )
 
 expected_sbatch_contents = """
@@ -53,7 +61,8 @@ CAL.run_forward_model(physical_model, CAL.get_config(physical_model, member, ite
 @info "Forward Model Run Completed" experiment_id physical_model iteration member'
 """
 
-for (generated_str, test_str) in zip(split(sbatch_file, "\n"), split(expected_sbatch_contents, "\n"))
+for (generated_str, test_str) in
+    zip(split(sbatch_file, "\n"), split(expected_sbatch_contents, "\n"))
     @test generated_str == test_str
 end
 
@@ -72,7 +81,7 @@ test_cmd = """
 #!/bin/bash
 #SBATCH --time=00:00:10
 #SBATCH --partition=expansion
-sleep 1
+sleep 10
 """
 
 jobid = submit_cmd_helper(test_cmd)
@@ -89,11 +98,13 @@ jobid = submit_cmd_helper(test_cmd)
 CAL.kill_slurm_job(jobid)
 sleep(1)
 @test CAL.job_status(jobid) == "FAILED"
-@test CAL.job_completed(CAL.job_status(jobid)) && CAL.job_failed(CAL.job_status(jobid))
+@test CAL.job_completed(CAL.job_status(jobid)) &&
+      CAL.job_failed(CAL.job_status(jobid))
 
 # Test batch cancellation
 jobids = ntuple(x -> submit_cmd_helper(test_cmd), 5)
 CAL.kill_all_jobs(jobids)
 for jobid in jobids
-    @test CAL.job_completed(CAL.job_status(jobid)) && CAL.job_failed(CAL.job_status(jobid))
+    @test CAL.job_completed(CAL.job_status(jobid))
+    @test CAL.job_failed(CAL.job_status(jobid))
 end

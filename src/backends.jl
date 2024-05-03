@@ -14,7 +14,7 @@ end
 
 """
     calibrate(config::ExperimentConfig)
-    calibrate(experiment_path::AbstractString)
+    calibrate(experiment_dir::AbstractString)
 
 Run a calibration in Julia. Takes an ExperimentConfig or an experiment folder.
 
@@ -27,23 +27,23 @@ Run: `julia --project=experiments/surface_fluxes_perfect_model`
 import CalibrateAtmos
 
 # Generate observational data and load interface
-experiment_path = dirname(Base.active_project())
-include(joinpath(experiment_path, "generate_data.jl"))
-include(joinpath(experiment_path, "observation_map.jl"))
-include(joinpath(experiment_path, "model_interface.jl"))
+experiment_dir = dirname(Base.active_project())
+include(joinpath(experiment_dir, "generate_data.jl"))
+include(joinpath(experiment_dir, "observation_map.jl"))
+include(joinpath(experiment_dir, "model_interface.jl"))
 
 # Initialize and run the calibration
-eki = CalibrateAtmos.calibrate(experiment_path)
+eki = CalibrateAtmos.calibrate(experiment_dir)
 ```
 """
 calibrate(config::ExperimentConfig; kwargs...) =
     calibrate(get_backend(), config; kwargs...)
 
-calibrate(experiment_path::AbstractString) =
-    calibrate(get_backend(), ExperimentConfig(experiment_path))
+calibrate(experiment_dir::AbstractString) =
+    calibrate(get_backend(), ExperimentConfig(experiment_dir))
 
-calibrate(::Type{JuliaBackend}, experiment_path::AbstractString) =
-    calibrate(get_backend(), ExperimentConfig(experiment_path))
+calibrate(b::Type{JuliaBackend}, experiment_dir::AbstractString) =
+    calibrate(b, ExperimentConfig(experiment_dir))
 
 function calibrate(::Type{JuliaBackend}, config::ExperimentConfig)
     initialize(config)
@@ -115,7 +115,7 @@ function calibrate(
     model_interface = abspath(
         joinpath(experiment_dir, "..", "..", "model_interface.jl"),
     ),
-    time_limit = "1:00:00",
+    time_limit = 60,
     ntasks = 1,
     cpus_per_task = 1,
     gpus_per_task = 0,
@@ -187,7 +187,7 @@ function log_member_error(output_dir, iteration, member, verbose = false)
     @warn warn_str
 end
 
-function generate_sbatch_file_contents(
+function generate_sbatch_script(
     output_dir,
     iter,
     member,
@@ -264,7 +264,7 @@ function sbatch_model_run(;
     experiment_dir,
     model_interface,
 )
-    sbatch_contents = generate_sbatch_file_contents(
+    sbatch_contents = generate_sbatch_script(
         output_dir,
         iter,
         member,
@@ -309,6 +309,7 @@ function wait_for_jobs(
                 if job_failed(status)
                     log_member_error(output_dir, iter, m, verbose)
                     if !(m in rerun_jobs)
+
                         @info "Rerunning ensemble member $m"
                         jobids[m] = sbatch_model_run(;
                             output_dir,
