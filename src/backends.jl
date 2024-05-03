@@ -179,7 +179,7 @@ function log_member_error(output_dir, iteration, member, verbose = false)
         path_to_ensemble_member(output_dir, iteration, member),
         "model_log.txt",
     )
-    warn_str = "Ensemble member $member raised an error. See model log at $member_log for stacktrace"
+    warn_str = "Ensemble member $member raised an error. See model log at $abspath(member_log) for stacktrace"
     if verbose
         stacktrace = replace(readchomp(member_log), "\\n" => "\n")
         warn_str = warn_str * ": \n$stacktrace"
@@ -350,7 +350,7 @@ function report_iteration_status(statuses, output_dir, iter)
     all(job_completed.(statuses)) || error("Some jobs are not complete")
     if all(job_failed, statuses)
         error(
-            "Full ensemble for iteration $iter has failed. See model logs in $(path_to_iteration(output_dir, iter)) for details.",
+            "Full ensemble for iteration $iter has failed. See model logs in $(abspath(path_to_iteration(output_dir, iter))) for details.",
         )
     elseif any(job_failed, statuses)
         @warn "Failed ensemble members: $(findall(job_failed, statuses))"

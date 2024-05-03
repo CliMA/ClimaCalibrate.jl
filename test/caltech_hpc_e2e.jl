@@ -40,7 +40,7 @@ backend = get_backend()
 eki = calibrate(
     backend,
     experiment_dir;
-    time_limit = 3,
+    time_limit = 5,
     model_interface,
     verbose = true,
 )
