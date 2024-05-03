@@ -87,6 +87,7 @@ sleep(180)  # Ensure job finishes. To debug, lower sleep time or comment out the
 # Test job cancellation
 jobid = submit_cmd_helper(test_cmd)
 CAL.kill_slurm_job(jobid)
+sleep(1)
 @test CAL.job_status(jobid) == "FAILED"
 @test CAL.job_completed(CAL.job_status(jobid)) && CAL.job_failed(CAL.job_status(jobid))
 

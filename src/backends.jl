@@ -42,6 +42,9 @@ calibrate(config::ExperimentConfig; kwargs...) =
 calibrate(experiment_path::AbstractString) =
     calibrate(get_backend(), ExperimentConfig(experiment_path))
 
+calibrate(::Type{JuliaBackend}, experiment_path::AbstractString) =
+    calibrate(get_backend(), ExperimentConfig(experiment_path))
+
 function calibrate(::Type{JuliaBackend}, config::ExperimentConfig)
     initialize(config)
     (; n_iterations, id, ensemble_size) = config
