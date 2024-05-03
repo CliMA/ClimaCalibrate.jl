@@ -2,6 +2,7 @@
 CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
 CalibrateAtmos = "4347a170-ebd6-470c-89d3-5c705c0cacc2"
 ClimaParams = "5c42b081-d73a-476f-9059-fd94b934656c"
+Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
 EnsembleKalmanProcesses = "aa8a2aa5-91d8-4396-bcef-d4f2ec43552d"
 JLD2 = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
@@ -14,6 +15,7 @@ Thermodynamics = "b60c26fb-14c3-4610-9d3e-2d17fe7ff00c"
 YAML = "ddb6d928-2868-570f-bddf-ab3f9cf99eb6"
 
 [compat]
+Distributions = "0.25"
 JLD2 = "0.4"
 SurfaceFluxes = "0.11"
 TOML = "1"
