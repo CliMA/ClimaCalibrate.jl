@@ -4,8 +4,9 @@ First, make sure your system meets the dependencies of [CalibrateEmulateSample.j
 You can run calibrations a cluster that supports Slurm or on your local machine.
 
 A good way to get started is to run the example experiment, `surface_fluxes_perfect_model`, which uses the [SurfaceFluxes.jl](https://github.com/CliMA/SurfaceFluxes.jl) package to generate a physical model that calculates the Monin Obukhov turbulent surface fluxes based on idealized atmospheric and surface conditions. Since this is a "perfect model" example, the same model is used to generate synthetic observations using its default parameters and a small amount of noise. These synthetic observations are considered to be the ground truth, which is used to assess the model ensembles' performance when parameters are drawn from the prior parameter distributions. 
-It is a perfect-model calibration, serving as a test case for the initial pipeline.
-By default, it runs 10 ensemble members for 10 iterations. Further details can be found in the experiment folder, `experiments/surace_fluxes_perfect_model`.
+
+It is a perfect-model calibration, serving as a test case for the initial pipeline. 
+By default, it runs 10 ensemble members for 6 iterations. Further details can be found in the experiment folder, `experiments/surace_fluxes_perfect_model`.
 
 ## Local Machine
 
@@ -43,11 +44,8 @@ experiment_dir = dirname(Base.active_project())
 include(joinpath(experiment_dir, "generate_data.jl"))
 model_interface = joinpath(experiment_dir, "model_interface.jl")
 include(joinpath(experiment_dir, "observation_map.jl"))
-eki = calibrate(
-        CaltechHPC,
-        experiment_dir;
-        time_limit = 3,
-        model_interface)
+eki = calibrate(CaltechHPC, experiment_dir; 
+                time_limit = 3, model_interface)
 
 include(joinpath(experiment_dir, "postprocessing.jl"))
 ```
