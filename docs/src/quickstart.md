@@ -23,7 +23,7 @@ include(joinpath(experiment_dir, "generate_data.jl"))
 include(joinpath(experiment_dir, "observation_map.jl"))
 include(joinpath(experiment_dir, "model_interface.jl"))
 
-eki = CalibrateAtmos.calibrate(experiment_dir)
+eki = CalibrateAtmos.calibrate(JuliaBackend, experiment_dir)
 include(joinpath(experiment_dir, "postprocessing.jl"))
 ```
 
@@ -44,7 +44,7 @@ include(joinpath(experiment_dir, "generate_data.jl"))
 model_interface = joinpath(experiment_dir, "model_interface.jl")
 include(joinpath(experiment_dir, "observation_map.jl"))
 eki = calibrate(
-        CaltechHPC(),
+        CaltechHPC,
         experiment_dir;
         time_limit = 3,
         model_interface)

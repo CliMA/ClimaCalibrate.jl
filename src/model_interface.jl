@@ -10,8 +10,11 @@ abstract type AbstractPhysicalModel end
 
 """
     get_config(physical_model::AbstractPhysicalModel, member, iteration, experiment_path::AbstractString)
+    get_config(physical_model::AbstractPhysicalModel, member, iteration, experiment_config)
 
-Fetch the configuration for a specific ensemble member and iteration based on a provided path.
+Fetch the model information for a specific ensemble member and iteration based on a provided path.
+This function must be overriden by a component's model interface and 
+should set things like the parameter path and other member-specific settings.
 """
 function get_config(
     physical_model::AbstractPhysicalModel,
@@ -23,12 +26,6 @@ function get_config(
     return get_config(physical_model, member, iteration, experiment_config)
 end
 
-"""
-    get_config(physical_model::AbstractPhysicalModel, member, iteration, experiment_config)
-
-Returns a model configuration for the specified member and iteration.
-This function should be implemented by the user to specify how configuration is fetched.
-"""
 get_config(
     physical_model::AbstractPhysicalModel,
     member,
@@ -57,7 +54,7 @@ function get_forward_model(experiment_id::Val)
 end
 
 """
-    observation_map(val:Vall, iteration)
+    observation_map(val:Val, iteration)
 
 Runs the observation map for the specified iteration.
 This function must be implemented for each calibration experiment.
