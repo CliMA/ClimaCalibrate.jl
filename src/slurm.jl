@@ -2,7 +2,7 @@
 kwargs(; kwargs...) = Dict{Symbol, Any}(kwargs...)
 
 """
-generate_sbatch_script
+    generate_sbatch_script
 
 
 """
@@ -47,11 +47,7 @@ function generate_sbatch_script(
     model_interface = "$model_interface"; include(model_interface)
 
     experiment_dir = "$experiment_dir"
-    experiment_config = CAL.ExperimentConfig(experiment_dir)
-    experiment_id = experiment_config.id
-    physical_model = CAL.get_forward_model(Val(Symbol(experiment_id)))
-    CAL.run_forward_model(physical_model, CAL.get_config(physical_model, member, iteration, experiment_dir))
-    @info "Forward Model Run Completed" experiment_id physical_model iteration member'
+    CAL.run_forward_model(CAL.set_up_forward_model(member, iteration, experiment_dir))'
     """
     return sbatch_contents
 end
@@ -157,7 +153,8 @@ If verbose, includes the ensemble member's output.
 """
 function log_member_error(output_dir, iteration, member, verbose = false)
     member_log = path_to_model_log(output_dir, iteration, member)
-    warn_str = "Ensemble member $member raised an error. See model log at $(abspath(member_log)) for stacktrace"
+    warn_str = """Ensemble member $member raised an error. See model log at \
+    $(abspath(member_log)) for stacktrace"""
     if verbose
         stacktrace = replace(readchomp(member_log), "\\n" => "\n")
         warn_str = warn_str * ": \n$stacktrace"
@@ -167,9 +164,11 @@ end
 
 function report_iteration_status(statuses, output_dir, iter)
     all(job_completed.(statuses)) || error("Some jobs are not complete")
+
     if all(job_failed, statuses)
         error(
-            "Full ensemble for iteration $iter has failed. See model logs in $(abspath(path_to_iteration(output_dir, iter))) for details.",
+            """Full ensemble for iteration $iter has failed. See model logs in
+            $(abspath(path_to_iteration(output_dir, iter)))""",
         )
     elseif any(job_failed, statuses)
         @warn "Failed ensemble members: $(findall(job_failed, statuses))"
@@ -246,5 +245,4 @@ function format_slurm_time(minutes::Int)
         )
     end
 end
-
 format_slurm_time(str::AbstractString) = str

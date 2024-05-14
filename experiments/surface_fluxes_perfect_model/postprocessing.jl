@@ -14,7 +14,6 @@ using ClimaCalibrate
 experiment_dir = dirname(Base.active_project())
 experiment_config = ClimaCalibrate.ExperimentConfig(experiment_dir)
 output_dir = experiment_config.output_dir
-experiment_id = experiment_config.id
 N_iter = experiment_config.n_iterations
 N_mem = experiment_config.ensemble_size
 
@@ -103,9 +102,7 @@ end
 
 
 pkg_dir = pkgdir(ClimaCalibrate)
-model_config = YAML.load_file(
-    joinpath(pkg_dir, "experiments", experiment_id, "model_config.yml"),
-)
+model_config = YAML.load_file(joinpath(experiment_dir, "model_config.yml"))
 
 eki_path = joinpath(
     ClimaCalibrate.path_to_iteration(output_dir, N_iter),
@@ -133,10 +130,7 @@ include(joinpath(experiment_dir, "model_interface.jl"))
 f = Makie.Figure()
 ax = Makie.Axis(f[1, 1], xlabel = "Iteration", ylabel = "Model Ustar")
 ustar_obs = JLD2.load_object(
-    joinpath(
-        pkg_dir,
-        "experiments/$experiment_id/data/synthetic_ustar_array_noisy.jld2",
-    ),
+    joinpath(pkg_dir, "$experiment_dir/data/synthetic_ustar_array_noisy.jld2"),
 )
 x_inputs = load_profiles(model_config["x_data_file"])
 

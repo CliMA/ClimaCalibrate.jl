@@ -16,9 +16,9 @@ To calibrate parameters, you need:
 - Truth and noise data
 - Observation map script with a function `observation_map(iteration)`
 
-These components are detailed in the guide below. Examples of all of these can also be found in `experiments/sphere_held_suarez_rhoe_equilmoist`
+These components are detailed in the guide below. Examples of all of these can also be found in ClimaAtmos in `calibration/experiments/sphere_held_suarez_rhoe_equilmoist`
 
-First, create a folder for your experiment with a descriptive experiment id in the `experiments/` folder. All of the components described below will be stored in this folder.
+First, create a folder for your experiment with a descriptive name in the `calibration/experiments/` folder. All of the components described below will be stored in this folder.
 
 ## Atmos Configuration File
 
@@ -96,8 +96,7 @@ Constraint constructors:
 
 The observation map is applied to process model output diagnostics into the exact observable used to fit to observations. In a perfect model setting it is used also to generate the observation.
 
-Your observation map file must export a function `observation_map(::Val{:<experiment_id>}, iteration)`, this function is specific to each experiment, so it is dispatched on the `experiment_id`.
-These requirements arise from the update step, which runs the function with your given experiment ID.
+These requirements arise from the update step, which runs the `observation_map` function.
 This function must load in model diagnostics for each ensemble member in the iteration and construct an array `arr = Array{Float64}(undef, dims..., ensemble_size)` such that
 `arr[:, i]` will return the i-th ensemble member's observation map output. Note this floating point precision is required for the EKI update step.
 
@@ -113,7 +112,7 @@ First, construct the array to store the ensemble's observations. Then, for each 
 Pseudocode for `observation_map(iteration)`:
 
 ```julia
-function observation_map(::Val{:sphere_held_suarez_rhoe_equilmoist}, iteration)
+function observation_map(iteration)
     # Get Configuration
     config_file = joinpath("calibration", "sphere_held_suarez_rhoe_equilmoist")
     config = ExperimentConfig(config_file)

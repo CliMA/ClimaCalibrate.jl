@@ -1,11 +1,6 @@
 import EnsembleKalmanProcesses as EKP
 using ClimaCalibrate
-import ClimaCalibrate:
-    AbstractPhysicalModel,
-    get_config,
-    run_forward_model,
-    get_forward_model,
-    ExperimentConfig
+import ClimaCalibrate: set_up_forward_model, run_forward_model, ExperimentConfig
 import YAML
 
 """
@@ -32,7 +27,6 @@ We need to follow the following steps for the calibration:
 4. define the prior distributions for θ (this is subjective and can be based on expert knowledge or previous studies)
 
 """
-struct SurfaceFluxModel <: AbstractPhysicalModel end
 
 experiment_dir = joinpath(
     pkgdir(ClimaCalibrate),
@@ -42,18 +36,8 @@ experiment_dir = joinpath(
 include(joinpath(experiment_dir, "sf_model.jl"))
 include(joinpath(experiment_dir, "observation_map.jl"))
 
-function get_forward_model(::Val{:surface_fluxes_perfect_model})
-    return SurfaceFluxModel()
-end
-
-function get_config(
-    model::SurfaceFluxModel,
-    member,
-    iteration,
-    experiment_dir::AbstractString,
-)
-    return get_config(
-        model,
+function set_up_forward_model(member, iteration, experiment_dir::AbstractString)
+    return set_up_forward_model(
         member,
         iteration,
         ExperimentConfig(experiment_dir),
@@ -61,15 +45,14 @@ function get_config(
 end
 
 """
-    get_config(member, iteration, experiment_dir::AbstractString)
-    get_config(member, iteration, experiment_config::ExperimentConfig)
+    set_up_forward_model(member, iteration, experiment_dir::AbstractString)
+    set_up_forward_model(member, iteration, experiment_config::ExperimentConfig)
 
 Returns an config dictionary object for the given member and iteration.
 Given an experiment dir, it will load the ExperimentConfig
 This assumes that the config dictionary has the `output_dir` key.
 """
-function get_config(
-    ::SurfaceFluxModel,
+function set_up_forward_model(
     member,
     iteration,
     experiment_config::ExperimentConfig,
@@ -103,7 +86,7 @@ end
 Runs the model with the given an AbstractDict object.
 """
 
-function run_forward_model(::SurfaceFluxModel, config::AbstractDict)
+function run_forward_model(config::AbstractDict)
     x_inputs = load_profiles(config["x_data_file"])
     FT = typeof(x_inputs.profiles_int[1].T)
     obtain_ustar(FT, x_inputs, config)

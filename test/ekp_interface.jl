@@ -17,7 +17,6 @@ n_iterations = 1
 ensemble_size = 10
 
 config = CAL.ExperimentConfig(
-    "test",
     n_iterations,
     ensemble_size,
     observations,

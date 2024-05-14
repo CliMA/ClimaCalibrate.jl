@@ -47,19 +47,15 @@ calibrate(b::Type{JuliaBackend}, experiment_dir::AbstractString) =
 
 function calibrate(::Type{JuliaBackend}, config::ExperimentConfig)
     initialize(config)
-    (; n_iterations, id, ensemble_size) = config
+    (; n_iterations, ensemble_size) = config
     eki = nothing
-    physical_model = get_forward_model(Val(Symbol(id)))
     for i in 0:(n_iterations - 1)
         @info "Running iteration $i"
         for m in 1:ensemble_size
-            run_forward_model(
-                physical_model,
-                get_config(physical_model, m, i, config),
-            )
+            run_forward_model(set_up_forward_model(m, i, config))
             @info "Completed member $m"
         end
-        G_ensemble = observation_map(Val(Symbol(id)), i)
+        G_ensemble = observation_map(i)
         save_G_ensemble(config, i, G_ensemble)
         eki = update_ensemble(config, i)
     end
@@ -150,7 +146,7 @@ function calibrate(
         )
         report_iteration_status(statuses, output_dir, iter)
         @info "Completed iteration $iter, updating ensemble"
-        G_ensemble = observation_map(Val(Symbol(config.id)), iter)
+        G_ensemble = observation_map(iter)
         save_G_ensemble(config, iter, G_ensemble)
         eki = update_ensemble(config, iter)
     end
