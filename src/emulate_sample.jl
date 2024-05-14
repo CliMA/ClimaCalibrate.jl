@@ -1,36 +1,22 @@
-import CalibrateEmulateSample as CES
-using CalibrateEmulateSample.Emulators
-using CalibrateEmulateSample.MarkovChainMonteCarlo
+# Function stubs for the CalibrateEmulateSample extension
 
-import EnsembleKalmanProcesses as EKP
-using EnsembleKalmanProcesses.ParameterDistributions
-using EnsembleKalmanProcesses.TOMLInterface
-
-import JLD2
+extension_not_loaded_err() = error(
+    "CES extension not loaded. Import CalibrateEmulateSample or run `Base.retry_load_extensions()`",
+)
 
 """
     get_input_output_pairs(ekp)
 
 Helper function for getting the input/output pairs from an EKP object.
 """
-function get_input_output_pairs(ekp; N_iterations = nothing)
-    N_iterations = isnothing(N_iterations) ? length(ekp.g) : N_iterations
-    input_output_pairs = CES.Utilities.get_training_points(ekp, N_iterations)
-    return input_output_pairs
-end
+get_input_output_pairs(ekp; N_iterations) = extension_not_loaded_err()
 
 """
     gp_emulator(input_output_pairs, obs_noise_cov)
 
 Constructs a gaussian process emulator from the given input/output pairs and noise.
 """
-function gp_emulator(input_output_pairs, obs_noise_cov)
-    gppackage = GPJL()
-    gauss_proc = GaussianProcess(gppackage, noise_learn = false)
-    emulator = Emulator(gauss_proc, input_output_pairs; obs_noise_cov)
-    optimize_hyperparameters!(emulator)
-    return emulator
-end
+gp_emulator(input_output_pairs, obs_noise_cov) = extension_not_loaded_err()
 
 """
     sample(
@@ -49,25 +35,15 @@ The initial stepsize can be specified by `init_stepsize`,
 and the number of initial samples to discard can be set by `discard_initial`.
 Returns both the MCMC object and the samples in a NamedTuple.
 """
-function sample(
+sample(
     emulator,
     y_obs,
     prior,
     init_params;
-    n_samples = 100_000,
-    init_stepsize = 0.1,
-    discard_initial = 0,
-)
-    mcmc = MCMCWrapper(RWMHSampling(), y_obs, prior, emulator; init_params)
-    new_step = optimize_stepsize(mcmc; init_stepsize, N = 2000, discard_initial)
-    chain = MarkovChainMonteCarlo.sample(
-        mcmc,
-        n_samples;
-        stepsize = new_step,
-        discard_initial = 0,
-    )
-    return (; mcmc, chain)
-end
+    n_samples,
+    init_stepsize,
+    discard_initial,
+) = extension_not_loaded_err()
 
 """
     save_posterior(mcmc, chain; filename = "samples.jld2")
@@ -76,8 +52,4 @@ Given an MCMC object, a Markov chain of samples, and a prior distribution,
 constructs the posterior distribution and saves it to `filename`. 
 Returns the samples in constrained (physical) parameter space.
 """
-function save_posterior(mcmc, chain; filename = "samples.jld2")
-    posterior = MarkovChainMonteCarlo.get_posterior(mcmc, chain)
-    JLD2.save_object(filename, posterior)
-    return posterior
-end
+save_posterior(mcmc, chain; filename) = extension_not_loaded_err()

@@ -1,5 +1,5 @@
 import EnsembleKalmanProcesses as EKP
-using CalibrateAtmos
+import CalibrateAtmos
 import CalibrateAtmos:
     AbstractPhysicalModel,
     get_config,
