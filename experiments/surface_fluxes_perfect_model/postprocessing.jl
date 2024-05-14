@@ -9,10 +9,10 @@ import TOML
 import CairoMakie: Makie
 using Statistics
 
-using CalibrateAtmos
+using ClimaCalibrate
 
 experiment_dir = dirname(Base.active_project())
-experiment_config = CalibrateAtmos.ExperimentConfig(experiment_dir)
+experiment_config = ClimaCalibrate.ExperimentConfig(experiment_dir)
 output_dir = experiment_config.output_dir
 experiment_id = experiment_config.id
 N_iter = experiment_config.n_iterations
@@ -102,13 +102,13 @@ function convergence_plot(
 end
 
 
-pkg_dir = pkgdir(CalibrateAtmos)
+pkg_dir = pkgdir(ClimaCalibrate)
 model_config = YAML.load_file(
     joinpath(pkg_dir, "experiments", experiment_id, "model_config.yml"),
 )
 
 eki_path = joinpath(
-    CalibrateAtmos.path_to_iteration(output_dir, N_iter),
+    ClimaCalibrate.path_to_iteration(output_dir, N_iter),
     "eki_file.jld2",
 );
 eki = JLD2.load_object(eki_path);
@@ -146,7 +146,7 @@ for iter in 0:N_iter
         model_config["toml"] = [
             joinpath(
                 pkg_dir,
-                CalibrateAtmos.path_to_ensemble_member(output_dir, iter, i),
+                ClimaCalibrate.path_to_ensemble_member(output_dir, iter, i),
                 "parameters.toml",
             ),
         ]

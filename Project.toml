@@ -1,4 +1,4 @@
-name = "CalibrateAtmos"
+name = "ClimaCalibrate"
 uuid = "4347a170-ebd6-470c-89d3-5c705c0cacc2"
 authors = ["Climate Modeling Alliance"]
 version = "0.1.0"

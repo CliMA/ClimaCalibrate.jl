@@ -1,19 +1,19 @@
 using Documenter
 using Documenter: doctest
-using CalibrateAtmos
+using ClimaCalibrate
 using Base.CoreLogging
 using DocumenterCitations
 
 disable_logging(Base.CoreLogging.Info) # Hide doctest's `@info` printing
 bib = CitationBibliography(joinpath(@__DIR__, "bibliography.bib"))
 
-doctest(CalibrateAtmos; plugins = [bib])
+doctest(ClimaCalibrate; plugins = [bib])
 disable_logging(Base.CoreLogging.BelowMinLevel) # Re-enable all logging
 
 makedocs(
     plugins = [bib],
-    modules = [CalibrateAtmos],
-    sitename = "CalibrateAtmos.jl",
+    modules = [ClimaCalibrate],
+    sitename = "ClimaCalibrate.jl",
     authors = "Clima",
     checkdocs = :exports,
     format = Documenter.HTML(
@@ -32,7 +32,7 @@ makedocs(
 )
 
 deploydocs(
-    repo = "github.com/CliMA/CalibrateAtmos.jl.git",
+    repo = "github.com/CliMA/ClimaCalibrate.jl.git",
     devbranch = "main",
     push_preview = true,
     forcepush = true,

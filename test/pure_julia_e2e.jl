@@ -5,7 +5,7 @@ using EnsembleKalmanProcesses.ParameterDistributions
 using EnsembleKalmanProcesses.TOMLInterface
 import ClimaParams as CP
 
-import CalibrateAtmos:
+import ClimaCalibrate:
     AbstractPhysicalModel,
     get_config,
     run_forward_model,

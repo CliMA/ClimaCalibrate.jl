@@ -9,7 +9,7 @@ using EnsembleKalmanProcesses.ParameterDistributions
 using EnsembleKalmanProcesses.TOMLInterface
 import JLD2
 
-import CalibrateAtmos as CAL
+import ClimaCalibrate as CAL
 
 
 function CAL.get_input_output_pairs(ekp; N_iterations = nothing)

@@ -24,7 +24,7 @@ model interfaces and data generation scripts are properly aligned with the confi
 # Example
 Run: `julia --project=experiments/surface_fluxes_perfect_model`
 ```julia
-import CalibrateAtmos
+import ClimaCalibrate
 
 # Generate observational data and load interface
 experiment_dir = dirname(Base.active_project())
@@ -33,7 +33,7 @@ include(joinpath(experiment_dir, "observation_map.jl"))
 include(joinpath(experiment_dir, "model_interface.jl"))
 
 # Initialize and run the calibration
-eki = CalibrateAtmos.calibrate(experiment_dir)
+eki = ClimaCalibrate.calibrate(experiment_dir)
 ```
 """
 calibrate(config::ExperimentConfig; kwargs...) =
@@ -87,7 +87,7 @@ Takes either an ExperimentConfig for an experiment folder.
 # Usage
 Open julia: `julia --project=experiments/surface_fluxes_perfect_model`
 ```julia
-import CalibrateAtmos: CaltechHPC, calibrate
+import ClimaCalibrate: CaltechHPC, calibrate
 
 experiment_dir = dirname(Base.active_project())
 model_interface = joinpath(experiment_dir, "model_interface.jl")
@@ -221,7 +221,7 @@ function generate_sbatch_script(
     $module_load
 
     srun --output=$member_log --open-mode=append julia --project=$experiment_dir -e '
-    import CalibrateAtmos as CAL
+    import ClimaCalibrate as CAL
     iteration = $iter; member = $member
     model_interface = "$model_interface"; include(model_interface)
 
