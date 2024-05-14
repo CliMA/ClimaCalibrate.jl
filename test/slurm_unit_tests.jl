@@ -13,6 +13,13 @@ const GPUS_PER_TASK = 1
 const EXPERIMENT_DIR = "exp/dir"
 const MODEL_INTERFACE = "model_interface.jl"
 
+const slurm_kwargs = CAL.kwargs(
+    time = TIME_LIMIT,
+    partition = PARTITION,
+    cpus_per_task = CPUS_PER_TASK,
+    gpus_per_task = GPUS_PER_TASK,
+)
+
 # Time formatting tests
 @test CAL.format_slurm_time(TIME_LIMIT) == "01:30:00"
 @test CAL.format_slurm_time(1) == "00:01:00"
@@ -21,27 +28,22 @@ const MODEL_INTERFACE = "model_interface.jl"
 
 # Generate and validate sbatch file contents
 sbatch_file = CAL.generate_sbatch_script(
-    OUTPUT_DIR,
     ITER,
     MEMBER,
-    TIME_LIMIT,
-    NTASKS,
-    PARTITION,
-    CPUS_PER_TASK,
-    GPUS_PER_TASK,
+    OUTPUT_DIR,
     EXPERIMENT_DIR,
-    MODEL_INTERFACE,
+    MODEL_INTERFACE;
+    slurm_kwargs,
 )
 
 expected_sbatch_contents = """
 #!/bin/bash
 #SBATCH --job-name=run_1_1
-#SBATCH --time=01:30:00
-#SBATCH --ntasks=1
-#SBATCH --partition=expansion
-#SBATCH --cpus-per-task=16
-#SBATCH --gpus-per-task=1
 #SBATCH --output=test/iteration_001/member_001/model_log.txt
+#SBATCH --partition=expansion
+#SBATCH --gpus-per-task=1
+#SBATCH --cpus-per-task=16
+#SBATCH --time=01:30:00
 
 export MODULEPATH=/groups/esm/modules:\$MODULEPATH
 module purge

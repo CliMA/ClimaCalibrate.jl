@@ -3,7 +3,7 @@
 # And include this file
 
 import ClimaCalibrate:
-    get_backend, CaltechHPC, JuliaBackend, calibrate, get_prior
+    get_backend, CaltechHPC, JuliaBackend, calibrate, get_prior, kwargs
 using Test
 import EnsembleKalmanProcesses: get_ϕ_mean_final, get_g_mean_final
 
@@ -40,8 +40,8 @@ backend = get_backend()
 eki = calibrate(
     backend,
     experiment_dir;
-    time_limit = 5,
     model_interface,
+    slurm_kwargs = kwargs(time = 5),
     verbose = true,
 )
 test_sf_calibration_output(eki, prior)
