@@ -7,9 +7,9 @@ import SurfaceFluxes.UniversalFunctions as UF
 import Thermodynamics as TD
 using YAML
 import SurfaceFluxes.Parameters: SurfaceFluxesParameters
-using CalibrateAtmos
+using ClimaCalibrate
 
-pkg_dir = pkgdir(CalibrateAtmos)
+pkg_dir = pkgdir(ClimaCalibrate)
 experiment_path = "$pkg_dir/experiments/$experiment_id"
 data_path = "$experiment_path/data"
 include(joinpath(experiment_path, "model_interface.jl"))

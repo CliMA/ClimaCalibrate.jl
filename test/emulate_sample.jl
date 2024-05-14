@@ -8,7 +8,7 @@ import EnsembleKalmanProcesses as EKP
 using EnsembleKalmanProcesses.ParameterDistributions
 using EnsembleKalmanProcesses.TOMLInterface
 
-import CalibrateAtmos as CAL
+import ClimaCalibrate as CAL
 
 @testset "Emulate and Sample tests" begin
     y_obs = [261.5493]

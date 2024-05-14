@@ -12,7 +12,7 @@ import EnsembleKalmanProcesses as EKP
 using EnsembleKalmanProcesses.ParameterDistributions
 using EnsembleKalmanProcesses.TOMLInterface
 
-import CalibrateAtmos as CAL
+import ClimaCalibrate as CAL
 ```
 
 Next, load in the data, EKP object, and prior distribution. These values are taken

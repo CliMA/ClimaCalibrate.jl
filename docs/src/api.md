@@ -3,27 +3,27 @@
 ## Model Interface
 
 ```@docs
-CalibrateAtmos.get_config
-CalibrateAtmos.run_forward_model
-CalibrateAtmos.get_forward_model
-CalibrateAtmos.observation_map
+ClimaCalibrate.get_config
+ClimaCalibrate.run_forward_model
+ClimaCalibrate.get_forward_model
+ClimaCalibrate.observation_map
 ```
 
 ## Backend Interface
 
 ```@docs
-CalibrateAtmos.calibrate
-CalibrateAtmos.sbatch_model_run
+ClimaCalibrate.calibrate
+ClimaCalibrate.sbatch_model_run
 ```
 
 ## EnsembleKalmanProcesses Interface
 
 ```@docs
-CalibrateAtmos.initialize
-CalibrateAtmos.save_G_ensemble
-CalibrateAtmos.update_ensemble
-CalibrateAtmos.ExperimentConfig
-CalibrateAtmos.get_prior
-CalibrateAtmos.get_param_dict
-CalibrateAtmos.path_to_iteration
+ClimaCalibrate.initialize
+ClimaCalibrate.save_G_ensemble
+ClimaCalibrate.update_ensemble
+ClimaCalibrate.ExperimentConfig
+ClimaCalibrate.get_prior
+ClimaCalibrate.get_param_dict
+ClimaCalibrate.path_to_iteration
 ```

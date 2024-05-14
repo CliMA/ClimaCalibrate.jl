@@ -1,11 +1,11 @@
 using Statistics
 import YAML
 import JLD2
-import CalibrateAtmos:
+import ClimaCalibrate:
     observation_map, ExperimentConfig, path_to_ensemble_member
 
 experiment_dir = joinpath(
-    pkgdir(CalibrateAtmos),
+    pkgdir(ClimaCalibrate),
     "experiments",
     "surface_fluxes_perfect_model",
 )

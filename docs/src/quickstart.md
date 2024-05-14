@@ -15,7 +15,7 @@ To run the example experiment on your local machine, first open your REPL with t
 
 Next, run the following code:
 ```julia
-import CalibrateAtmos
+import ClimaCalibrate
 
 experiment_dir = dirname(Base.active_project())
 
@@ -24,7 +24,7 @@ include(joinpath(experiment_dir, "generate_data.jl"))
 include(joinpath(experiment_dir, "observation_map.jl"))
 include(joinpath(experiment_dir, "model_interface.jl"))
 
-eki = CalibrateAtmos.calibrate(JuliaBackend, experiment_dir)
+eki = ClimaCalibrate.calibrate(JuliaBackend, experiment_dir)
 include(joinpath(experiment_dir, "postprocessing.jl"))
 ```
 
@@ -33,11 +33,11 @@ This method will queue Julia processes to run on your slurm cluster.
 
 To run this experiment:
 1. Log onto the Caltech HPC
-2. Clone CalibrateAtmos.jl and `cd` into the repository.
+2. Clone ClimaCalibrate.jl and `cd` into the repository.
 3. Start julia: `julia --project=experiments/surace_fluxes_perfect_model`
 4. Run the following:
 ```julia
-import CalibrateAtmos: CaltechHPC, calibrate
+import ClimaCalibrate: CaltechHPC, calibrate
 
 experiment_dir = dirname(Base.active_project())
 
@@ -50,4 +50,4 @@ eki = calibrate(CaltechHPC, experiment_dir;
 include(joinpath(experiment_dir, "postprocessing.jl"))
 ```
 
-New experiments should be defined within the component model repos (in this case, `SurfaceFluxes.jl`), so that the internals of `CalibrateAtmos.jl` do not explicitly depend on component models.
+New experiments should be defined within the component model repos (in this case, `SurfaceFluxes.jl`), so that the internals of `ClimaCalibrate.jl` do not explicitly depend on component models.

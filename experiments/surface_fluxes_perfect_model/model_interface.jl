@@ -1,6 +1,6 @@
 import EnsembleKalmanProcesses as EKP
-import CalibrateAtmos
-import CalibrateAtmos:
+using ClimaCalibrate
+import ClimaCalibrate:
     AbstractPhysicalModel,
     get_config,
     run_forward_model,
@@ -35,7 +35,7 @@ We need to follow the following steps for the calibration:
 struct SurfaceFluxModel <: AbstractPhysicalModel end
 
 experiment_dir = joinpath(
-    pkgdir(CalibrateAtmos),
+    pkgdir(ClimaCalibrate),
     "experiments",
     "surface_fluxes_perfect_model",
 )

@@ -1,6 +1,6 @@
 # Unit tests for slurm job control functionality
 using Test
-import CalibrateAtmos as CAL
+import ClimaCalibrate as CAL
 
 const OUTPUT_DIR = "test"
 const ITER = 1
@@ -49,7 +49,7 @@ module load climacommon/2024_04_30
 
 
 srun --output=test/iteration_001/member_001/model_log.txt --open-mode=append julia --project=exp/dir -e '
-import CalibrateAtmos as CAL
+import ClimaCalibrate as CAL
 iteration = 1; member = 1
 model_interface = "model_interface.jl"; include(model_interface)
 

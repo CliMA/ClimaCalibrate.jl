@@ -2,7 +2,7 @@
 # To run, open the REPL: julia --project=experiments/surface_fluxes_perfect_model
 # And include this file
 
-import CalibrateAtmos:
+import ClimaCalibrate:
     get_backend, CaltechHPC, JuliaBackend, calibrate, get_prior
 using Test
 import EnsembleKalmanProcesses: get_ϕ_mean_final, get_g_mean_final

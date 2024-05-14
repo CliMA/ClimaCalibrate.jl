@@ -1,6 +1,6 @@
-# CalibrateAtmos.jl
+# ClimaCalibrate.jl
 
-CalibrateAtmos.jl is a toolkit for developing scalable and reproducible model 
+ClimaCalibrate.jl is a toolkit for developing scalable and reproducible model 
 calibration pipelines using CalibrateEmulateSample.jl with minimal boilerplate.
 
 For more information, see our Getting Started page.
