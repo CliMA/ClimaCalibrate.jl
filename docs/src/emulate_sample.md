@@ -16,7 +16,8 @@ import ClimaCalibrate as CAL
 ```
 
 Next, load in the data, EKP object, and prior distribution. These values are taken
-from the perfect model experiment with experiment ID `sphere_held_suarez_rhoe_equilmoist`.
+from the Held-Suarez perfect model experiment in ClimaAtmos.
+
 ```julia
 asset_path = joinpath(
     pkgdir(CAL),

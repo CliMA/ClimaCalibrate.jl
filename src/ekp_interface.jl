@@ -16,7 +16,6 @@ ExperimentConfig holds the configuration for a calibration experiment.
 This can be constructed from a YAML configuration file or directly using individual parameters.
 """
 struct ExperimentConfig
-    id::AbstractString
     n_iterations::Integer
     ensemble_size::Integer
     observations::Any
@@ -40,10 +39,7 @@ function ExperimentConfig(filepath::AbstractString; kwargs...)
         error("Invalid experiment configuration filepath: `$filepath`")
     end
 
-    experiment_id =
-        get(config_dict, "experiment_id", last(splitdir(experiment_dir)))
-    default_output =
-        haskey(ENV, "CI") ? experiment_id : joinpath("output", experiment_id)
+    default_output = joinpath(experiment_dir, "output")
     output_dir = get(config_dict, "output_dir", default_output)
 
     n_iterations = config_dict["n_iterations"]
@@ -65,7 +61,6 @@ function ExperimentConfig(filepath::AbstractString; kwargs...)
     prior = get_prior(prior_path)
 
     return ExperimentConfig(
-        experiment_id,
         n_iterations,
         ensemble_size,
         observations,

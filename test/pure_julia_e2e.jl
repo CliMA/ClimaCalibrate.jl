@@ -6,10 +6,9 @@ using EnsembleKalmanProcesses.TOMLInterface
 import ClimaParams as CP
 
 import ClimaCalibrate:
-    AbstractPhysicalModel,
-    get_config,
     run_forward_model,
-    get_forward_model,
+    set_up_forward_model,
+    JuliaBackend,
     ExperimentConfig,
     calibrate,
     observation_map
@@ -17,7 +16,6 @@ import ClimaCalibrate:
 import JLD2
 
 # Experiment Info
-id = "e2e_test"
 output_file = "model_output.jld2"
 prior = constrained_gaussian("test_param", 10, 5, 0, Inf)
 n_iterations = 1
@@ -27,7 +25,6 @@ noise = [0.01;;]
 output_dir = joinpath("test", "e2e_test_output")
 
 experiment_config = ExperimentConfig(
-    id,
     n_iterations,
     ensemble_size,
     observations,
@@ -38,14 +35,7 @@ experiment_config = ExperimentConfig(
 )
 
 # Model interface
-struct TestModel end
-
-TestModel <: AbstractPhysicalModel
-
-get_forward_model(::Val{:e2e_test}) = TestModel()
-
-function get_config(
-    physical_model::TestModel,
+function set_up_forward_model(
     member,
     iteration,
     experiment_config::ExperimentConfig,
@@ -59,7 +49,7 @@ function get_config(
     return model_config
 end
 
-function run_forward_model(::TestModel, config)
+function run_forward_model(config)
     toml_dict = CP.create_toml_dict(Float64; override_file = config["toml"])
     (; test_param) = CP.get_parameter_values(toml_dict, "test_param")
     output = test_param
@@ -67,7 +57,7 @@ function run_forward_model(::TestModel, config)
 end
 
 # Observation map
-function observation_map(::Val{:e2e_test}, iteration)
+function observation_map(iteration)
 
     (; ensemble_size) = experiment_config
     dims = 1
@@ -82,9 +72,9 @@ function observation_map(::Val{:e2e_test}, iteration)
 end
 
 # Test!
-ekp = calibrate(experiment_config)
+ekp = calibrate(JuliaBackend, experiment_config)
 
-@testset "Test simple end-to-end calibration" begin
+@testset "Test end-to-end calibration" begin
     parameter_values =
         [EKP.get_ϕ_mean(prior, ekp, it) for it in 1:(n_iterations + 1)]
     @test parameter_values[1][1] ≈ 9.779 rtol = 0.01

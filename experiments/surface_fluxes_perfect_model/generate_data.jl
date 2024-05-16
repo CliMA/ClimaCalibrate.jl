@@ -1,5 +1,4 @@
 # generate_data: generate true y, noise and x_inputs
-experiment_id = "surface_fluxes_perfect_model"
 
 import SurfaceFluxes as SF
 import SurfaceFluxes.Parameters as SFPP
@@ -10,8 +9,9 @@ import SurfaceFluxes.Parameters: SurfaceFluxesParameters
 using ClimaCalibrate
 
 pkg_dir = pkgdir(ClimaCalibrate)
-experiment_path = "$pkg_dir/experiments/$experiment_id"
-data_path = "$experiment_path/data"
+experiment_path =
+    joinpath(pkg_dir, "experiments", "surface_fluxes_perfect_model")
+data_path = joinpath(experiment_path, "data")
 include(joinpath(experiment_path, "model_interface.jl"))
 
 FT = Float32

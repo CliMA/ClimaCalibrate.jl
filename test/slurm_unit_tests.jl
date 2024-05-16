@@ -56,11 +56,7 @@ iteration = 1; member = 1
 model_interface = "model_interface.jl"; include(model_interface)
 
 experiment_dir = "exp/dir"
-experiment_config = CAL.ExperimentConfig(experiment_dir)
-experiment_id = experiment_config.id
-physical_model = CAL.get_forward_model(Val(Symbol(experiment_id)))
-CAL.run_forward_model(physical_model, CAL.get_config(physical_model, member, iteration, experiment_dir))
-@info "Forward Model Run Completed" experiment_id physical_model iteration member'
+CAL.run_forward_model(CAL.set_up_forward_model(member, iteration, experiment_dir))'
 """
 
 for (generated_str, test_str) in

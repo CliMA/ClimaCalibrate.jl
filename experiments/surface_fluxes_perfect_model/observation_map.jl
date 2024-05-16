@@ -16,7 +16,7 @@ experiment_dir = joinpath(
 Returns the observation map (from the raw model output to the observable y),
 as specified by process_member_data, for the given iteration.
 """
-function observation_map(::Val{:surface_fluxes_perfect_model}, iteration)
+function observation_map(iteration)
     config = ExperimentConfig(experiment_dir)
     (; output_dir, ensemble_size) = config
     model_output = "model_ustar_array.jld2"

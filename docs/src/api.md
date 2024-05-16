@@ -3,9 +3,8 @@
 ## Model Interface
 
 ```@docs
-ClimaCalibrate.get_config
+ClimaCalibrate.set_up_forward_model
 ClimaCalibrate.run_forward_model
-ClimaCalibrate.get_forward_model
 ClimaCalibrate.observation_map
 ```
 
