@@ -47,7 +47,7 @@ expected_sbatch_contents = """
 
 export MODULEPATH=/groups/esm/modules:\$MODULEPATH
 module purge
-module load climacommon/2024_04_30
+module load climacommon/2024_05_27
 
 
 srun --output=test/iteration_001/member_001/model_log.txt --open-mode=append julia --project=exp/dir -e '
