@@ -15,7 +15,7 @@ function generate_sbatch_script(
     module_load = """
     export MODULEPATH=/groups/esm/modules:\$MODULEPATH
     module purge
-    module load climacommon/2024_04_30
+    module load climacommon/2024_05_27
     """,
     slurm_kwargs = Dict{Symbol, Any}(
         :time => 45,
