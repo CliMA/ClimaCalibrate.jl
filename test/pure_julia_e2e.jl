@@ -31,7 +31,6 @@ experiment_config = ExperimentConfig(
     noise,
     prior,
     output_dir,
-    false,
 )
 
 # Model interface

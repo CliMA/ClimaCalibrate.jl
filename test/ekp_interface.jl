@@ -23,7 +23,6 @@ config = CAL.ExperimentConfig(
     noise,
     prior,
     output_dir,
-    false,
 )
 
 CAL.initialize(config)

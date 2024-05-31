@@ -34,6 +34,11 @@ sbatch_file = CAL.generate_sbatch_script(
     EXPERIMENT_DIR,
     MODEL_INTERFACE;
     slurm_kwargs,
+    module_load_str = """
+    export MODULEPATH=/groups/esm/modules:\$MODULEPATH
+    module purge
+    module load climacommon/2024_05_27
+    """,
 )
 
 expected_sbatch_contents = """

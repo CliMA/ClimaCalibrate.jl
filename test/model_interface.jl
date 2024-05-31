@@ -22,7 +22,6 @@ using Test
             [1],
             ClimaCalibrate.get_prior(prior_path),
             "output",
-            false,
         )
         @test_throws ErrorException("set_up_forward_model not implemented") ClimaCalibrate.set_up_forward_model(
             1,
