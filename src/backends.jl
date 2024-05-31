@@ -3,6 +3,11 @@ abstract type AbstractBackend end
 struct JuliaBackend <: AbstractBackend end
 struct CaltechHPC <: AbstractBackend end
 
+"""
+    get_backend()
+
+Determine the appropriate backend using relevant system information.
+"""
 function get_backend()
     backend = JuliaBackend
     if isfile("/etc/redhat-release") &&
@@ -13,13 +18,15 @@ function get_backend()
 end
 
 """
-    calibrate(config::ExperimentConfig)
-    calibrate(experiment_dir::AbstractString)
+    calibrate(::Type{JuliaBackend}, config::ExperimentConfig)
+    calibrate(::Type{JuliaBackend}, experiment_dir::AbstractString)
 
-Run a calibration in Julia. Takes an ExperimentConfig or an experiment folder.
+Run a calibration in Julia.
 
-This function is intended for use in a larger workflow, assuming that all related 
-model interfaces and data generation scripts are properly aligned with the configuration.
+Takes an ExperimentConfig or an experiment folder.
+If no backend is passed, one is chosen via `get_backend`. 
+This function is intended for use in a larger workflow, assuming that all needed 
+model interface and observation map functions are set up for the calibration.
 
 # Example
 Run: `julia --project=experiments/surface_fluxes_perfect_model`
@@ -66,18 +73,14 @@ end
     calibrate(::Type{CaltechHPC}, config::ExperimentConfig; kwargs...)
     calibrate(::Type{CaltechHPC}, experiment_dir; kwargs...)
 
-Runs a full calibration, scheduling the forward model runs on Caltech's HPC cluster.
+Run a full calibration, scheduling the forward model runs on Caltech's HPC cluster.
 
-Takes either an ExperimentConfig for an experiment folder.
+Takes either an ExperimentConfig or an experiment folder.
 
 # Keyword Arguments
-- `experiment_dir::AbstractString`: Directory containing experiment configurations.
-- `model_interface::AbstractString`: Path to the model interface file.
-- `time_limit::AbstractString`: Time limit for Slurm jobs.
-- `ntasks::Int`: Number of tasks to run in parallel.
-- `cpus_per_task::Int`: Number of CPUs per Slurm task.
-- `gpus_per_task::Int`: Number of GPUs per Slurm task.
-- `partition::AbstractString`: Slurm partition to use.
+- `experiment_dir: Directory containing experiment configurations.
+- `model_interface: Path to the model interface file.
+- `slurm_kwargs`: Dictionary of slurm arguments, passed through to `sbatch`.
 - `verbose::Bool`: Enable verbose output for debugging.
 
 # Usage
@@ -113,7 +116,7 @@ function calibrate(
         joinpath(experiment_dir, "..", "..", "model_interface.jl"),
     ),
     verbose = false,
-    slurm_kwargs = Dict(:time_limit => 45),
+    slurm_kwargs = Dict(:time_limit => 45, :ntasks => 1),
 )
     # ExperimentConfig is created from a YAML file within the experiment_dir
     (; n_iterations, output_dir, ensemble_size) = config

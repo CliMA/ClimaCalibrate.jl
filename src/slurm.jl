@@ -1,10 +1,15 @@
-
 kwargs(; kwargs...) = Dict{Symbol, Any}(kwargs...)
 
 """
-    generate_sbatch_script
+    generate_sbatch_script(
+        iter, member,
+        output_dir, experiment_dir, model_interface;
+        module_load_str, slurm_kwargs,
+    )
 
+Generate a string containing an sbatch script to run the forward model.
 
+Helper function for `sbatch_model_run`.
 """
 function generate_sbatch_script(
     iter,
@@ -12,16 +17,8 @@ function generate_sbatch_script(
     output_dir,
     experiment_dir,
     model_interface;
-    module_load = """
-    export MODULEPATH=/groups/esm/modules:\$MODULEPATH
-    module purge
-    module load climacommon/2024_05_27
-    """,
-    slurm_kwargs = Dict{Symbol, Any}(
-        :time => 45,
-        :ntasks => 1,
-        :cpus_per_task => 1,
-    ),
+    module_load_str,
+    slurm_kwargs,
 )
     member_log = path_to_model_log(output_dir, iter, member)
 
@@ -39,7 +36,7 @@ function generate_sbatch_script(
     #SBATCH --output=$member_log
     $slurm_directives_str
 
-    $module_load
+    $module_load_str
 
     srun --output=$member_log --open-mode=append julia --project=$experiment_dir -e '
     import ClimaCalibrate as CAL
@@ -63,7 +60,16 @@ end
         slurm_kwargs,
     )
 
-Construct and execute a command to run a model simulation on a Slurm cluster for a single ensemble member.
+Construct and execute a command to run a forward model on a Slurm cluster for a single ensemble member.
+
+Arguments:
+- iter: Iteration number
+- member: Member number
+- output_dir: Calibration experiment output directory
+- experiment_dir: Directory containing the experiment's Project.toml
+- model_interface: File containing the model interface
+- module_load_str: Commands which load the necessary modules
+- slurm_kwargs: Dictionary containing the slurm resources for the job. Easily generated using `kwargs`.
 """
 function sbatch_model_run(
     iter,
@@ -71,7 +77,16 @@ function sbatch_model_run(
     output_dir,
     experiment_dir,
     model_interface;
-    slurm_kwargs = Dict{Symbol, Any}(),
+    slurm_kwargs = Dict{Symbol, Any}(
+        :time => 45,
+        :ntasks => 1,
+        :cpus_per_task => 1,
+    ),
+    module_load_str = """
+    export MODULEPATH=/groups/esm/modules:\$MODULEPATH
+    module purge
+    module load climacommon/2024_05_27
+    """,
     kwargs...,
 )
     sbatch_contents = generate_sbatch_script(
@@ -81,6 +96,7 @@ function sbatch_model_run(
         experiment_dir,
         model_interface;
         slurm_kwargs,
+        module_load_str,
         kwargs...,
     )
 
@@ -105,7 +121,7 @@ function wait_for_jobs(
     completed_jobs = Set{Int}()
 
     try
-        while !all(job_completed, statuses)
+        while length(completed_jobs) < length(statuses)
             for (m, status) in enumerate(statuses)
                 m in completed_jobs && continue
 
