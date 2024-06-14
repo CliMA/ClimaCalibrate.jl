@@ -37,6 +37,8 @@ function generate_sbatch_script(
     $module_load_str
 
     srun --output=$member_log --open-mode=append julia --project=$experiment_dir -e '
+    import ClimaComms: @import_required_backends
+    @import_required_backends
     import ClimaCalibrate as CAL
     iteration = $iter; member = $member
     model_interface = "$model_interface"; include(model_interface)

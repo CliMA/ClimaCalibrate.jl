@@ -47,6 +47,8 @@ module purge
 module load climacommon/2024_05_27
 
 srun --output=test/iteration_001/member_001/model_log.txt --open-mode=append julia --project=exp/dir -e '
+import ClimaComms: @import_required_backends
+@import_required_backends
 import ClimaCalibrate as CAL
 iteration = 1; member = 1
 model_interface = "model_interface.jl"; include(model_interface)
