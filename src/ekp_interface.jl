@@ -221,6 +221,7 @@ function initialize(
     prior,
     output_dir;
     rng_seed = 1234,
+    ekp_kwargs...,
 )
     Random.seed!(rng_seed)
     rng_ekp = Random.MersenneTwister(rng_seed)
@@ -234,6 +235,7 @@ function initialize(
         EKP.Inversion();
         rng = rng_ekp,
         failure_handler_method = EKP.SampleSuccGauss(),
+        ekp_kwargs...,
     )
 
     param_dict = get_param_dict(prior)
