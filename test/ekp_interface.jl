@@ -1,4 +1,5 @@
 using Distributions
+import EnsembleKalmanProcesses as EKP
 using EnsembleKalmanProcesses.ParameterDistributions
 import ClimaCalibrate as CAL
 import ClimaParams as CP
@@ -7,7 +8,7 @@ using Test
 
 FT = Float64
 output_dir = "test_init"
-prior_path = joinpath("test_case_inputs", "prior.toml")
+prior_path = joinpath(pkgdir(CAL), "test", "test_case_inputs", "prior.toml")
 param_names = ["one", "two"]
 
 prior = CAL.get_prior(prior_path)
@@ -25,7 +26,20 @@ config = CAL.ExperimentConfig(
     output_dir,
 )
 
-CAL.initialize(config)
+eki = CAL.initialize(config)
+eki_with_kwargs = CAL.initialize(
+    config;
+    scheduler = EKP.MutableScheduler(2),
+    accelerator = EKP.NesterovAccelerator(),
+)
+
+@testset "Test passing kwargs to EKP struct" begin
+    @test eki_with_kwargs.scheduler != eki.scheduler
+    @test eki_with_kwargs.scheduler isa EKP.MutableScheduler
+
+    @test eki_with_kwargs.accelerator != eki.accelerator
+    @test eki_with_kwargs.accelerator isa EKP.NesterovAccelerator
+end
 
 override_file = joinpath(
     config.output_dir,

@@ -43,17 +43,24 @@ include(joinpath(experiment_dir, "model_interface.jl"))
 eki = ClimaCalibrate.calibrate(experiment_dir)
 ```
 """
-calibrate(config::ExperimentConfig; kwargs...) =
-    calibrate(get_backend(), config; kwargs...)
+calibrate(config::ExperimentConfig; ekp_kwargs...) =
+    calibrate(get_backend(), config; ekp_kwargs...)
 
-calibrate(experiment_dir::AbstractString) =
-    calibrate(get_backend(), ExperimentConfig(experiment_dir))
+calibrate(experiment_dir::AbstractString; ekp_kwargs...) =
+    calibrate(get_backend(), ExperimentConfig(experiment_dir); ekp_kwargs...)
 
-calibrate(b::Type{JuliaBackend}, experiment_dir::AbstractString) =
-    calibrate(b, ExperimentConfig(experiment_dir))
+calibrate(
+    b::Type{JuliaBackend},
+    experiment_dir::AbstractString;
+    ekp_kwargs...,
+) = calibrate(b, ExperimentConfig(experiment_dir); ekp_kwargs...)
 
-function calibrate(::Type{JuliaBackend}, config::ExperimentConfig)
-    initialize(config)
+function calibrate(
+    ::Type{JuliaBackend},
+    config::ExperimentConfig;
+    ekp_kwargs...,
+)
+    initialize(config; ekp_kwargs...)
     (; n_iterations, ensemble_size) = config
     eki = nothing
     for i in 0:(n_iterations - 1)
@@ -103,9 +110,10 @@ eki = calibrate(CaltechHPC, experiment_dir; model_interface, slurm_kwargs);
 function calibrate(
     b::Type{CaltechHPC},
     experiment_dir::AbstractString;
-    kwargs...,
+    slurm_kwargs,
+    ekp_kwargs...,
 )
-    calibrate(b, ExperimentConfig(experiment_dir); kwargs...)
+    calibrate(b, ExperimentConfig(experiment_dir); slurm_kwargs, ekp_kwargs...)
 end
 
 function calibrate(
@@ -117,11 +125,12 @@ function calibrate(
     ),
     verbose = false,
     slurm_kwargs = Dict(:time_limit => 45, :ntasks => 1),
+    ekp_kwargs...,
 )
     # ExperimentConfig is created from a YAML file within the experiment_dir
     (; n_iterations, output_dir, ensemble_size) = config
     @info "Initializing calibration" n_iterations ensemble_size output_dir
-    initialize(config)
+    initialize(config; ekp_kwargs...)
 
     eki = nothing
     for iter in 0:(n_iterations - 1)
