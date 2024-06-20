@@ -37,14 +37,14 @@ To run this experiment:
 3. Start julia: `julia --project=experiments/surace_fluxes_perfect_model`
 4. Run the following:
 ```julia
-import ClimaCalibrate: CaltechHPC, calibrate
+import ClimaCalibrate: CaltechHPCBackend, calibrate
 
 experiment_dir = dirname(Base.active_project())
 
 include(joinpath(experiment_dir, "generate_data.jl"))
 model_interface = joinpath(experiment_dir, "model_interface.jl")
 include(joinpath(experiment_dir, "observation_map.jl"))
-eki = calibrate(CaltechHPC, experiment_dir; 
+eki = calibrate(CaltechHPCBackend, experiment_dir; 
                 time_limit = 3, model_interface)
 
 include(joinpath(experiment_dir, "postprocessing.jl"))
