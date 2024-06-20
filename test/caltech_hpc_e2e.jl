@@ -1,9 +1,9 @@
 # Tests for SurfaceFluxes example calibration on slurm, used in buildkite testing
-# To run, open the REPL: julia --project=experiments/surface_fluxes_perfect_model
+# To run, open the REPL: julia --project=experiments/surface_fluxes_perfect_model test/caltech
 # And include this file
 
 import ClimaCalibrate:
-    get_backend, CaltechHPC, JuliaBackend, calibrate, get_prior, kwargs
+    get_backend, CaltechHPCBackend, JuliaBackend, calibrate, get_prior, kwargs
 using Test
 import EnsembleKalmanProcesses: get_ϕ_mean_final, get_g_mean_final
 
@@ -35,7 +35,7 @@ end
 
 # Test Caltech HPC backend
 backend = get_backend()
-@test backend == CaltechHPC
+@test backend == CaltechHPCBackend
 
 eki = calibrate(
     backend,

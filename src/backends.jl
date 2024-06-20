@@ -1,20 +1,42 @@
 abstract type AbstractBackend end
 
 struct JuliaBackend <: AbstractBackend end
-struct CaltechHPC <: AbstractBackend end
+abstract type SlurmBackend <: AbstractBackend end
+struct CaltechHPCBackend <: SlurmBackend end
+struct ClimaGPUBackend <: SlurmBackend end
 
 """
     get_backend()
 
-Determine the appropriate backend using relevant system information.
+Get ideal backend for deploying forward model runs. 
+Each backend is found via `gethostname()`. Defaults to JuliaBackend if none is found.
 """
 function get_backend()
-    backend = JuliaBackend
-    if isfile("/etc/redhat-release") &&
-       occursin("Red Hat", read("/etc/redhat-release", String))
-        backend = CaltechHPC
+    hostname = gethostname()
+    if occursin(r"^hpc-(\d\d)-(\d\d).cm.cluster$", hostname) ||
+       occursin(r"^login[1-4].cm.cluster$match", hostname)
+        return CaltechHPCBackend
+    elseif hostname == "clima.gps.caltech.edu"
+        return ClimaGPUBackend
+    else
+        return JuliaBackend
     end
-    return backend
+end
+
+"""
+    module_load_string(T) where {T<:Type{SlurmBackend}}
+
+Return a string that loads the correct modules for a given backend when executed via bash.
+"""
+function module_load_string(::Type{CaltechHPCBackend})
+    return """export MODULEPATH=/groups/esm/modules:\$MODULEPATH
+    module purge
+    module load climacommon/2024_05_27"""
+end
+
+function module_load_string(::Type{ClimaGPUBackend})
+    return """module purge
+    modules load julia/1.10.0 cuda/julia-pref openmpi/4.1.5-mpitrampoline"""
 end
 
 """
@@ -77,8 +99,8 @@ function calibrate(
 end
 
 """
-    calibrate(::Type{CaltechHPC}, config::ExperimentConfig; kwargs...)
-    calibrate(::Type{CaltechHPC}, experiment_dir; kwargs...)
+    calibrate(::Type{SlurmBackend}, config::ExperimentConfig; kwargs...)
+    calibrate(::Type{SlurmBackend}, experiment_dir; kwargs...)
 
 Run a full calibration, scheduling the forward model runs on Caltech's HPC cluster.
 
@@ -93,7 +115,7 @@ Takes either an ExperimentConfig or an experiment folder.
 # Usage
 Open julia: `julia --project=experiments/surface_fluxes_perfect_model`
 ```julia
-import ClimaCalibrate: CaltechHPC, calibrate
+import ClimaCalibrate: CaltechHPCBackend, calibrate
 
 experiment_dir = dirname(Base.active_project())
 model_interface = joinpath(experiment_dir, "model_interface.jl")
@@ -104,11 +126,11 @@ include(joinpath(experiment_dir, "observation_map.jl"))
 include(model_interface)
 
 slurm_kwargs = kwargs(time = 3)
-eki = calibrate(CaltechHPC, experiment_dir; model_interface, slurm_kwargs);
+eki = calibrate(CaltechHPCBackend, experiment_dir; model_interface, slurm_kwargs);
 ```
 """
 function calibrate(
-    b::Type{CaltechHPC},
+    b::Type{<:SlurmBackend},
     experiment_dir::AbstractString;
     slurm_kwargs,
     ekp_kwargs...,
@@ -117,7 +139,7 @@ function calibrate(
 end
 
 function calibrate(
-    ::Type{CaltechHPC},
+    b::Type{<:SlurmBackend},
     config::ExperimentConfig;
     experiment_dir = dirname(Base.active_project()),
     model_interface = abspath(
@@ -133,6 +155,7 @@ function calibrate(
     initialize(config; ekp_kwargs...)
 
     eki = nothing
+    module_load_str = module_load_string(b)
     for iter in 0:(n_iterations - 1)
         @info "Iteration $iter"
         jobids = map(1:ensemble_size) do member
@@ -142,7 +165,8 @@ function calibrate(
                 member,
                 output_dir,
                 experiment_dir,
-                model_interface;
+                model_interface,
+                module_load_str;
                 slurm_kwargs,
             )
         end
@@ -152,9 +176,10 @@ function calibrate(
             output_dir,
             iter,
             experiment_dir,
-            model_interface;
-            verbose,
+            model_interface,
+            module_load_str;
             slurm_kwargs,
+            verbose,
         )
         report_iteration_status(statuses, output_dir, iter)
         @info "Completed iteration $iter, updating ensemble"

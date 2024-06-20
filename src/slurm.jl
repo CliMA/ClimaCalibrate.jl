@@ -16,8 +16,8 @@ function generate_sbatch_script(
     member,
     output_dir,
     experiment_dir,
-    model_interface;
-    module_load_str,
+    model_interface,
+    module_load_str;
     slurm_kwargs,
 )
     member_log = path_to_model_log(output_dir, iter, member)
@@ -35,7 +35,6 @@ function generate_sbatch_script(
     #SBATCH --job-name=run_$(iter)_$(member)
     #SBATCH --output=$member_log
     $slurm_directives_str
-
     $module_load_str
 
     srun --output=$member_log --open-mode=append julia --project=$experiment_dir -e '
@@ -76,17 +75,13 @@ function sbatch_model_run(
     member,
     output_dir,
     experiment_dir,
-    model_interface;
+    model_interface,
+    module_load_str;
     slurm_kwargs = Dict{Symbol, Any}(
         :time => 45,
         :ntasks => 1,
         :cpus_per_task => 1,
     ),
-    module_load_str = """
-    export MODULEPATH=/groups/esm/modules:\$MODULEPATH
-    module purge
-    module load climacommon/2024_05_27
-    """,
     kwargs...,
 )
     sbatch_contents = generate_sbatch_script(
@@ -94,9 +89,9 @@ function sbatch_model_run(
         member,
         output_dir,
         experiment_dir,
-        model_interface;
+        model_interface,
+        module_load_str;
         slurm_kwargs,
-        module_load_str,
         kwargs...,
     )
 
@@ -112,7 +107,8 @@ function wait_for_jobs(
     output_dir,
     iter,
     experiment_dir,
-    model_interface;
+    model_interface,
+    module_load_str;
     verbose,
     slurm_kwargs,
 )
@@ -135,7 +131,8 @@ function wait_for_jobs(
                             m,
                             output_dir,
                             experiment_dir,
-                            model_interface;
+                            model_interface,
+                            module_load_str;
                             slurm_kwargs,
                         )
                         push!(rerun_jobs, m)

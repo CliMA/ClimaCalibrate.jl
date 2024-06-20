@@ -12,7 +12,7 @@ const CPUS_PER_TASK = 16
 const GPUS_PER_TASK = 1
 const EXPERIMENT_DIR = "exp/dir"
 const MODEL_INTERFACE = "model_interface.jl"
-
+const MODULE_LOAD_STR = CAL.module_load_string(CAL.CaltechHPCBackend)
 const slurm_kwargs = CAL.kwargs(
     time = TIME_LIMIT,
     partition = PARTITION,
@@ -32,13 +32,9 @@ sbatch_file = CAL.generate_sbatch_script(
     MEMBER,
     OUTPUT_DIR,
     EXPERIMENT_DIR,
-    MODEL_INTERFACE;
+    MODEL_INTERFACE,
+    MODULE_LOAD_STR;
     slurm_kwargs,
-    module_load_str = """
-    export MODULEPATH=/groups/esm/modules:\$MODULEPATH
-    module purge
-    module load climacommon/2024_05_27
-    """,
 )
 
 expected_sbatch_contents = """
@@ -49,11 +45,9 @@ expected_sbatch_contents = """
 #SBATCH --gpus-per-task=1
 #SBATCH --cpus-per-task=16
 #SBATCH --time=01:30:00
-
 export MODULEPATH=/groups/esm/modules:\$MODULEPATH
 module purge
 module load climacommon/2024_05_27
-
 
 srun --output=test/iteration_001/member_001/model_log.txt --open-mode=append julia --project=exp/dir -e '
 import ClimaCalibrate as CAL
