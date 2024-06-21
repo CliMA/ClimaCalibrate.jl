@@ -187,7 +187,12 @@ function report_iteration_status(statuses, output_dir, iter)
     end
 end
 
-function submit_sbatch_job(sbatch_filepath; debug = false, env = Dict())
+function submit_sbatch_job(sbatch_filepath; debug = false, env = deepcopy(ENV))
+    unset_env_vars =
+        ("SLURM_MEM_PER_CPU", "SLURM_MEM_PER_GPU", "SLURM_MEM_PER_NODE")
+    for k in unset_env_vars
+        haskey(env, k) && delete!(env, k)
+    end
     jobid = readchomp(setenv(`sbatch --parsable $sbatch_filepath`, env))
     debug || rm(sbatch_filepath)
     return parse(Int, jobid)
