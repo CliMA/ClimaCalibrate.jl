@@ -78,11 +78,11 @@ sleep 10
 """
 
 jobid = submit_cmd_helper(test_cmd)
-@test CAL.job_status(jobid) == "RUNNING"
+@test CAL.job_status(jobid) == :RUNNING
 @test CAL.job_running(CAL.job_status(jobid))
 
 sleep(180)  # Ensure job finishes. To debug, lower sleep time or comment out the code block
-@test CAL.job_status(jobid) == "COMPLETED"
+@test CAL.job_status(jobid) == :COMPLETED
 @test CAL.job_completed(CAL.job_status(jobid))
 @test CAL.job_success(CAL.job_status(jobid))
 
@@ -90,7 +90,7 @@ sleep(180)  # Ensure job finishes. To debug, lower sleep time or comment out the
 jobid = submit_cmd_helper(test_cmd)
 CAL.kill_slurm_job(jobid)
 sleep(1)
-@test CAL.job_status(jobid) == "FAILED"
+@test CAL.job_status(jobid) == :FAILED
 @test CAL.job_completed(CAL.job_status(jobid)) &&
       CAL.job_failed(CAL.job_status(jobid))
 
