@@ -12,15 +12,17 @@ Get ideal backend for deploying forward model runs.
 Each backend is found via `gethostname()`. Defaults to JuliaBackend if none is found.
 """
 function get_backend()
-    hostname = gethostname()
-    if occursin(r"^hpc-(\d\d)-(\d\d).cm.cluster$", hostname) ||
-       occursin(r"^login[1-4].cm.cluster$match", hostname)
-        return CaltechHPCBackend
-    elseif hostname == "clima.gps.caltech.edu"
-        return ClimaGPUBackend
-    else
-        return JuliaBackend
+    HOSTNAMES = [
+        (r"^clima.gps.caltech.edu$", ClimaGPUBackend),
+        (r"^login[1-4].cm.cluster$", CaltechHPCBackend),
+        (r"^hpc-(\d\d)-(\d\d).cm.cluster$", CaltechHPCBackend),
+    ]
+
+    for (pattern, backend) in HOSTNAMES
+        !isnothing(match(pattern, gethostname())) && return backend
     end
+
+    return JuliaBackend
 end
 
 """
@@ -36,7 +38,7 @@ end
 
 function module_load_string(::Type{ClimaGPUBackend})
     return """module purge
-    modules load julia/1.10.0 cuda/julia-pref openmpi/4.1.5-mpitrampoline"""
+    module load julia/1.10.0 cuda/julia-pref openmpi/4.1.5-mpitrampoline"""
 end
 
 """

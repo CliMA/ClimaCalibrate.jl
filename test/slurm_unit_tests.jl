@@ -7,7 +7,6 @@ const ITER = 1
 const MEMBER = 1
 const TIME_LIMIT = 90
 const NTASKS = 1
-const PARTITION = "expansion"
 const CPUS_PER_TASK = 16
 const GPUS_PER_TASK = 1
 const EXPERIMENT_DIR = "exp/dir"
@@ -15,7 +14,6 @@ const MODEL_INTERFACE = "model_interface.jl"
 const MODULE_LOAD_STR = CAL.module_load_string(CAL.CaltechHPCBackend)
 const slurm_kwargs = CAL.kwargs(
     time = TIME_LIMIT,
-    partition = PARTITION,
     cpus_per_task = CPUS_PER_TASK,
     gpus_per_task = GPUS_PER_TASK,
 )
@@ -41,7 +39,6 @@ expected_sbatch_contents = """
 #!/bin/bash
 #SBATCH --job-name=run_1_1
 #SBATCH --output=test/iteration_001/member_001/model_log.txt
-#SBATCH --partition=expansion
 #SBATCH --gpus-per-task=1
 #SBATCH --cpus-per-task=16
 #SBATCH --time=01:30:00
@@ -77,16 +74,15 @@ end
 test_cmd = """
 #!/bin/bash
 #SBATCH --time=00:00:10
-#SBATCH --partition=expansion
 sleep 10
 """
 
 jobid = submit_cmd_helper(test_cmd)
-@test CAL.job_status(jobid) == "RUNNING"
+@test CAL.job_status(jobid) == :RUNNING
 @test CAL.job_running(CAL.job_status(jobid))
 
 sleep(180)  # Ensure job finishes. To debug, lower sleep time or comment out the code block
-@test CAL.job_status(jobid) == "COMPLETED"
+@test CAL.job_status(jobid) == :COMPLETED
 @test CAL.job_completed(CAL.job_status(jobid))
 @test CAL.job_success(CAL.job_status(jobid))
 
@@ -94,7 +90,7 @@ sleep(180)  # Ensure job finishes. To debug, lower sleep time or comment out the
 jobid = submit_cmd_helper(test_cmd)
 CAL.kill_slurm_job(jobid)
 sleep(1)
-@test CAL.job_status(jobid) == "FAILED"
+@test CAL.job_status(jobid) == :FAILED
 @test CAL.job_completed(CAL.job_status(jobid)) &&
       CAL.job_failed(CAL.job_status(jobid))
 

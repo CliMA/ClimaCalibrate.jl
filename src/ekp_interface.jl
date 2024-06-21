@@ -241,7 +241,7 @@ function initialize(
     param_dict = get_param_dict(prior)
 
     save_parameter_ensemble(
-        EKP.get_u_final(eki), # constraints applied when saving
+        EKP.get_u_final(eki),  # constraints applied when saving
         prior,
         param_dict,
         output_dir,

@@ -28,13 +28,12 @@ function generate_sbatch_script(
     slurm_directives = map(collect(slurm_kwargs)) do (k, v)
         "#SBATCH --$(replace(string(k), "_" => "-"))=$(replace(string(v), "_" => "-"))"
     end
-    slurm_directives_str = join(slurm_directives, "\n")
 
     sbatch_contents = """
     #!/bin/bash
     #SBATCH --job-name=run_$(iter)_$(member)
     #SBATCH --output=$member_log
-    $slurm_directives_str
+    $(join(slurm_directives, "\n"))
     $module_load_str
 
     srun --output=$member_log --open-mode=append julia --project=$experiment_dir -e '
@@ -188,33 +187,38 @@ function report_iteration_status(statuses, output_dir, iter)
     end
 end
 
-function submit_sbatch_job(sbatch_filepath; debug = false, env = ENV)
+function submit_sbatch_job(sbatch_filepath; debug = false, env = deepcopy(ENV))
+    unset_env_vars =
+        ("SLURM_MEM_PER_CPU", "SLURM_MEM_PER_GPU", "SLURM_MEM_PER_NODE")
+    for k in unset_env_vars
+        haskey(env, k) && delete!(env, k)
+    end
     jobid = readchomp(setenv(`sbatch --parsable $sbatch_filepath`, env))
     debug || rm(sbatch_filepath)
     return parse(Int, jobid)
 end
 
-job_running(status) = status == "RUNNING"
-job_success(status) = status == "COMPLETED"
-job_failed(status) = status == "FAILED"
+job_running(status) = status == :RUNNING
+job_success(status) = status == :COMPLETED
+job_failed(status) = status == :FAILED
 job_completed(status) = job_failed(status) || job_success(status)
 
 """
     job_status(jobid)
 
-Parse the slurm jobid's state and return one of three status strings: "COMPLETED", "FAILED", or "RUNNING"
+Parse the slurm jobid's state and return one of three status symbols: :COMPLETED, :FAILED, or :RUNNING.
 """
-function job_status(jobid)
+function job_status(jobid::Int)
     failure_statuses = ("FAILED", "CANCELLED+", "CANCELLED")
     output = readchomp(`sacct -j $jobid --format=State --noheader`)
     # Jobs usually have multiple statuses
     statuses = strip.(split(output, "\n"))
     if all(s -> s == "COMPLETED", statuses)
-        return "COMPLETED"
+        return :COMPLETED
     elseif any(s -> s in failure_statuses, statuses)
-        return "FAILED"
+        return :FAILED
     else
-        return "RUNNING"
+        return :RUNNING
     end
 end
 

@@ -2,8 +2,7 @@
 # To run, open the REPL: julia --project=experiments/surface_fluxes_perfect_model test/caltech
 # And include this file
 
-import ClimaCalibrate:
-    get_backend, CaltechHPCBackend, JuliaBackend, calibrate, get_prior, kwargs
+import ClimaCalibrate: get_backend, JuliaBackend, calibrate, get_prior, kwargs
 using Test
 import EnsembleKalmanProcesses: get_ϕ_mean_final, get_g_mean_final
 
@@ -33,12 +32,9 @@ function test_sf_calibration_output(eki, prior)
     end
 end
 
-# Test Caltech HPC backend
-backend = get_backend()
-@test backend == CaltechHPCBackend
+@assert get_backend() != JuliaBackend
 
 eki = calibrate(
-    backend,
     experiment_dir;
     model_interface,
     slurm_kwargs = kwargs(time = 5),
@@ -46,7 +42,7 @@ eki = calibrate(
 )
 test_sf_calibration_output(eki, prior)
 
-# Pure Julia Backend
+# Pure Julia calibration, this should run anywhere
 eki = calibrate(JuliaBackend, experiment_dir)
 test_sf_calibration_output(eki, prior)
 
