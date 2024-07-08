@@ -1,6 +1,7 @@
 import EnsembleKalmanProcesses as EKP
 import YAML
 
+export set_up_forward_model, run_forward_model, observation_map
 
 """
     set_up_forward_model(member, iteration, experiment_dir::AbstractString)

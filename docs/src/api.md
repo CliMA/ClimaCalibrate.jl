@@ -11,6 +11,7 @@ ClimaCalibrate.observation_map
 ## Backend Interface
 
 ```@docs
+ClimaCalibrate.get_backend
 ClimaCalibrate.calibrate
 ClimaCalibrate.sbatch_model_run
 ```
@@ -25,4 +26,6 @@ ClimaCalibrate.ExperimentConfig
 ClimaCalibrate.get_prior
 ClimaCalibrate.get_param_dict
 ClimaCalibrate.path_to_iteration
+ClimaCalibrate.path_to_ensemble_member
+ClimaCalibrate.path_to_model_log
 ```

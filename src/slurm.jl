@@ -1,3 +1,5 @@
+export kwargs, sbatch_model_run, wait_for_jobs
+
 kwargs(; kwargs...) = Dict{Symbol, Any}(kwargs...)
 
 """
