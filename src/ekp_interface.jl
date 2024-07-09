@@ -6,7 +6,8 @@ import EnsembleKalmanProcesses as EKP
 using EnsembleKalmanProcesses.ParameterDistributions
 using EnsembleKalmanProcesses.TOMLInterface
 
-export ExperimentConfig
+export ExperimentConfig, get_prior, initialize, update_ensemble, save_G_ensemble
+export path_to_ensemble_member, path_to_model_log, path_to_iteration
 
 """
     ExperimentConfig(

@@ -1,3 +1,5 @@
+export get_backend, calibrate
+
 abstract type AbstractBackend end
 
 struct JuliaBackend <: AbstractBackend end
