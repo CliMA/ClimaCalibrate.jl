@@ -42,6 +42,7 @@ expected_sbatch_contents = """
 #SBATCH --gpus-per-task=1
 #SBATCH --cpus-per-task=16
 #SBATCH --time=01:30:00
+set -euo pipefail
 export MODULEPATH=/groups/esm/modules:\$MODULEPATH
 module purge
 module load climacommon/2024_05_27
@@ -53,6 +54,7 @@ model_interface = "model_interface.jl"; include(model_interface)
 
 experiment_dir = "exp/dir"
 CAL.run_forward_model(CAL.set_up_forward_model(member, iteration, experiment_dir))'
+exit 0
 """
 
 for (generated_str, test_str) in
@@ -96,6 +98,7 @@ sleep(1)
 
 # Test batch cancellation
 jobids = ntuple(x -> submit_cmd_helper(test_cmd), 5)
+
 CAL.kill_all_jobs(jobids)
 for jobid in jobids
     @test CAL.job_completed(CAL.job_status(jobid))
