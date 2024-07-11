@@ -19,10 +19,10 @@ const slurm_kwargs = CAL.kwargs(
 )
 
 # Time formatting tests
-@test CAL.format_slurm_time(TIME_LIMIT) == "01:30:00"
-@test CAL.format_slurm_time(1) == "00:01:00"
-@test CAL.format_slurm_time(60) == "01:00:00"
-@test CAL.format_slurm_time(1440) == "1-00:00:00"
+@test CAL.format_time(TIME_LIMIT) == "01:30:00"
+@test CAL.format_time(1) == "00:01:00"
+@test CAL.format_time(60) == "01:00:00"
+@test CAL.format_time(1440) == "1-00:00:00"
 
 # Generate and validate sbatch file contents
 sbatch_file = CAL.generate_sbatch_script(

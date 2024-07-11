@@ -1,61 +1,77 @@
-export kwargs, sbatch_model_run, wait_for_jobs
+function generate_pbs_directives(pbs_kwargs)
+    @assert haskey(pbs_kwargs, :walltime) "PBS kwargs must include key :walltime"
+    pbs_kwargs[:walltime] = format_time(pbs_kwargs[:walltime])
 
-kwargs(; kwargs...) = Dict{Symbol, Any}(kwargs...)
-
-function generate_sbatch_directives(slurm_kwargs)
-    @assert haskey(slurm_kwargs, :time) "Slurm kwargs must include key :time"
-
-    slurm_kwargs[:time] = format_time(slurm_kwargs[:time])
-    slurm_directives = map(collect(slurm_kwargs)) do (k, v)
-        "#SBATCH --$(replace(string(k), "_" => "-"))=$(replace(string(v), "_" => "-"))"
+    pbs_directives = map(collect(pbs_kwargs)) do (k, v)
+        "#PBS -$k=$v"
     end
-    return join(slurm_directives, "\n")
+
+    return join(pbs_directives, "\n")
+end
+
+function extract_pbs_values(pbs_directives::AbstractString)
+    select_match = match(r"select=(\d+)", pbs_directives)
+    ncpus_match = match(r"ncpus=(\d+)", pbs_directives)
+    ngpus_match = match(r"ngpus=(\d+)", pbs_directives)
+    
+    num_nodes = select_match !== nothing ? parse(Int, select_match.captures[1]) : error("PBS directives must include 'select'")
+    ncpus_per_node = ncpus_match !== nothing ? parse(Int, ncpus_match.captures[1]) : error("PBS directives must include 'ncpus'")
+    gpus_per_node = ngpus_match !== nothing ? parse(Int, ngpus_match.captures[1]) : 0
+    
+    return num_nodes, ncpus_per_node, gpus_per_node
 end
 
 """
-    generate_sbatch_script(iter, member,
+    generate_script(
+        iter, member,
         output_dir, experiment_dir, model_interface;
-        module_load_str, slurm_kwargs,
+        module_load_str, pbs_kwargs,
     )
 
-Generate a string containing an sbatch script to run the forward model.
+Generate a string containing a PBS script to run the forward model.
 
-Helper function for `sbatch_model_run`.
+Helper function for `model_run`.
 """
-function generate_sbatch_script(
+function generate_pbs_script(
     iter::Int,
     member::Int,
     output_dir::AbstractString,
     experiment_dir::AbstractString,
     model_interface::AbstractString,
     module_load_str::AbstractString;
-    slurm_kwargs,
+    pbs_kwargs...
 )
     member_log = path_to_model_log(output_dir, iter, member)
-    slurm_directives = generate_sbatch_directives(slurm_kwargs)
+    pbs_directives = generate_pbs_directives(pbs_kwargs)
+    num_nodes, ncpus_per_node, gpus_per_node = extract_pbs_values(pbs_directives)
+    total_procs = num_nodes * ncpus_per_node
 
-    sbatch_contents = """
+    qsub_contents = """
     #!/bin/bash
-    #SBATCH --job-name=run_$(iter)_$(member)
-    #SBATCH --output=$member_log
-    $slurm_directives
+    #PBS -N run_${iter}_${member}
+    #PBS -j oe
+    #PBS -A UCIT0011
+    #PBS -q preempt
+    #PBS -o $member_log
+    $pbs_directives
     set -euo pipefail
     $module_load_str
 
-    srun --output=$member_log --open-mode=append julia --project=$experiment_dir -e '
+    \$MPITRAMPOLINE_EXEC -n $total_procs -ppn $ncpus_per_node set_gpu_rank julia --project=$experiment_dir -e '
     import ClimaCalibrate as CAL
     iteration = $iter; member = $member
     model_interface = "$model_interface"; include(model_interface)
 
     experiment_dir = "$experiment_dir"
     CAL.run_forward_model(CAL.set_up_forward_model(member, iteration, experiment_dir))'
+
     exit 0
     """
-    return sbatch_contents
+    return qsub_contents
 end
 
 """
-    sbatch_model_run(
+    model_run(
         iter,
         member,
         output_dir,
@@ -76,7 +92,7 @@ Arguments:
 - module_load_str: Commands which load the necessary modules
 - slurm_kwargs: Dictionary containing the slurm resources for the job. Easily generated using `kwargs`.
 """
-function sbatch_model_run(
+function model_run(
     iter,
     member,
     output_dir,
@@ -88,17 +104,9 @@ function sbatch_model_run(
         :ntasks => 1,
         :cpus_per_task => 1,
     ),
+    kwargs...,
 )
-    # Type and existence checks
-    @assert isdir(output_dir) "Output directory does not exist: $output_dir"
-    @assert isdir(experiment_dir) "Experiment directory does not exist: $experiment_dir"
-    @assert isfile(model_interface) "Model interface file does not exist: $model_interface"
-
-    # Range checks
-    @assert iter >= 0 "Iteration number must be non-negative"
-    @assert member > 0 "Member number must be positive"
-
-    sbatch_contents = generate_sbatch_script(
+    script_contents = generate_script(
         iter,
         member,
         output_dir,
@@ -106,14 +114,14 @@ function sbatch_model_run(
         model_interface,
         module_load_str;
         slurm_kwargs,
+        kwargs...,
     )
 
-    jobid = mktemp(output_dir) do sbatch_filepath, io
-        write(io, sbatch_contents)
-        close(io)
-        submit_job(sbatch_filepath)
-    end
-    return jobid
+    sbatch_filepath, io = mktemp(output_dir)
+    write(io, script_contents)
+    close(io)
+
+    return submit_sbatch_job(sbatch_filepath)
 end
 
 function wait_for_jobs(
@@ -141,7 +149,7 @@ function wait_for_jobs(
                     if rerun_job_count[m] < reruns
 
                         @info "Rerunning ensemble member $m"
-                        jobids[m] = sbatch_model_run(
+                        jobids[m] = model_run(
                             iter,
                             m,
                             output_dir,
@@ -176,7 +184,7 @@ end
 """
     log_member_error(output_dir, iteration, member, verbose = false)
 
-Log a warning message when an error occurs.
+Log a warning message when an error occurs in a specific ensemble member during a model run in a Slurm environment. 
 If verbose, includes the ensemble member's output.
 """
 function log_member_error(output_dir, iteration, member, verbose = false)
@@ -203,14 +211,13 @@ function report_iteration_status(statuses, output_dir, iter)
     end
 end
 
-function submit_job(sbatch_filepath; env = deepcopy(ENV))
-    # Ensure that we don't inherit unwanted environment variables
+function submit_job(filepath; debug = false, env = deepcopy(ENV))
     unset_env_vars =
         ("SLURM_MEM_PER_CPU", "SLURM_MEM_PER_GPU", "SLURM_MEM_PER_NODE")
     for k in unset_env_vars
         haskey(env, k) && delete!(env, k)
     end
-    jobid = readchomp(setenv(`sbatch --parsable $sbatch_filepath`, env))
+    jobid = readchomp(setenv(`qsub $filepath`, env))
     return parse(Int, jobid)
 end
 
@@ -222,60 +229,40 @@ job_completed(status) = job_failed(status) || job_success(status)
 """
     job_status(jobid)
 
-Parse the slurm jobid's state and return one of three status symbols: :COMPLETED, :FAILED, or :RUNNING.
+Parse the jobid's state and return one of three status symbols: :COMPLETED, :FAILED, or :RUNNING.
 """
-function job_status(jobid::Int)
-    failure_statuses = ("FAILED", "CANCELLED+", "CANCELLED")
-    output = readchomp(`sacct -j $jobid --format=State --noheader`)
-    # Jobs usually have multiple statuses
-    statuses = strip.(split(output, "\n"))
-    if all(s -> s == "COMPLETED", statuses)
-        return :COMPLETED
-    elseif any(s -> s in failure_statuses, statuses)
-        return :FAILED
-    else
-        return :RUNNING
+function job_status(jobid)
+    status_str = readchomp(`qstat -f $jobid -x -F dsv`)
+    job_state_match = match(r"job_state=([^|]+)", status_str)
+    status = first(job_state_match.captures)
+    substate_match = match(r"substate=([^|]+)", status_str)
+    substate_number = parse(Int, (first(substate_match.captures)))
+    status_dict = Dict(
+        "Q" => :RUNNING,
+        "F" => :COMPLETED,
+    )
+    status_symbol = get(status_dict, status, :RUNNING)
+    # Check for failure in the substate number
+    if status_symbol == :COMPLETED && substate_number in (91, 93)
+        status_symbol = :FAILED
     end
+    return status_symbol
 end
 
 """
     kill_all_jobs(jobids)
 
-Takes a list of slurm job IDs and runs `scancel` on them.
+Cancels a list of PBS jobids.
 """
 function kill_all_jobs(jobids)
     for jobid in jobids
         try
-            kill_slurm_job(jobid)
-            println("Cancelling slurm job $jobid")
+            kill_pbs_job(jobid)
+            println("Cancelling PBS job $jobid")
         catch e
-            println("Failed to cancel slurm job $jobid: ", e)
+            println("Failed to cancel PBS job $jobid: ", e)
         end
     end
 end
 
-kill_slurm_job(jobid) = run(`scancel $jobid`)
-
-function format_time(minutes::Int)
-    days, remaining_minutes = divrem(minutes, (60 * 24))
-    hours, remaining_minutes = divrem(remaining_minutes, 60)
-    # Format the string according to Slurm's time format
-    if days > 0
-        return string(
-            days,
-            "-",
-            lpad(hours, 2, '0'),
-            ":",
-            lpad(remaining_minutes, 2, '0'),
-            ":00",
-        )
-    else
-        return string(
-            lpad(hours, 2, '0'),
-            ":",
-            lpad(remaining_minutes, 2, '0'),
-            ":00",
-        )
-    end
-end
-format_time(str::AbstractString) = str
+kill_pbs_job(jobid) = run(`qdel -W force $jobid`)

@@ -3,9 +3,14 @@ export get_backend, calibrate
 abstract type AbstractBackend end
 
 struct JuliaBackend <: AbstractBackend end
-abstract type SlurmBackend <: AbstractBackend end
+
+abstract type HPCBackend <: AbstractBackend end
+abstract type SlurmBackend <: HPCBackend end
+
 struct CaltechHPCBackend <: SlurmBackend end
 struct ClimaGPUBackend <: SlurmBackend end
+
+struct DerechoBackend <: HPCBackend end
 
 """
     get_backend()
@@ -18,6 +23,8 @@ function get_backend()
         (r"^clima.gps.caltech.edu$", ClimaGPUBackend),
         (r"^login[1-4].cm.cluster$", CaltechHPCBackend),
         (r"^hpc-(\d\d)-(\d\d).cm.cluster$", CaltechHPCBackend),
+        (r"derecho(\d)$", DerechoBackend),
+        (r"dec(\d\d\d\d)$", DerechoBackend), # This could probably be more specific, I am not sure what the node name pattern is
     ]
 
     for (pattern, backend) in HOSTNAMES
@@ -33,7 +40,7 @@ end
 Return a string that loads the correct modules for a given backend when executed via bash.
 """
 function module_load_string(::Type{CaltechHPCBackend})
-    return """export MODULEPATH=/groups/esm/modules:\$MODULEPATH
+    return """export MODULEPATH="/groups/esm/modules:\$MODULEPATH"
     module purge
     module load climacommon/2024_05_27"""
 end
@@ -41,6 +48,14 @@ end
 function module_load_string(::Type{ClimaGPUBackend})
     return """module purge
     module load julia/1.10.0 cuda/julia-pref openmpi/4.1.5-mpitrampoline"""
+end
+
+function module_load_string(::Type{DerechoBackend})
+    return """export PBS_ACCOUNT="UCIT0011"
+    export MODULEPATH="/glade/campaign/univ/ucit0011/ClimaModules-Derecho:\$MODULEPATH" 
+    module purge
+    module load climacommon
+    """
 end
 
 """
