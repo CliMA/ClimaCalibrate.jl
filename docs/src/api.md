@@ -13,7 +13,24 @@ ClimaCalibrate.observation_map
 ```@docs
 ClimaCalibrate.get_backend
 ClimaCalibrate.calibrate
-ClimaCalibrate.sbatch_model_run
+ClimaCalibrate.model_run
+ClimaCalibrate.module_load_string
+```
+
+## Job Scheduler
+```@docs
+ClimaCalibrate.wait_for_jobs
+ClimaCalibrate.log_member_error
+ClimaCalibrate.kill_job
+ClimaCalibrate.job_status
+ClimaCalibrate.kwargs
+ClimaCalibrate.slurm_model_run
+ClimaCalibrate.generate_sbatch_script
+ClimaCalibrate.generate_sbatch_directives
+ClimaCalibrate.submit_slurm_job
+ClimaCalibrate.pbs_model_run
+ClimaCalibrate.generate_pbs_script
+ClimaCalibrate.submit_pbs_job
 ```
 
 ## EnsembleKalmanProcesses Interface

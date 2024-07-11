@@ -61,8 +61,8 @@ end
         "Experiment dir not found in environment. Ensure that env variable \"CALIBRATION_EXPERIMENT_DIR\" is set.",
     ) CAL.env_experiment_dir()
     @test_throws ErrorException(
-        "Iteration number not found in environment. Ensure that env variable \"CALIBRATION_ITER_NUMBER\" is set.",
-    ) CAL.env_iter_number()
+        "Iteration number not found in environment. Ensure that env variable \"CALIBRATION_ITERATION\" is set.",
+    ) CAL.env_iteration()
     @test_throws ErrorException(
         "Member number not found in environment. Ensure that env variable \"CALIBRATION_MEMBER_NUMBER\" is set.",
     ) CAL.env_member_number()
@@ -72,15 +72,15 @@ end
 
     test_ENV = Dict()
     test_ENV["CALIBRATION_EXPERIMENT_DIR"] = experiment_dir = "test"
-    test_ENV["CALIBRATION_ITER_NUMBER"] = "0"
-    iter_number = parse(Int, test_ENV["CALIBRATION_ITER_NUMBER"])
+    test_ENV["CALIBRATION_ITERATION"] = "0"
+    iter_number = parse(Int, test_ENV["CALIBRATION_ITERATION"])
     test_ENV["CALIBRATION_MEMBER_NUMBER"] = "1"
     member_number = parse(Int, test_ENV["CALIBRATION_MEMBER_NUMBER"])
     test_ENV["CALIBRATION_MODEL_INTERFACE"] =
         model_interface = joinpath(pkgdir(CAL), "model_interface.jl")
 
     @test experiment_dir == CAL.env_experiment_dir(test_ENV)
-    @test iter_number == CAL.env_iter_number(test_ENV)
+    @test iter_number == CAL.env_iteration(test_ENV)
     @test member_number == CAL.env_member_number(test_ENV)
     @test model_interface == CAL.env_model_interface(test_ENV)
 end

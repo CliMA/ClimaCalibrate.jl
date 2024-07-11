@@ -1,11 +1,16 @@
-export get_backend, calibrate
+export get_backend, calibrate, model_run
 
 abstract type AbstractBackend end
 
 struct JuliaBackend <: AbstractBackend end
-abstract type SlurmBackend <: AbstractBackend end
+
+abstract type HPCBackend <: AbstractBackend end
+abstract type SlurmBackend <: HPCBackend end
+
 struct CaltechHPCBackend <: SlurmBackend end
 struct ClimaGPUBackend <: SlurmBackend end
+
+struct DerechoBackend <: HPCBackend end
 
 """
     get_backend()
@@ -18,6 +23,8 @@ function get_backend()
         (r"^clima.gps.caltech.edu$", ClimaGPUBackend),
         (r"^login[1-4].cm.cluster$", CaltechHPCBackend),
         (r"^hpc-(\d\d)-(\d\d).cm.cluster$", CaltechHPCBackend),
+        (r"derecho([1-8])$", DerechoBackend),
+        (r"dec(\d\d\d\d)$", DerechoBackend), # This should be more specific
     ]
 
     for (pattern, backend) in HOSTNAMES
@@ -28,12 +35,12 @@ function get_backend()
 end
 
 """
-    module_load_string(T) where {T<:Type{SlurmBackend}}
+    module_load_string(backend)
 
 Return a string that loads the correct modules for a given backend when executed via bash.
 """
 function module_load_string(::Type{CaltechHPCBackend})
-    return """export MODULEPATH=/groups/esm/modules:\$MODULEPATH
+    return """export MODULEPATH="/groups/esm/modules:\$MODULEPATH"
     module purge
     module load climacommon/2024_05_27"""
 end
@@ -43,32 +50,14 @@ function module_load_string(::Type{ClimaGPUBackend})
     module load julia/1.10.0 cuda/julia-pref openmpi/4.1.5-mpitrampoline"""
 end
 
-"""
-    calibrate(::Type{JuliaBackend}, config::ExperimentConfig)
-    calibrate(::Type{JuliaBackend}, experiment_dir::AbstractString)
+function module_load_string(::Type{DerechoBackend})
+    return """export MODULEPATH="/glade/campaign/univ/ucit0011/ClimaModules-Derecho:\$MODULEPATH" 
+    module purge
+    module load climacommon
+    module list
+    """
+end
 
-Run a calibration in Julia.
-
-Takes an ExperimentConfig or an experiment folder.
-If no backend is passed, one is chosen via `get_backend`. 
-This function is intended for use in a larger workflow, assuming that all needed 
-model interface and observation map functions are set up for the calibration.
-
-# Example
-Run: `julia --project=experiments/surface_fluxes_perfect_model`
-```julia
-import ClimaCalibrate
-
-# Generate observational data and load interface
-experiment_dir = dirname(Base.active_project())
-include(joinpath(experiment_dir, "generate_data.jl"))
-include(joinpath(experiment_dir, "observation_map.jl"))
-include(joinpath(experiment_dir, "model_interface.jl"))
-
-# Initialize and run the calibration
-eki = ClimaCalibrate.calibrate(experiment_dir)
-```
-"""
 calibrate(config::ExperimentConfig; ekp_kwargs...) =
     calibrate(get_backend(), config; ekp_kwargs...)
 
@@ -86,9 +75,8 @@ function calibrate(
     config::ExperimentConfig;
     ekp_kwargs...,
 )
-    initialize(config; ekp_kwargs...)
     (; n_iterations, ensemble_size) = config
-    eki = nothing
+    eki = initialize(config; ekp_kwargs...)
     for i in 0:(n_iterations - 1)
         @info "Running iteration $i"
         for m in 1:ensemble_size
@@ -103,25 +91,28 @@ function calibrate(
 end
 
 """
-    calibrate(::Type{SlurmBackend}, config::ExperimentConfig; kwargs...)
-    calibrate(::Type{SlurmBackend}, experiment_dir; kwargs...)
+    calibrate(::Type{AbstractBackend}, config::ExperimentConfig; kwargs...)
+    calibrate(::Type{AbstractBackend}, experiment_dir; kwargs...)
 
 Run a full calibration, scheduling the forward model runs on Caltech's HPC cluster.
 
 Takes either an ExperimentConfig or an experiment folder.
 
+Available Backends: CaltechHPCBackend, ClimaGPUBackend, DerechoBackend, JuliaBackend
+
+
 # Keyword Arguments
 - `experiment_dir: Directory containing experiment configurations.
 - `model_interface: Path to the model interface file.
-- `slurm_kwargs`: Dictionary of slurm arguments, passed through to `sbatch`.
-- `verbose::Bool`: Enable verbose output for debugging.
+- `hpc_kwargs`: Dictionary of resource arguments, passed to the job scheduler.
+- `verbose::Bool`: Enable verbose logging.
 
 # Usage
 Open julia: `julia --project=experiments/surface_fluxes_perfect_model`
 ```julia
-import ClimaCalibrate: CaltechHPCBackend, calibrate
+using ClimaCalibrate
 
-experiment_dir = dirname(Base.active_project())
+experiment_dir = joinpath(pkgdir(ClimaCalibrate), "experiments", "surface_fluxes_perfect_model")
 model_interface = joinpath(experiment_dir, "model_interface.jl")
 
 # Generate observational data and load interface
@@ -129,49 +120,51 @@ include(joinpath(experiment_dir, "generate_data.jl"))
 include(joinpath(experiment_dir, "observation_map.jl"))
 include(model_interface)
 
-slurm_kwargs = kwargs(time = 3)
-eki = calibrate(CaltechHPCBackend, experiment_dir; model_interface, slurm_kwargs);
+hpc_kwargs = kwargs(time = 3)
+backend = get_backend()
+eki = calibrate(backend, experiment_dir; model_interface, hpc_kwargs);
 ```
 """
 function calibrate(
-    b::Type{<:SlurmBackend},
+    b::Type{<:HPCBackend},
     experiment_dir::AbstractString;
-    slurm_kwargs,
+    hpc_kwargs,
     ekp_kwargs...,
 )
-    calibrate(b, ExperimentConfig(experiment_dir); slurm_kwargs, ekp_kwargs...)
+    calibrate(b, ExperimentConfig(experiment_dir); hpc_kwargs, ekp_kwargs...)
 end
 
 function calibrate(
-    b::Type{<:SlurmBackend},
+    b::Type{<:HPCBackend},
     config::ExperimentConfig;
     experiment_dir = dirname(Base.active_project()),
     model_interface = abspath(
         joinpath(experiment_dir, "..", "..", "model_interface.jl"),
     ),
     verbose = false,
-    slurm_kwargs = Dict(:time_limit => 45, :ntasks => 1),
+    reruns = 1,
+    hpc_kwargs,
     ekp_kwargs...,
 )
     # ExperimentConfig is created from a YAML file within the experiment_dir
     (; n_iterations, output_dir, ensemble_size) = config
     @info "Initializing calibration" n_iterations ensemble_size output_dir
-    initialize(config; ekp_kwargs...)
 
-    eki = nothing
+    eki = initialize(config; ekp_kwargs...)
     module_load_str = module_load_string(b)
     for iter in 0:(n_iterations - 1)
         @info "Iteration $iter"
         jobids = map(1:ensemble_size) do member
             @info "Running ensemble member $member"
-            sbatch_model_run(
+            model_run(
+                b,
                 iter,
                 member,
                 output_dir,
                 experiment_dir,
                 model_interface,
                 module_load_str;
-                slurm_kwargs,
+                hpc_kwargs,
             )
         end
 
@@ -182,10 +175,10 @@ function calibrate(
             experiment_dir,
             model_interface,
             module_load_str;
-            slurm_kwargs,
+            hpc_kwargs,
             verbose,
+            reruns,
         )
-        report_iteration_status(statuses, output_dir, iter)
         @info "Completed iteration $iter, updating ensemble"
         G_ensemble = observation_map(iter)
         save_G_ensemble(config, iter, G_ensemble)
@@ -193,3 +186,58 @@ function calibrate(
     end
     return eki
 end
+
+# Dispatch on backend type to unify `calibrate` for all HPCBackends
+# Scheduler interfaces should not depend on backend struct
+"""
+    model_run(backend, iter, member, output_dir, experiment_dir; model_interface, verbose, hpc_kwargs)
+    
+Construct and execute a command to run a single forward model on a given job scheduler.
+
+Dispatches on `backend` to run [`slurm_model_run`](@ref) or [`pbs_model_run`](@ref).
+
+Arguments:
+- iter: Iteration number
+- member: Member number
+- output_dir: Calibration experiment output directory
+- experiment_dir: Directory containing the experiment's Project.toml
+- model_interface: File containing the model interface
+- module_load_str: Commands which load the necessary modules
+- hpc_kwargs: Dictionary containing the resources for the job. Easily generated using [`kwargs`](@ref).
+"""
+model_run(
+    b::Type{<:SlurmBackend},
+    iter,
+    member,
+    output_dir,
+    experiment_dir,
+    model_interface,
+    module_load_str;
+    hpc_kwargs,
+) = slurm_model_run(
+    iter,
+    member,
+    output_dir,
+    experiment_dir,
+    model_interface,
+    module_load_str;
+    hpc_kwargs,
+)
+model_run(
+    b::Type{DerechoBackend},
+    iter,
+    member,
+    output_dir,
+    experiment_dir,
+    model_interface,
+    module_load_str;
+    hpc_kwargs,
+) = pbs_model_run(
+    iter,
+    member,
+    output_dir,
+    experiment_dir,
+    model_interface,
+    module_load_str;
+    hpc_kwargs,
+)
