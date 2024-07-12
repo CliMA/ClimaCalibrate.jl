@@ -1,12 +1,14 @@
+struct Slurm end
+
 export kwargs, sbatch_model_run, wait_for_jobs
 
 kwargs(; kwargs...) = Dict{Symbol, Any}(kwargs...)
 
-function generate_sbatch_directives(slurm_kwargs)
-    @assert haskey(slurm_kwargs, :time) "Slurm kwargs must include key :time"
+function generate_sbatch_directives(hpc_kwargs)
+    @assert haskey(hpc_kwargs, :time) "Slurm kwargs must include key :time"
 
-    slurm_kwargs[:time] = format_time(slurm_kwargs[:time])
-    slurm_directives = map(collect(slurm_kwargs)) do (k, v)
+    hpc_kwargs[:time] = format_slurm_time(hpc_kwargs[:time])
+    slurm_directives = map(collect(hpc_kwargs)) do (k, v)
         "#SBATCH --$(replace(string(k), "_" => "-"))=$(replace(string(v), "_" => "-"))"
     end
     return join(slurm_directives, "\n")
@@ -15,7 +17,7 @@ end
 """
     generate_sbatch_script(iter, member,
         output_dir, experiment_dir, model_interface;
-        module_load_str, slurm_kwargs,
+        module_load_str, hpc_kwargs,
     )
 
 Generate a string containing an sbatch script to run the forward model.
@@ -29,10 +31,10 @@ function generate_sbatch_script(
     experiment_dir::AbstractString,
     model_interface::AbstractString,
     module_load_str::AbstractString;
-    slurm_kwargs,
+    hpc_kwargs,
 )
     member_log = path_to_model_log(output_dir, iter, member)
-    slurm_directives = generate_sbatch_directives(slurm_kwargs)
+    slurm_directives = generate_sbatch_directives(hpc_kwargs)
 
     sbatch_contents = """
     #!/bin/bash
@@ -62,7 +64,7 @@ end
         experiment_dir;
         model_interface,
         verbose;
-        slurm_kwargs,
+        hpc_kwargs,
     )
 
 Construct and execute a command to run a forward model on a Slurm cluster for a single ensemble member.
@@ -74,7 +76,7 @@ Arguments:
 - experiment_dir: Directory containing the experiment's Project.toml
 - model_interface: File containing the model interface
 - module_load_str: Commands which load the necessary modules
-- slurm_kwargs: Dictionary containing the slurm resources for the job. Easily generated using `kwargs`.
+- hpc_kwargs: Dictionary containing the slurm resources for the job. Easily generated using `kwargs`.
 """
 function sbatch_model_run(
     iter,
@@ -83,7 +85,7 @@ function sbatch_model_run(
     experiment_dir,
     model_interface,
     module_load_str;
-    slurm_kwargs = Dict{Symbol, Any}(
+    hpc_kwargs = Dict{Symbol, Any}(
         :time => 45,
         :ntasks => 1,
         :cpus_per_task => 1,
@@ -105,7 +107,7 @@ function sbatch_model_run(
         experiment_dir,
         model_interface,
         module_load_str;
-        slurm_kwargs,
+        hpc_kwargs,
     )
 
     jobid = mktemp(output_dir) do sbatch_filepath, io
@@ -117,14 +119,15 @@ function sbatch_model_run(
 end
 
 function wait_for_jobs(
-    jobids::Vector{Int},
+    jobids::AbstractVector,
     output_dir,
     iter,
     experiment_dir,
     model_interface,
-    module_load_str;
+    module_load_str,
+    model_run_func;
     verbose,
-    slurm_kwargs,
+    hpc_kwargs,
     reruns = 1,
 )
     statuses = map(job_status, jobids)
@@ -141,14 +144,14 @@ function wait_for_jobs(
                     if rerun_job_count[m] < reruns
 
                         @info "Rerunning ensemble member $m"
-                        jobids[m] = sbatch_model_run(
+                        jobids[m] = model_run_func(
                             iter,
                             m,
                             output_dir,
                             experiment_dir,
                             model_interface,
                             module_load_str;
-                            slurm_kwargs,
+                            hpc_kwargs,
                         )
                         rerun_job_count[m] += 1
                     else
@@ -162,15 +165,17 @@ function wait_for_jobs(
             sleep(5)
             statuses = map(job_status, jobids)
         end
-        return statuses
     catch e
         kill_job.(jobids)
         if !(e isa InterruptException)
-            @error "Pipeline crashed outside of a model run. Stacktrace for failed simulation" exception =
+            @error "Pipeline crashed outside of a model run. Stacktrace:" exception =
                 (e, catch_backtrace())
         end
-        return map(job_status, jobids)
+        statuses = map(job_status, jobids)
     end
+
+    report_iteration_status(statuses, output_dir, iter)
+    return statuses
 end
 
 """
@@ -203,7 +208,7 @@ function report_iteration_status(statuses, output_dir, iter)
     end
 end
 
-function submit_job(sbatch_filepath; env = deepcopy(ENV))
+function submit_sbatch_job(sbatch_filepath; env = deepcopy(ENV))
     # Ensure that we don't inherit unwanted environment variables
     unset_env_vars =
         ("SLURM_MEM_PER_CPU", "SLURM_MEM_PER_GPU", "SLURM_MEM_PER_NODE")
@@ -219,12 +224,38 @@ job_success(status) = status == :COMPLETED
 job_failed(status) = status == :FAILED
 job_completed(status) = job_failed(status) || job_success(status)
 
+const SlurmJobID = Int
+
+wait_for_jobs(
+    jobids::Vector{SlurmJobID},
+    output_dir,
+    iter,
+    experiment_dir,
+    model_interface,
+    module_load_str;
+    verbose,
+    hpc_kwargs,
+    reruns = 1,
+) = wait_for_jobs(
+    jobids,
+    output_dir,
+    iter,
+    experiment_dir,
+    model_interface,
+    module_load_str,
+    sbatch_model_run;
+    verbose = verbose,
+    hpc_kwargs = hpc_kwargs,
+    reruns = reruns,
+)
+
+
 """
     job_status(jobid)
 
 Parse the slurm jobid's state and return one of three status symbols: :COMPLETED, :FAILED, or :RUNNING.
 """
-function job_status(jobid::Int)
+function job_status(jobid::SlurmJobID)
     failure_statuses = ("FAILED", "CANCELLED+", "CANCELLED")
     output = readchomp(`sacct -j $jobid --format=State --noheader`)
     # Jobs usually have multiple statuses
@@ -238,7 +269,7 @@ function job_status(jobid::Int)
     end
 end
 
-function kill_job(jobid::Int) 
+function kill_job(jobid::SlurmJobID)
     try
         run(`scancel $jobid`)
         println("Cancelling slurm job $jobid")
@@ -247,7 +278,7 @@ function kill_job(jobid::Int)
     end
 end
 
-function format_time(minutes::Int)
+function format_slurm_time(minutes::Int)
     days, remaining_minutes = divrem(minutes, (60 * 24))
     hours, remaining_minutes = divrem(remaining_minutes, 60)
     # Format the string according to Slurm's time format
@@ -269,4 +300,4 @@ function format_time(minutes::Int)
         )
     end
 end
-format_time(str::AbstractString) = str
+format_slurm_time(str::AbstractString) = str

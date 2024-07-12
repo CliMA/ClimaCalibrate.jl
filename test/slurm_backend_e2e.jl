@@ -1,8 +1,10 @@
 # Tests for SurfaceFluxes example calibration on slurm, used in buildkite testing
 # To run, open the REPL: julia --project=experiments/surface_fluxes_perfect_model test/slurm_backend_e2e.jl
 
-using Pkg; pkg"instantiate"
-import ClimaCalibrate: get_backend, JuliaBackend, calibrate, get_prior, kwargs
+using Pkg;
+pkg"instantiate";
+import ClimaCalibrate:
+    get_backend, HPCBackend, JuliaBackend, calibrate, get_prior, kwargs
 using Test
 import EnsembleKalmanProcesses: get_ϕ_mean_final, get_g_mean_final
 
@@ -32,14 +34,9 @@ function test_sf_calibration_output(eki, prior)
     end
 end
 
-@assert get_backend() != JuliaBackend
-
-eki = calibrate(
-    experiment_dir;
-    model_interface,
-    slurm_kwargs = kwargs(time = 5),
-    verbose = true,
-)
+@assert get_backend() <: HPCBackend
+hpc_kwargs = kwargs(time = 5, ncpus = 1, ncpus_per_task = 1)
+eki = calibrate(experiment_dir; model_interface, hpc_kwargs, verbose = true)
 test_sf_calibration_output(eki, prior)
 
 # Pure Julia calibration, this should run anywhere

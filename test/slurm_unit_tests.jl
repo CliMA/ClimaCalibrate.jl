@@ -12,7 +12,7 @@ const GPUS_PER_TASK = 1
 const EXPERIMENT_DIR = "exp/dir"
 const MODEL_INTERFACE = "model_interface.jl"
 const MODULE_LOAD_STR = CAL.module_load_string(CAL.CaltechHPCBackend)
-const slurm_kwargs = CAL.kwargs(
+const hpc_kwargs = CAL.kwargs(
     time = TIME_LIMIT,
     cpus_per_task = CPUS_PER_TASK,
     gpus_per_task = GPUS_PER_TASK,
@@ -32,7 +32,7 @@ sbatch_file = CAL.generate_sbatch_script(
     EXPERIMENT_DIR,
     MODEL_INTERFACE,
     MODULE_LOAD_STR;
-    slurm_kwargs,
+    hpc_kwargs,
 )
 
 expected_sbatch_contents = """

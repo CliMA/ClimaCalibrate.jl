@@ -11,10 +11,8 @@ const GPUS_PER_TASK = 1
 const EXPERIMENT_DIR = "exp/dir"
 const MODEL_INTERFACE = "model_interface.jl"
 const MODULE_LOAD_STR = CAL.module_load_string(CAL.DerechoBackend)
-const pbs_kwargs = CAL.kwargs(
-    walltime = TIME_LIMIT,
-    select = "2:ncpus=128:ngpus=2",
-)
+const hpc_kwargs =
+    CAL.kwargs(walltime = TIME_LIMIT, select = "2:ncpus=128:ngpus=2")
 
 # Time formatting tests
 @test CAL.format_pbs_time(TIME_LIMIT) == "01:30:00"
@@ -30,7 +28,7 @@ pbs_file = CAL.generate_pbs_script(
     EXPERIMENT_DIR,
     MODEL_INTERFACE,
     MODULE_LOAD_STR;
-    pbs_kwargs,
+    hpc_kwargs,
 )
 
 expected_pbs_contents = """
