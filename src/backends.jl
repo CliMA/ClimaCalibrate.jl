@@ -55,6 +55,7 @@ function module_load_string(::Type{DerechoBackend})
     export MODULEPATH="/glade/campaign/univ/ucit0011/ClimaModules-Derecho:\$MODULEPATH" 
     module purge
     module load climacommon
+    module list
     """
 end
 
@@ -101,9 +102,8 @@ function calibrate(
     config::ExperimentConfig;
     ekp_kwargs...,
 )
-    initialize(config; ekp_kwargs...)
     (; n_iterations, ensemble_size) = config
-    eki = nothing
+    eki = initialize(config; ekp_kwargs...)
     for i in 0:(n_iterations - 1)
         @info "Running iteration $i"
         for m in 1:ensemble_size
@@ -171,9 +171,8 @@ function calibrate(
     # ExperimentConfig is created from a YAML file within the experiment_dir
     (; n_iterations, output_dir, ensemble_size) = config
     @info "Initializing calibration" n_iterations ensemble_size output_dir
-    initialize(config; ekp_kwargs...)
-
-    eki = nothing
+    
+    eki = initialize(config; ekp_kwargs...)
     module_load_str = module_load_string(b)
     for iter in 0:(n_iterations - 1)
         @info "Iteration $iter"
@@ -198,6 +197,57 @@ function calibrate(
             model_interface,
             module_load_str;
             slurm_kwargs,
+            verbose,
+        )
+        report_iteration_status(statuses, output_dir, iter)
+        @info "Completed iteration $iter, updating ensemble"
+        G_ensemble = observation_map(iter)
+        save_G_ensemble(config, iter, G_ensemble)
+        eki = update_ensemble(config, iter)
+    end
+    return eki
+end
+
+function calibrate(
+    b::Type{DerechoBackend},
+    config::ExperimentConfig;
+    experiment_dir = dirname(Base.active_project()),
+    model_interface = abspath(
+        joinpath(experiment_dir, "..", "..", "model_interface.jl"),
+    ),
+    verbose = false,
+    pbs_kwargs = Dict(:time_limit => 45, :ntasks => 1),
+    ekp_kwargs...,
+)
+    # ExperimentConfig is created from a YAML file within the experiment_dir
+    (; n_iterations, output_dir, ensemble_size) = config
+    @info "Initializing calibration" n_iterations ensemble_size output_dir
+    eki = initialize(config; ekp_kwargs...)
+
+    module_load_str = module_load_string(b)
+    for iter in 0:(n_iterations - 1)
+        @info "Iteration $iter"
+        jobids = map(1:ensemble_size) do member
+            @info "Running ensemble member $member"
+            model_run(
+                iter,
+                member,
+                output_dir,
+                experiment_dir,
+                model_interface,
+                module_load_str;
+                pbs_kwargs,
+            )
+        end
+
+        statuses = wait_for_jobs(
+            jobids,
+            output_dir,
+            iter,
+            experiment_dir,
+            model_interface,
+            module_load_str;
+            pbs_kwargs,
             verbose,
         )
         report_iteration_status(statuses, output_dir, iter)

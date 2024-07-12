@@ -164,7 +164,7 @@ function wait_for_jobs(
         end
         return statuses
     catch e
-        kill_all_jobs(jobids)
+        kill_job.(jobids)
         if !(e isa InterruptException)
             @error "Pipeline crashed outside of a model run. Stacktrace for failed simulation" exception =
                 (e, catch_backtrace())
@@ -238,23 +238,14 @@ function job_status(jobid::Int)
     end
 end
 
-"""
-    kill_all_jobs(jobids)
-
-Takes a list of slurm job IDs and runs `scancel` on them.
-"""
-function kill_all_jobs(jobids)
-    for jobid in jobids
-        try
-            kill_slurm_job(jobid)
-            println("Cancelling slurm job $jobid")
-        catch e
-            println("Failed to cancel slurm job $jobid: ", e)
-        end
+function kill_job(jobid::Int) 
+    try
+        run(`scancel $jobid`)
+        println("Cancelling slurm job $jobid")
+    catch e
+        println("Failed to cancel slurm job $jobid: ", e)
     end
 end
-
-kill_slurm_job(jobid) = run(`scancel $jobid`)
 
 function format_time(minutes::Int)
     days, remaining_minutes = divrem(minutes, (60 * 24))

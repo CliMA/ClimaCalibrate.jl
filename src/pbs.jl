@@ -1,28 +1,5 @@
-function generate_pbs_directives(pbs_kwargs)
-    @assert haskey(pbs_kwargs, :walltime) "PBS kwargs must include key :walltime"
-    pbs_kwargs[:walltime] = format_time(pbs_kwargs[:walltime])
-
-    pbs_directives = map(collect(pbs_kwargs)) do (k, v)
-        "#PBS -$k=$v"
-    end
-
-    return join(pbs_directives, "\n")
-end
-
-function extract_pbs_values(pbs_directives::AbstractString)
-    select_match = match(r"select=(\d+)", pbs_directives)
-    ncpus_match = match(r"ncpus=(\d+)", pbs_directives)
-    ngpus_match = match(r"ngpus=(\d+)", pbs_directives)
-    
-    num_nodes = select_match !== nothing ? parse(Int, select_match.captures[1]) : error("PBS directives must include 'select'")
-    ncpus_per_node = ncpus_match !== nothing ? parse(Int, ncpus_match.captures[1]) : error("PBS directives must include 'ncpus'")
-    gpus_per_node = ngpus_match !== nothing ? parse(Int, ngpus_match.captures[1]) : 0
-    
-    return num_nodes, ncpus_per_node, gpus_per_node
-end
-
 """
-    generate_script(
+generate_pbs_script(
         iter, member,
         output_dir, experiment_dir, model_interface;
         module_load_str, pbs_kwargs,
@@ -39,25 +16,37 @@ function generate_pbs_script(
     experiment_dir::AbstractString,
     model_interface::AbstractString,
     module_load_str::AbstractString;
-    pbs_kwargs...
+    pbs_kwargs = Dict()
 )
     member_log = path_to_model_log(output_dir, iter, member)
-    pbs_directives = generate_pbs_directives(pbs_kwargs)
-    num_nodes, ncpus_per_node, gpus_per_node = extract_pbs_values(pbs_directives)
-    total_procs = num_nodes * ncpus_per_node
+
+    walltime = format_pbs_time(get(pbs_kwargs, :time, 45))
+    num_nodes = get(pbs_kwargs, :ntasks, 1)
+    ncpus_per_node = get(pbs_kwargs, :ncpus_per_task, 1)
+    ngpus_per_node = get(pbs_kwargs, :ngpus_per_task, 0)
+    queue = get(pbs_kwargs, :ngpus_per_task, "develop")
+
+    if ngpus_per_node > 0
+        ranks_per_node = ngpus_per_node
+        set_gpu_rank = "set_gpu_rank"
+    else
+        ranks_per_node = ncpus_per_node
+        set_gpu_rank = ""
+    end
+    total_ranks = num_nodes * ranks_per_node
 
     qsub_contents = """
     #!/bin/bash
-    #PBS -N run_${iter}_${member}
+    #PBS -N run_$(iter)_$member
     #PBS -j oe
     #PBS -A UCIT0011
-    #PBS -q preempt
+    #PBS -q $queue
     #PBS -o $member_log
-    $pbs_directives
+    #PBS -l walltime=$walltime
+    #PBS -l select=$num_nodes:ncpus=$ncpus_per_node:ngpus=$ngpus_per_node
     set -euo pipefail
     $module_load_str
-
-    \$MPITRAMPOLINE_EXEC -n $total_procs -ppn $ncpus_per_node set_gpu_rank julia --project=$experiment_dir -e '
+    \$MPITRAMPOLINE_MPIEXEC -n $total_ranks -ppn $ranks_per_node $set_gpu_rank julia --project=$experiment_dir -e '
     import ClimaCalibrate as CAL
     iteration = $iter; member = $member
     model_interface = "$model_interface"; include(model_interface)
@@ -99,42 +88,43 @@ function model_run(
     experiment_dir,
     model_interface,
     module_load_str;
-    slurm_kwargs = Dict{Symbol, Any}(
-        :time => 45,
-        :ntasks => 1,
-        :cpus_per_task => 1,
+    pbs_kwargs = Dict{Symbol, Any}(
+        :walltime => 45,
+        :select => "1:ncpus=1:ngpus=0",
     ),
-    kwargs...,
 )
-    script_contents = generate_script(
+    script_contents = generate_pbs_script(
         iter,
         member,
         output_dir,
         experiment_dir,
         model_interface,
         module_load_str;
-        slurm_kwargs,
-        kwargs...,
+        pbs_kwargs,
     )
 
-    sbatch_filepath, io = mktemp(output_dir)
-    write(io, script_contents)
-    close(io)
+    jobid = mktemp(output_dir) do filepath, io
+        write(io, script_contents)
+        close(io)
+        submit_pbs_job(filepath)
+    end
 
-    return submit_sbatch_job(sbatch_filepath)
+    return jobid
 end
 
 function wait_for_jobs(
-    jobids::Vector{Int},
+    jobids::Vector{<:AbstractString},
     output_dir,
     iter,
     experiment_dir,
     model_interface,
     module_load_str;
     verbose,
-    slurm_kwargs,
+    slurm_kwargs = nothing,
+    pbs_kwargs = nothing,
     reruns = 1,
 )
+    @assert !isnothing(slurm_kwargs) || !isnothing(pbs_kwargs)
     statuses = map(job_status, jobids)
     rerun_job_count = zeros(length(jobids))
     completed_jobs = Set{Int}()
@@ -149,15 +139,27 @@ function wait_for_jobs(
                     if rerun_job_count[m] < reruns
 
                         @info "Rerunning ensemble member $m"
-                        jobids[m] = model_run(
-                            iter,
-                            m,
-                            output_dir,
-                            experiment_dir,
-                            model_interface,
-                            module_load_str;
-                            slurm_kwargs,
-                        )
+                        if isnothing(slurm_kwargs) 
+                            jobids[m] = model_run(
+                                iter,
+                                m,
+                                output_dir,
+                                experiment_dir,
+                                model_interface,
+                                module_load_str;
+                                pbs_kwargs,
+                            )
+                        else
+                            jobids[m] = model_run(
+                                iter,
+                                m,
+                                output_dir,
+                                experiment_dir,
+                                model_interface,
+                                module_load_str;
+                                slurm_kwargs,
+                            )
+                        end
                         rerun_job_count[m] += 1
                     else
                         push!(completed_jobs, m)
@@ -172,7 +174,7 @@ function wait_for_jobs(
         end
         return statuses
     catch e
-        kill_all_jobs(jobids)
+        kill_job.(jobids)
         if !(e isa InterruptException)
             @error "Pipeline crashed outside of a model run. Stacktrace for failed simulation" exception =
                 (e, catch_backtrace())
@@ -181,57 +183,22 @@ function wait_for_jobs(
     end
 end
 
-"""
-    log_member_error(output_dir, iteration, member, verbose = false)
-
-Log a warning message when an error occurs in a specific ensemble member during a model run in a Slurm environment. 
-If verbose, includes the ensemble member's output.
-"""
-function log_member_error(output_dir, iteration, member, verbose = false)
-    member_log = path_to_model_log(output_dir, iteration, member)
-    warn_str = """Ensemble member $member raised an error. See model log at \
-    $(abspath(member_log)) for stacktrace"""
-    if verbose
-        stacktrace = replace(readchomp(member_log), "\\n" => "\n")
-        warn_str = warn_str * ": \n$stacktrace"
-    end
-    @warn warn_str
-end
-
-function report_iteration_status(statuses, output_dir, iter)
-    all(job_completed.(statuses)) || error("Some jobs are not complete")
-
-    if all(job_failed, statuses)
-        error(
-            """Full ensemble for iteration $iter has failed. See model logs in
-            $(abspath(path_to_iteration(output_dir, iter)))""",
-        )
-    elseif any(job_failed, statuses)
-        @warn "Failed ensemble members: $(findall(job_failed, statuses))"
-    end
-end
-
-function submit_job(filepath; debug = false, env = deepcopy(ENV))
+function submit_pbs_job(filepath; debug = false, env = deepcopy(ENV))
     unset_env_vars =
-        ("SLURM_MEM_PER_CPU", "SLURM_MEM_PER_GPU", "SLURM_MEM_PER_NODE")
+        ("PBS_MEM_PER_CPU", "PBS_MEM_PER_GPU", "PBS_MEM_PER_NODE")
     for k in unset_env_vars
         haskey(env, k) && delete!(env, k)
     end
     jobid = readchomp(setenv(`qsub $filepath`, env))
-    return parse(Int, jobid)
+    return jobid
 end
-
-job_running(status) = status == :RUNNING
-job_success(status) = status == :COMPLETED
-job_failed(status) = status == :FAILED
-job_completed(status) = job_failed(status) || job_success(status)
 
 """
     job_status(jobid)
 
 Parse the jobid's state and return one of three status symbols: :COMPLETED, :FAILED, or :RUNNING.
 """
-function job_status(jobid)
+function job_status(jobid::AbstractString)
     status_str = readchomp(`qstat -f $jobid -x -F dsv`)
     job_state_match = match(r"job_state=([^|]+)", status_str)
     status = first(job_state_match.captures)
@@ -249,20 +216,25 @@ function job_status(jobid)
     return status_symbol
 end
 
-"""
-    kill_all_jobs(jobids)
+function kill_job(jobid::AbstractString)
+    try
+        run(`qdel -W force $jobid`)
+        println("Cancelling PBS job $jobid")
 
-Cancels a list of PBS jobids.
-"""
-function kill_all_jobs(jobids)
-    for jobid in jobids
-        try
-            kill_pbs_job(jobid)
-            println("Cancelling PBS job $jobid")
-        catch e
-            println("Failed to cancel PBS job $jobid: ", e)
-        end
+    catch e
+        println("Failed to cancel PBS job $jobid: ", e)
     end
+
 end
 
-kill_pbs_job(jobid) = run(`qdel -W force $jobid`)
+function format_pbs_time(minutes::Int)
+    hours, remaining_minutes = divrem(minutes, 60)
+    # Format the string according to Slurm's time format
+    return string(
+        lpad(hours, 2, '0'),
+        ":",
+        lpad(remaining_minutes, 2, '0'),
+        ":00",
+    )
+end
+format_pbs_time(str::AbstractString) = str
