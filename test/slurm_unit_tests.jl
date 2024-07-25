@@ -12,7 +12,7 @@ const GPUS_PER_TASK = 1
 const EXPERIMENT_DIR = "exp/dir"
 const MODEL_INTERFACE = "model_interface.jl"
 const MODULE_LOAD_STR = CAL.module_load_string(CAL.CaltechHPCBackend)
-const slurm_kwargs = CAL.kwargs(
+const hpc_kwargs = CAL.kwargs(
     time = TIME_LIMIT,
     cpus_per_task = CPUS_PER_TASK,
     gpus_per_task = GPUS_PER_TASK,
@@ -32,7 +32,7 @@ sbatch_file = CAL.generate_sbatch_script(
     EXPERIMENT_DIR,
     MODEL_INTERFACE,
     MODULE_LOAD_STR;
-    slurm_kwargs,
+    hpc_kwargs,
 )
 
 expected_sbatch_contents = """
@@ -42,10 +42,12 @@ expected_sbatch_contents = """
 #SBATCH --gpus-per-task=1
 #SBATCH --cpus-per-task=16
 #SBATCH --time=01:30:00
-set -euo pipefail
-export MODULEPATH=/groups/esm/modules:\$MODULEPATH
+export MODULEPATH="/groups/esm/modules:\$MODULEPATH"
 module purge
 module load climacommon/2024_05_27
+
+export CLIMACOMMS_DEVICE="CUDA"
+export CLIMACOMMS_CONTEXT="MPI"
 
 srun --output=test/iteration_001/member_001/model_log.txt --open-mode=append julia --project=exp/dir -e '
 import ClimaCalibrate as CAL
@@ -67,7 +69,7 @@ function submit_cmd_helper(cmd)
     sbatch_filepath, io = mktemp()
     write(io, cmd)
     close(io)
-    jobid = CAL.submit_sbatch_job(sbatch_filepath)
+    jobid = CAL.submit_slurm_job(sbatch_filepath)
     sleep(1)  # Allow time for the job to start
     return jobid
 end
@@ -90,7 +92,7 @@ sleep(180)  # Ensure job finishes. To debug, lower sleep time or comment out the
 
 # Test job cancellation
 jobid = submit_cmd_helper(test_cmd)
-CAL.kill_slurm_job(jobid)
+CAL.kill_job(jobid)
 sleep(1)
 @test CAL.job_status(jobid) == :FAILED
 @test CAL.job_completed(CAL.job_status(jobid)) &&
@@ -99,7 +101,7 @@ sleep(1)
 # Test batch cancellation
 jobids = ntuple(x -> submit_cmd_helper(test_cmd), 5)
 
-CAL.kill_all_jobs(jobids)
+CAL.kill_job.(jobids)
 for jobid in jobids
     @test CAL.job_completed(CAL.job_status(jobid))
     @test CAL.job_failed(CAL.job_status(jobid))

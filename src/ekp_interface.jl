@@ -171,10 +171,10 @@ function env_model_interface(env = ENV)
     return string(env[key])
 end
 
-function env_iter_number(env = ENV)
-    key = "CALIBRATION_ITER_NUMBER"
+function env_iteration(env = ENV)
+    key = "CALIBRATION_ITERATION"
     haskey(env, key) || error(
-        "Iteration number not found in environment. Ensure that env variable \"CALIBRATION_ITER_NUMBER\" is set.",
+        "Iteration number not found in environment. Ensure that env variable \"CALIBRATION_ITERATION\" is set.",
     )
     return parse(Int, env[key])
 end

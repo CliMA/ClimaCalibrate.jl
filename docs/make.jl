@@ -26,7 +26,6 @@ makedocs(
         "Getting Started" => "quickstart.md",
         "ClimaAtmos Setup Guide" => "atmos_setup_guide.md",
         "Emulate and Sample" => "emulate_sample.md",
-        "Precompilation" => "precompilation.md",
         "API" => "api.md",
     ],
 )
