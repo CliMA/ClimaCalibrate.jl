@@ -188,23 +188,18 @@ function env_member_number(env = ENV)
 end
 
 """
-    initialize(
-        ensemble_size,
-        observations,
-        noise,
-        prior,
-        output_dir;
-        rng_seed = 1234,
-    )
-    initialize(config::ExperimentConfig; rng_seed = 1234)
-    initialize(filepath::AbstractString; rng_seed = 1234)
+    initialize(ensemble_size, observations, noise, prior, output_dir; kwargs...)
+    initialize(ensemble_size, observations, prior, output_dir; kwargs...)
+    initialize(config::ExperimentConfig; kwargs...)
+    initialize(filepath::AbstractString; kwargs...)
 
-Initializes the calibration process by setting up the EnsembleKalmanProcess object
-and parameter files with a given seed for random number generation.
+Initialize the EnsembleKalmanProcess object and parameter files.
+
+Noise is optional when the observation is an EKP.ObservationSeries.
+Additional kwargs may be passed through to the EnsembleKalmanProcess constructor.
 """
 initialize(filepath::AbstractString; kwargs...) =
     initialize(ExperimentConfig(filepath); kwargs...)
-
 
 initialize(config::ExperimentConfig; kwargs...) = initialize(
     config.ensemble_size,
@@ -215,7 +210,23 @@ initialize(config::ExperimentConfig; kwargs...) = initialize(
     kwargs...,
 )
 
-function initialize(
+initialize(
+    ensemble_size,
+    observations,
+    prior,
+    output_dir;
+    rng_seed = 1234,
+    ekp_kwargs...,
+) = _initialize(
+    ensemble_size,
+    observations,
+    prior,
+    output_dir;
+    rng_seed,
+    ekp_kwargs...,
+)
+
+initialize(
     ensemble_size,
     observations,
     noise,
@@ -223,37 +234,68 @@ function initialize(
     output_dir;
     rng_seed = 1234,
     ekp_kwargs...,
+) = _initialize(
+    ensemble_size,
+    observations,
+    prior,
+    output_dir;
+    noise,
+    rng_seed,
+    ekp_kwargs...,
+)
+
+function _initialize(
+    ensemble_size,
+    observations,
+    prior,
+    output_dir;
+    noise = nothing,
+    rng_seed,
+    ekp_kwargs...,
 )
     Random.seed!(rng_seed)
     rng_ekp = Random.MersenneTwister(rng_seed)
-
     initial_ensemble =
         EKP.construct_initial_ensemble(rng_ekp, prior, ensemble_size)
-    eki = EKP.EnsembleKalmanProcess(
-        initial_ensemble,
-        observations,
-        noise,
-        EKP.Inversion();
-        rng = rng_ekp,
-        failure_handler_method = EKP.SampleSuccGauss(),
-        ekp_kwargs...,
-    )
 
+    eki_constructor =
+        (args...) -> EKP.EnsembleKalmanProcess(
+            args...;
+            rng = rng_ekp,
+            failure_handler_method = EKP.SampleSuccGauss(),
+            ekp_kwargs...,
+        )
+
+    eki = if isnothing(noise)
+        eki_constructor(initial_ensemble, observations, EKP.Inversion())
+    else
+        eki_constructor(initial_ensemble, observations, noise, EKP.Inversion())
+    end
+
+    save_eki_state(eki, output_dir, 0, prior)
+    return eki
+end
+
+"""
+    save_eki_state(eki, output_dir, iteration, prior)
+
+Save EKI state and parameters. Helper function for [`initialize`](@ref) and [`update_ensemble`](@ref)
+"""
+function save_eki_state(eki, output_dir, iteration, prior)
     param_dict = get_param_dict(prior)
-
     save_parameter_ensemble(
-        EKP.get_u_final(eki),  # constraints applied when saving
+        EKP.get_u_final(eki),
         prior,
         param_dict,
         output_dir,
         "parameters.toml",
-        0,  # Initial iteration = 0
+        iteration,
     )
 
-    # Save the EKI object in the 'iteration_000' folder
-    eki_path = joinpath(output_dir, "iteration_000", "eki_file.jld2")
+    # Save the EKI object in the 'iteration_xxx' folder
+    iter_path = path_to_iteration(output_dir, iteration)
+    eki_path = joinpath(iter_path, "eki_file.jld2")
     JLD2.save_object(eki_path, eki)
-    return eki
 end
 
 """
@@ -270,30 +312,13 @@ update_ensemble(configuration::ExperimentConfig, iteration) =
     update_ensemble(configuration.output_dir, iteration, configuration.prior)
 
 function update_ensemble(output_dir::AbstractString, iteration, prior)
-    # Load EKI object from iteration folder
     iter_path = path_to_iteration(output_dir, iteration)
     eki = JLD2.load_object(joinpath(iter_path, "eki_file.jld2"))
 
     # Load data from the ensemble
     G_ens = JLD2.load_object(joinpath(iter_path, "G_ensemble.jld2"))
-    # Update
     EKP.update_ensemble!(eki, G_ens)
-    iteration += 1
 
-    param_dict = get_param_dict(prior)
-
-    save_parameter_ensemble(
-        EKP.get_u_final(eki),  # constraints applied when saving
-        prior,
-        param_dict,
-        output_dir,
-        "parameters.toml",
-        iteration,
-    )
-
-    # Save EKI object for next iteration
-    iter_path = path_to_iteration(output_dir, iteration)
-    eki_path = joinpath(iter_path, "eki_file.jld2")
-    JLD2.save_object(eki_path, eki)
+    save_eki_state(eki, output_dir, iteration + 1, prior)
     return eki
 end

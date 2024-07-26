@@ -71,7 +71,7 @@ function wait_for_jobs(
                     push!(completed_jobs, m)
                 end
             end
-            sleep(10)
+            sleep(5)
         end
     catch e
         kill_job.(jobids)
