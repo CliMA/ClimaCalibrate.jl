@@ -1,3 +1,5 @@
+using Distributed
+
 export get_backend, calibrate, model_run
 
 abstract type AbstractBackend end
@@ -58,28 +60,39 @@ function module_load_string(::Type{DerechoBackend})
     """
 end
 
-calibrate(config::ExperimentConfig; ekp_kwargs...) =
-    calibrate(get_backend(), config; ekp_kwargs...)
+calibrate(config::ExperimentConfig; reruns = 0, ekp_kwargs...) =
+    calibrate(get_backend(), config; reruns, ekp_kwargs...)
 
-calibrate(experiment_dir::AbstractString; ekp_kwargs...) =
-    calibrate(get_backend(), ExperimentConfig(experiment_dir); ekp_kwargs...)
+calibrate(experiment_dir::AbstractString; reruns = 0, ekp_kwargs...) =
+    calibrate(
+        get_backend(),
+        ExperimentConfig(experiment_dir);
+        reruns,
+        ekp_kwargs...,
+    )
 
 calibrate(
     b::Type{JuliaBackend},
     experiment_dir::AbstractString;
+    reruns = 0,
     ekp_kwargs...,
-) = calibrate(b, ExperimentConfig(experiment_dir); ekp_kwargs...)
+) = calibrate(b, ExperimentConfig(experiment_dir); reruns, ekp_kwargs...)
 
 function calibrate(
     ::Type{JuliaBackend},
     config::ExperimentConfig;
+    reruns = 0,
     ekp_kwargs...,
 )
     (; n_iterations, ensemble_size) = config
     eki = initialize(config; ekp_kwargs...)
+    on_error(e::InterruptException) = rethrow(e)
+    on_error(e) =
+        @error "Single ensemble member has errored. See stacktrace" exception =
+            (e, catch_backtrace())
     for i in 0:(n_iterations - 1)
         @info "Running iteration $i"
-        for m in 1:ensemble_size
+        pmap(1:ensemble_size; retry_delays = reruns, on_error) do m
             run_forward_model(set_up_forward_model(m, i, config))
             @info "Completed member $m"
         end
@@ -100,11 +113,11 @@ Takes either an ExperimentConfig or an experiment folder.
 
 Available Backends: CaltechHPCBackend, ClimaGPUBackend, DerechoBackend, JuliaBackend
 
-
 # Keyword Arguments
 - `experiment_dir: Directory containing experiment configurations.
 - `model_interface: Path to the model interface file.
 - `hpc_kwargs`: Dictionary of resource arguments, passed to the job scheduler.
+- `reruns`: Number of times to retry a failed ensemble member.
 - `verbose::Bool`: Enable verbose logging.
 
 # Usage
@@ -168,7 +181,7 @@ function calibrate(
             )
         end
 
-        statuses = wait_for_jobs(
+        wait_for_jobs(
             jobids,
             output_dir,
             iter,
@@ -206,7 +219,7 @@ Arguments:
 - hpc_kwargs: Dictionary containing the resources for the job. Easily generated using [`kwargs`](@ref).
 """
 model_run(
-    b::Type{<:SlurmBackend},
+    ::Type{<:SlurmBackend},
     iter,
     member,
     output_dir,
@@ -224,7 +237,7 @@ model_run(
     hpc_kwargs,
 )
 model_run(
-    b::Type{DerechoBackend},
+    ::Type{DerechoBackend},
     iter,
     member,
     output_dir,
