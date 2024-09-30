@@ -17,7 +17,7 @@ steps:
     key: "init_cpu_env"
     command:
       - echo "--- Instantiate SurfaceFluxes calibration project"
-      - julia --project=experiments/surface_fluxes_perfect_model -e 'using Pkg; Pkg.develop(;path="."); Pkg.precompile()'
+      - julia --project=experiments/surface_fluxes_perfect_model -e 'using Pkg; Pkg.precompile()'
 
   - wait
   - label: "SurfaceFluxes perfect model calibration"

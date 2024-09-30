@@ -33,6 +33,7 @@ jobs:
       - uses: actions/cache@v1
         env:
           cache-name: cache-artifacts
+          PYTHON: ""
         with:
           path: ~/.julia/artifacts
           key: ${{ runner.os }}-test-${{ env.cache-name }}-${{ hashFiles('**/Project.toml') }}
@@ -44,6 +45,17 @@ jobs:
         with:
           version: ${{ matrix.version }}
           arch: ${{ matrix.arch }}
+      # CalibrateEmulateSample relies on Python modules
+      # We retry this step because the first install is flaky
+      - uses: nick-fields/retry@v3
+        with:
+          max_attempts: 2
+          timeout_minutes: 10
+          command: |
+            julia --color=yes --project=test -e 'using Pkg; Pkg.instantiate()'
+            julia --project=test -e 'using Conda; Conda.add("scipy=1.14.1"); Conda.add("scikit-learn=1.5.1")'
+        env: 
+          PYTHON: ""
       - uses: julia-actions/julia-buildpkg@v1
       - uses: julia-actions/julia-runtest@v1
       - uses: julia-actions/julia-processcoverage@v1

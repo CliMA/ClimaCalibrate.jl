@@ -19,7 +19,7 @@ import JLD2
 output_file = "model_output.jld2"
 prior = constrained_gaussian("test_param", 10, 5, 0, Inf)
 n_iterations = 1
-ensemble_size = 10
+ensemble_size = 20
 observations = [20.0]
 noise = [0.01;;]
 output_dir = joinpath("test", "e2e_test_output")
@@ -34,6 +34,8 @@ experiment_config = ExperimentConfig(
 )
 
 # Model interface
+# This "model" just samples parameters and returns them, we are checking that the 
+# results are reproducible.
 function set_up_forward_model(
     member,
     iteration,
@@ -55,9 +57,7 @@ function run_forward_model(config)
     JLD2.save_object(joinpath(config["output_dir"], output_file), output)
 end
 
-# Observation map
 function observation_map(iteration)
-
     (; ensemble_size) = experiment_config
     dims = 1
     G_ensemble = Array{Float64}(undef, dims..., ensemble_size)
@@ -76,8 +76,8 @@ ekp = calibrate(JuliaBackend, experiment_config)
 @testset "Test end-to-end calibration" begin
     parameter_values =
         [EKP.get_ϕ_mean(prior, ekp, it) for it in 1:(n_iterations + 1)]
-    @test parameter_values[1][1] ≈ 9.779 rtol = 0.01
-    @test parameter_values[end][1] ≈ 19.63 rtol = 0.01
+    @test parameter_values[1][1] ≈ 9.215 rtol = 0.01
+    @test parameter_values[end][1] ≈ 20.224 rtol = 0.01
 end
 
 rm(output_dir; recursive = true)

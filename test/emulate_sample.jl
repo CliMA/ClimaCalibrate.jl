@@ -13,22 +13,23 @@ import ClimaCalibrate as CAL
 @testset "Emulate and Sample tests" begin
     y_obs = [261.5493]
     y_noise_cov = [0.02619;;]
-    ekp = JLD2.load_object(joinpath("test_case_inputs", "eki_test.jld2"))
-    init_params = [EKP.get_u_final(ekp)[1]]
-
+    init_params = [4.1928479297330306]
     prior_path = joinpath("test_case_inputs", "sphere_hs_rhoe.toml")
-
     prior = CAL.get_prior(prior_path)
 
-    input_output_pairs = CAL.get_input_output_pairs(ekp)
-
-    @test input_output_pairs.inputs.stored_data ==
-          hcat([ekp.u[i].stored_data for i in 1:(length(ekp.u) - 1)]...)
-    @test input_output_pairs.outputs.stored_data ==
-          hcat([ekp.g[i].stored_data for i in 1:length(ekp.g)]...)
+    # Sample data
+    input_output_pairs = EKP.DataContainers.PairedDataContainer(
+        # Parameter values
+        EKP.DataContainers.DataContainer(
+            [5.05038266176406 4.49801357065531 4.625175276903062 4.497648108467572 5.049462857273453 5.470189766650297 4.945930038719361 4.694723166004012 4.936413547464582 4.618148508404665 4.041965675651152 4.121910454258125 4.077521148463588 4.119541027138994 4.043163793654862 4.21813038496636 4.0249164182511485 4.0292005257357895 4.026103892229238 4.0880286181841585 4.1861745817794205 4.20048531589655 4.187992300461601 4.19870114405988 4.209232786450678 4.191675948737242 4.187239734960614 4.186875241183792 4.189230960868622 4.19193208121736],
+        ),
+        # Observation map output values
+        EKP.DataContainers.DataContainer(
+            [229.28858947753906 249.54794311523438 244.09906005859375 249.78701782226562 229.31289672851562 221.62457275390625 232.126953125 240.37799072265625 232.520751953125 244.3943634033203 266.1481628417969 263.6910705566406 265.0572509765625 263.7556457519531 266.0339660644531 260.7401428222656 266.4653015136719 266.42529296875 266.4148864746094 264.5828552246094 261.7020568847656 261.2137451171875 261.7446594238281 261.2926025390625 260.7995910644531 261.4737548828125 261.597900390625 261.69354248046875 261.52777099609375 261.3088684082031],
+        ),
+    )
 
     emulator = CAL.gp_emulator(input_output_pairs, y_noise_cov)
-
 
     (; mcmc, chain) = CAL.sample(emulator, y_obs, prior, init_params)
     @test mean(chain.value[1:100000]) ≈ 4.19035299 rtol = 0.0001
