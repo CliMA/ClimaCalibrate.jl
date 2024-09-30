@@ -183,10 +183,10 @@ weakdeps = ["SparseArrays"]
     ChainRulesCoreSparseArraysExt = "SparseArrays"
 
 [[deps.ClimaCalibrate]]
-deps = ["Distributions", "EnsembleKalmanProcesses", "JLD2", "Random", "TOML", "YAML"]
+deps = ["Distributed", "Distributions", "EnsembleKalmanProcesses", "JLD2", "Random", "TOML", "YAML"]
 path = "../.."
 uuid = "4347a170-ebd6-470c-89d3-5c705c0cacc2"
-version = "0.0.2"
+version = "0.0.4"
 
     [deps.ClimaCalibrate.extensions]
     CESExt = "CalibrateEmulateSample"
