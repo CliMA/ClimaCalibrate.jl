@@ -317,8 +317,8 @@ function update_ensemble(output_dir::AbstractString, iteration, prior)
 
     # Load data from the ensemble
     G_ens = JLD2.load_object(joinpath(iter_path, "G_ensemble.jld2"))
-    EKP.update_ensemble!(eki, G_ens)
 
+    terminate = EKP.update_ensemble!(eki, G_ens)
     save_eki_state(eki, output_dir, iteration + 1, prior)
-    return eki
+    return terminate
 end
