@@ -84,7 +84,7 @@ function calibrate(
     reruns = 0,
     ekp_kwargs...,
 )
-    (; n_iterations, ensemble_size) = config
+    (; n_iterations, output_dir, ensemble_size) = config
     eki = initialize(config; ekp_kwargs...)
     on_error(e::InterruptException) = rethrow(e)
     on_error(e) =
@@ -98,7 +98,10 @@ function calibrate(
         end
         G_ensemble = observation_map(i)
         save_G_ensemble(config, i, G_ensemble)
-        eki = update_ensemble(config, i)
+        terminate = update_ensemble(config, i)
+        !isnothing(terminate) && break
+        iter_path = path_to_iteration(output_dir, i + 1)
+        eki = JLD2.load_object(joinpath(iter_path, "eki_file.jld2"))
     end
     return eki
 end
@@ -119,6 +122,7 @@ Available Backends: CaltechHPCBackend, ClimaGPUBackend, DerechoBackend, JuliaBac
 - `hpc_kwargs`: Dictionary of resource arguments, passed to the job scheduler.
 - `reruns`: Number of times to retry a failed ensemble member.
 - `verbose::Bool`: Enable verbose logging.
+- Any keyword arguments for the EnsembleKalmanProcess constructor, such as `scheduler`
 
 # Usage
 Open julia: `julia --project=experiments/surface_fluxes_perfect_model`
@@ -159,19 +163,18 @@ function calibrate(
     hpc_kwargs,
     ekp_kwargs...,
 )
-    # ExperimentConfig is created from a YAML file within the experiment_dir
     (; n_iterations, output_dir, ensemble_size) = config
     @info "Initializing calibration" n_iterations ensemble_size output_dir
 
     eki = initialize(config; ekp_kwargs...)
     module_load_str = module_load_string(b)
-    for iter in 0:(n_iterations - 1)
-        @info "Iteration $iter"
+    for i in 0:(n_iterations - 1)
+        @info "Iteration $i"
         jobids = map(1:ensemble_size) do member
             @info "Running ensemble member $member"
             model_run(
                 b,
-                iter,
+                i,
                 member,
                 output_dir,
                 experiment_dir,
@@ -184,7 +187,7 @@ function calibrate(
         wait_for_jobs(
             jobids,
             output_dir,
-            iter,
+            i,
             experiment_dir,
             model_interface,
             module_load_str;
@@ -192,10 +195,13 @@ function calibrate(
             verbose,
             reruns,
         )
-        @info "Completed iteration $iter, updating ensemble"
-        G_ensemble = observation_map(iter)
-        save_G_ensemble(config, iter, G_ensemble)
-        eki = update_ensemble(config, iter)
+        @info "Completed iteration $i, updating ensemble"
+        G_ensemble = observation_map(i)
+        save_G_ensemble(config, i, G_ensemble)
+        terminate = update_ensemble(config, i)
+        !isnothing(terminate) && break
+        iter_path = path_to_iteration(output_dir, i + 1)
+        eki = JLD2.load_object(joinpath(iter_path, "eki_file.jld2"))
     end
     return eki
 end
