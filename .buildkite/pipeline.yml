@@ -1,6 +1,6 @@
 
 agents:
-  queue: test_clima
+  queue: clima
   modules: julia/1.10.0 cuda/julia-pref openmpi/4.1.5-mpitrampoline nsight-systems/2024.4.1
   test: 'hello'
 
@@ -15,7 +15,7 @@ steps:
     key: "init_cpu_env"
     command:
       - echo "--- Instantiate SurfaceFluxes calibration project"
-      - julia -e 'println("hello")'
+      - julia --project=experiments/surface_fluxes_perfect_model -e 'using Pkg; Pkg.precompile()'
 
   # - wait
   # - label: "SurfaceFluxes perfect model calibration"
