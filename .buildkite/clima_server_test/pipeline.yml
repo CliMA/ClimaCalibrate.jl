@@ -1,9 +1,9 @@
 agents:
-  queue: clima
-  modules: julia/1.10.0 cuda/julia-pref openmpi/4.1.5-mpitrampoline nsight-systems/2024.2.1
   slurm_partition: broken
   slurm_arg: invalid
   architecture: GPU
+  queue: clima
+  modules: julia/1.10.0 cuda/julia-pref openmpi/4.1.5-mpitrampoline nsight-systems/2024.2.1
 
 env:
   JULIA_MPI_HAS_CUDA: "true"
