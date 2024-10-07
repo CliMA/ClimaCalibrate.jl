@@ -190,12 +190,17 @@ end
 """
     initialize(ensemble_size, observations, noise, prior, output_dir; kwargs...)
     initialize(ensemble_size, observations, prior, output_dir; kwargs...)
+    initialize(eki::EnsembleKalmanProcess, prior, output_dir)
     initialize(config::ExperimentConfig; kwargs...)
     initialize(filepath::AbstractString; kwargs...)
 
 Initialize the EnsembleKalmanProcess object and parameter files.
 
+Can take in an existing EnsembleKalmanProcess which will be used to generate the
+ initial parameter ensemble.
+
 Noise is optional when the observation is an EKP.ObservationSeries.
+
 Additional kwargs may be passed through to the EnsembleKalmanProcess constructor.
 """
 initialize(filepath::AbstractString; kwargs...) =
@@ -243,6 +248,11 @@ initialize(
     rng_seed,
     ekp_kwargs...,
 )
+
+function initialize(eki::EKP.EnsembleKalmanProcess, prior, output_dir)
+    save_eki_state(eki, output_dir, 0, prior)
+    return eki
+end
 
 function _initialize(
     ensemble_size,

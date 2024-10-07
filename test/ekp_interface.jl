@@ -5,6 +5,11 @@ import ClimaCalibrate as CAL
 import ClimaParams as CP
 import LinearAlgebra: I
 using Test
+import Random
+
+rng_seed = 1234
+Random.seed!(rng_seed)
+rng_ekp = Random.MersenneTwister(rng_seed)
 
 FT = Float64
 output_dir = "test_init"
@@ -55,6 +60,30 @@ params = CP.get_parameter_values(td, param_names)
     @test params.one == 1.8171573383720587
     @test params.two == 5.408386812503563
 end
+
+@testset "Test passing an EKP struct into `initialize`" begin
+    LHF_target = 4.0
+    ensemble_size = 5
+    N_iterations = 5
+    Γ = 20.0 * EKP.I
+    output_dir = joinpath("test", "custom_ekp")
+    initial_ensemble =
+        EKP.construct_initial_ensemble(rng_ekp, prior, ensemble_size)
+    ensemble_kalman_process = EKP.EnsembleKalmanProcess(
+        initial_ensemble,
+        LHF_target,
+        Γ,
+        EKP.Inversion(),
+    )
+    CAL.initialize(ensemble_kalman_process, prior, output_dir)
+    override_file =
+        joinpath(output_dir, "iteration_000", "member_001", "parameters.toml")
+    td = CP.create_toml_dict(FT; override_file)
+    params = CP.get_parameter_values(td, param_names)
+    @test params.one == 4.506555276137722
+    @test params.two == 5.408386812503563
+end
+
 
 @testset "Environment variables" begin
     @test_throws ErrorException(
