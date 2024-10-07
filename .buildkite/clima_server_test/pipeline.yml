@@ -3,7 +3,7 @@ agents:
   slurm_arg: invalid
   architecture: GPU
   queue: clima
-  modules: test test
+  modules: "test test"
 
 env:
   JULIA_MPI_HAS_CUDA: "true"
@@ -14,6 +14,7 @@ env:
   SLURM_KILL_BAD_EXIT: 1
   SLURM_GRES_FLAGS: "allow-task-sharing"
   JULIA_DEPOT_PATH: "${BUILDKITE_BUILD_PATH}/${BUILDKITE_PIPELINE_SLUG}/depot/default"
+  TEST: "hello"
 
 steps:
   - label: "init :computer:"
@@ -29,7 +30,7 @@ steps:
     agents: 
       slurm_partition: broken
       slurm_arg: invalid
-      modules: test test
+      modules: "test test"
     
   - label: "Slurm job controller unit tests"
     command: julia --project=experiments/surface_fluxes_perfect_model test/slurm_unit_tests.jl
