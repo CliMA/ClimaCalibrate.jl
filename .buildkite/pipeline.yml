@@ -1,26 +1,16 @@
+agents:
+  queue: new-central
+  modules: climacommon/2024_05_27
+   
+env:
+  OPENBLAS_NUM_THREADS: 1
+  SLURM_KILL_BAD_EXIT: 1
+  JULIA_MAX_NUM_PRECOMPILE_FILES: 100
+  JULIA_DEPOT_PATH: "${BUILDKITE_BUILD_PATH}/${BUILDKITE_PIPELINE_SLUG}/depot/default"
 
-# agents:
-#   queue: test_clima
-#   modules: julia/1.10.0 cuda/julia-pref openmpi/4.1.5-mpitrampoline nsight-systems/2024.4.1
-#   test: 'hello'
-
-# env:
-#   OPENBLAS_NUM_THREADS: 1
-#   SLURM_KILL_BAD_EXIT: 1
-#   JULIA_MAX_NUM_PRECOMPILE_FILES: 100
-#   JULIA_DEPOT_PATH: "${BUILDKITE_BUILD_PATH}/${BUILDKITE_PIPELINE_SLUG}/depot/default"
-
-# steps:
-#   - label: "init :computer:"
-#     key: "init_cpu_env"
-#     command:
-#       - echo "--- Instantiate SurfaceFluxes calibration project"
-#       - julia --project=experiments/surface_fluxes_perfect_model -e 'using Pkg; Pkg.precompile()'
-
-#   # - wait
-#   # - label: "SurfaceFluxes perfect model calibration"
-#   #   command: julia --project=experiments/surface_fluxes_perfect_model test/hpc_backend_e2e.jl
-#   #   artifact_paths: output/surface_fluxes_perfect_model/*
-    
-#   # - label: "Slurm job controller unit tests"
-#   #   command: julia --project=experiments/surface_fluxes_perfect_model test/slurm_unit_tests.jl
+steps:
+  - label: "init :computer:"
+    key: "init_cpu_env"
+    command:
+      - echo "--- Instantiate SurfaceFluxes calibration project"
+      - julia -e 'sleep(600)'
