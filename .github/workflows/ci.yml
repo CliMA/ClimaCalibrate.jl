@@ -22,15 +22,13 @@ jobs:
       fail-fast: true
       matrix:
         version:
-          - '1.10'
+          - '1.11'
         os:
           - ubuntu-latest
           - macOS-latest
-        arch:
-          - x64
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/cache@v1
+      - uses: actions/cache@v2
         env:
           cache-name: cache-artifacts
         with:
@@ -43,7 +41,6 @@ jobs:
       - uses: julia-actions/setup-julia@v1
         with:
           version: ${{ matrix.version }}
-          arch: ${{ matrix.arch }}
       # CalibrateEmulateSample relies on Python modules
       # We retry this step because the first install is flaky
       - uses: nick-fields/retry@v3

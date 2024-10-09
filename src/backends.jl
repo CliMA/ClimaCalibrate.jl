@@ -44,12 +44,12 @@ Return a string that loads the correct modules for a given backend when executed
 function module_load_string(::Type{CaltechHPCBackend})
     return """export MODULEPATH="/groups/esm/modules:\$MODULEPATH"
     module purge
-    module load climacommon/2024_05_27"""
+    module load climacommon/2024_10_09"""
 end
 
 function module_load_string(::Type{ClimaGPUBackend})
     return """module purge
-    module load julia/1.10.0 cuda/julia-pref openmpi/4.1.5-mpitrampoline"""
+    module load julia/1.11.0 cuda/julia-pref openmpi/4.1.5-mpitrampoline"""
 end
 
 function module_load_string(::Type{DerechoBackend})

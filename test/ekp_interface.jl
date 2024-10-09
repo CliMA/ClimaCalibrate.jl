@@ -57,8 +57,8 @@ params = CP.get_parameter_values(td, param_names)
 
 @testset "Initialized parameter values" begin
     # This checks for random seed as well
-    @test params.one == 1.8171573383720587
-    @test params.two == 5.408386812503563
+    @test params.one == 3.416574531266089
+    @test params.two == 4.614950047803855
 end
 
 @testset "Test passing an EKP struct into `initialize`" begin
@@ -80,8 +80,8 @@ end
         joinpath(output_dir, "iteration_000", "member_001", "parameters.toml")
     td = CP.create_toml_dict(FT; override_file)
     params = CP.get_parameter_values(td, param_names)
-    @test params.one == 4.506555276137722
-    @test params.two == 5.408386812503563
+    @test params.one == 2.513110562120818
+    @test params.two == 4.614950047803855
 end
 
 
