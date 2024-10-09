@@ -28,13 +28,13 @@ prior = get_prior(joinpath(experiment_dir, "prior.toml"))
 function test_sf_calibration_output(eki, prior)
     @testset "End to end test using file config (surface fluxes perfect model)" begin
         parameter_values = get_ϕ_mean_final(prior, eki)
-        test_parameter_values = [4.8636494875560246, 5.18733785098307]
+        test_parameter_values = [4.778584250117946, 3.7295665619234697]
         @test all(
             isapprox.(parameter_values, test_parameter_values; rtol = 1e-3),
         )
 
         forward_model_output = get_g_mean_final(eki)
-        test_model_output = [0.04756260327994823]
+        test_model_output = [0.05228473730385304]
         @test all(
             isapprox.(forward_model_output, test_model_output; rtol = 1e-3),
         )

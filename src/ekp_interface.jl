@@ -270,10 +270,9 @@ function _initialize(
 
     eki_constructor =
         (args...) -> EKP.EnsembleKalmanProcess(
-            args...;
+            args...,
+            Dict(EKP.default_options_dict(EKP.Inversion())..., ekp_kwargs...);
             rng = rng_ekp,
-            failure_handler_method = EKP.SampleSuccGauss(),
-            ekp_kwargs...,
         )
 
     eki = if isnothing(noise)
