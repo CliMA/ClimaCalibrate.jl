@@ -44,7 +44,7 @@ expected_sbatch_contents = """
 #SBATCH --time=01:30:00
 export MODULEPATH="/groups/esm/modules:\$MODULEPATH"
 module purge
-module load climacommon/2024_05_27
+module load climacommon/2024_10_09
 
 export CLIMACOMMS_DEVICE="CUDA"
 export CLIMACOMMS_CONTEXT="MPI"
