@@ -1,6 +1,4 @@
 agents:
-  slurm_partition: broken
-  slurm_arg: invalid
   architecture: GPU
   queue: clima
   modules: "test test"
@@ -28,7 +26,6 @@ steps:
     command: julia -e 'sleep(3600)'
     artifact_paths: output/surface_fluxes_perfect_model/*
     agents: 
-      slurm_gpus_per_task: 1
       slurm_cpus_per_task: 4
       slurm_ntasks: 1
       slurm_mem: 30GB
