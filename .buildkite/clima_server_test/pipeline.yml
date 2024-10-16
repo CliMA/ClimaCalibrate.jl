@@ -1,7 +1,6 @@
 agents:
   architecture: GPU
   queue: clima
-  modules: "test test"
 
 env:
   JULIA_MPI_HAS_CUDA: "true"
@@ -29,7 +28,6 @@ steps:
       slurm_cpus_per_task: 4
       slurm_ntasks: 1
       slurm_mem: 30GB
-      modules: "test test"
     
   - label: "Slurm job controller unit tests"
     command: julia --project=experiments/surface_fluxes_perfect_model test/slurm_unit_tests.jl
