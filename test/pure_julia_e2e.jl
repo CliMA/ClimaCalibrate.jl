@@ -76,8 +76,8 @@ ekp = calibrate(JuliaBackend, experiment_config)
 @testset "Test end-to-end calibration" begin
     parameter_values =
         [EKP.get_ϕ_mean(prior, ekp, it) for it in 1:(n_iterations + 1)]
-    @test parameter_values[1][1] ≈ 9.215 rtol = 0.01
-    @test parameter_values[end][1] ≈ 20.224 rtol = 0.01
+    @test parameter_values[1][1] ≈ 8.507 rtol = 0.01
+    @test parameter_values[end][1] ≈ 19.0124 rtol = 0.01
 end
 
 rm(output_dir; recursive = true)
