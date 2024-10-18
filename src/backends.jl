@@ -82,8 +82,12 @@ function calibrate(
     ::Type{JuliaBackend},
     config::ExperimentConfig;
     reruns = 0,
+    model_interface = nothing,
     ekp_kwargs...,
 )
+    if !isnothing(model_interface)
+        @everywhere include(model_interface)
+    end
     (; n_iterations, output_dir, ensemble_size) = config
     eki = initialize(config; ekp_kwargs...)
     on_error(e::InterruptException) = rethrow(e)
