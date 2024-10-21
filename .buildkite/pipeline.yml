@@ -1,5 +1,5 @@
 agents:
-  queue: new-central
+  queue: test
   modules: climacommon/2024_05_27
    
 env:
