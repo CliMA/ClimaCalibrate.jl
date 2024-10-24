@@ -1,5 +1,5 @@
 agents:
-  queue: test
+  queue: derecho
   modules: climacommon/2024_05_27
    
 env:
