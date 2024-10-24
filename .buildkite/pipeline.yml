@@ -10,7 +10,6 @@ env:
 
 steps:
   - label: "init :computer:"
-    key: "init_cpu_env"
     command:
       - echo "--- Instantiate SurfaceFluxes calibration project"
       - julia -e 'sleep(600)'
