@@ -14,3 +14,7 @@ steps:
     command:
       - echo "--- Instantiate SurfaceFluxes calibration project"
       - julia -e 'sleep(600)'
+    agents:
+      pbs_q: develop
+      pbs_l_select: "1:ncpus=1"
+      pbs_l_walltime: "00:05:00"
