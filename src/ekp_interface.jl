@@ -268,10 +268,11 @@ function _initialize(
     initial_ensemble =
         EKP.construct_initial_ensemble(rng_ekp, prior, ensemble_size)
 
+    ekp_str_kwargs = Dict([string(k) => v for (k, v) in ekp_kwargs])
     eki_constructor =
         (args...) -> EKP.EnsembleKalmanProcess(
             args...,
-            Dict(EKP.default_options_dict(EKP.Inversion())..., ekp_kwargs...);
+            merge(EKP.default_options_dict(EKP.Inversion()), ekp_str_kwargs);
             rng = rng_ekp,
         )
 
