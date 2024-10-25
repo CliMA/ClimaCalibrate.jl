@@ -31,7 +31,19 @@ config = CAL.ExperimentConfig(
     output_dir,
 )
 
-eki = CAL.initialize(config)
+
+user_initial_ensemble =
+    EKP.construct_initial_ensemble(rng_ekp, prior, ensemble_size)
+user_constructed_eki = EKP.EnsembleKalmanProcess(
+    user_initial_ensemble,
+    observations,
+    noise,
+    EKP.Inversion(),
+    EKP.default_options_dict(EKP.Inversion());
+    rng = rng_ekp,
+)
+
+eki = CAL.initialize(config; rng_seed)
 eki_with_kwargs = CAL.initialize(
     config;
     scheduler = EKP.MutableScheduler(2),
@@ -44,6 +56,14 @@ eki_with_kwargs = CAL.initialize(
 
     @test eki_with_kwargs.accelerator != eki.accelerator
     @test eki_with_kwargs.accelerator isa EKP.NesterovAccelerator
+end
+
+@testset "Test that a user-constructed EKP obj is same as initialized one" begin
+    for prop in propertynames(eki)
+        prop in [:u, :accelerator, :localizer] && continue
+        @test getproperty(eki, prop) == getproperty(user_constructed_eki, prop)
+    end
+    @test eki.u[1].stored_data == user_constructed_eki.u[1].stored_data
 end
 
 override_file = joinpath(
@@ -80,10 +100,9 @@ end
         joinpath(output_dir, "iteration_000", "member_001", "parameters.toml")
     td = CP.create_toml_dict(FT; override_file)
     params = CP.get_parameter_values(td, param_names)
-    @test params.one == 2.513110562120818
-    @test params.two == 4.614950047803855
+    @test params.one == 3.1313341622997677
+    @test params.two == 5.063035177034372
 end
-
 
 @testset "Environment variables" begin
     @test_throws ErrorException(

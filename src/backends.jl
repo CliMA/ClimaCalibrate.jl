@@ -1,5 +1,7 @@
 using Distributed
 
+import EnsembleKalmanProcesses as EKP
+
 export get_backend, calibrate, model_run
 
 abstract type AbstractBackend end
@@ -82,10 +84,15 @@ function calibrate(
     ::Type{JuliaBackend},
     config::ExperimentConfig;
     reruns = 0,
+    ekp = nothing,
     ekp_kwargs...,
 )
     (; n_iterations, output_dir, ensemble_size) = config
-    eki = initialize(config; ekp_kwargs...)
+    ekp = if ekp isa EKP.EnsembleKalmanProcess
+        initialize(ekp, prior, output_dir)
+    else
+        initialize(config; ekp_kwargs...)
+    end
     on_error(e::InterruptException) = rethrow(e)
     on_error(e) =
         @error "Single ensemble member has errored. See stacktrace" exception =
@@ -101,14 +108,15 @@ function calibrate(
         terminate = update_ensemble(config, i)
         !isnothing(terminate) && break
         iter_path = path_to_iteration(output_dir, i + 1)
-        eki = JLD2.load_object(joinpath(iter_path, "eki_file.jld2"))
+        ekp = JLD2.load_object(joinpath(iter_path, "eki_file.jld2"))
     end
-    return eki
+    return ekp
 end
 
 """
     calibrate(::Type{AbstractBackend}, config::ExperimentConfig; kwargs...)
     calibrate(::Type{AbstractBackend}, experiment_dir; kwargs...)
+    calibrate(::Type{AbstractBackend}, ekp::EnsembleKalmanProcess, experiment_dir; kwargs...)
 
 Run a full calibration, scheduling the forward model runs on Caltech's HPC cluster.
 
@@ -160,13 +168,18 @@ function calibrate(
     ),
     verbose = false,
     reruns = 1,
+    ekp = nothing,
     hpc_kwargs,
     ekp_kwargs...,
 )
-    (; n_iterations, output_dir, ensemble_size) = config
+    (; n_iterations, output_dir, prior, ensemble_size) = config
     @info "Initializing calibration" n_iterations ensemble_size output_dir
 
-    eki = initialize(config; ekp_kwargs...)
+    ekp = if ekp isa EKP.EnsembleKalmanProcess
+        initialize(ekp, prior, output_dir)
+    else
+        initialize(config; ekp_kwargs...)
+    end
     module_load_str = module_load_string(b)
     for i in 0:(n_iterations - 1)
         @info "Iteration $i"
@@ -201,9 +214,9 @@ function calibrate(
         terminate = update_ensemble(config, i)
         !isnothing(terminate) && break
         iter_path = path_to_iteration(output_dir, i + 1)
-        eki = JLD2.load_object(joinpath(iter_path, "eki_file.jld2"))
+        ekp = JLD2.load_object(joinpath(iter_path, "eki_file.jld2"))
     end
-    return eki
+    return ekp
 end
 
 # Dispatch on backend type to unify `calibrate` for all HPCBackends
