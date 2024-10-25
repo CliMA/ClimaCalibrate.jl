@@ -47,7 +47,7 @@ steps:
       - "julia --project=examples artifacts/download_artifacts.jl"
 
     agents:
-      pbs_l_select: "1:ncpus=8:ngpus=1"
+      pbs_l_select: "1:ncpus=8:ngpus=1:mem=8G"
     env:
       JULIA_NUM_PRECOMPILE_TASKS: 8
       JULIA_MAX_NUM_PRECOMPILE_FILES: 50
