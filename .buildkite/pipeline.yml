@@ -1,6 +1,6 @@
 agents:
   queue: derecho
-  pbs_l_mem: 8G
+  # pbs_l_mem: 8G
   modules: climacommon/2024_05_27
 
 env:
