@@ -1,19 +1,71 @@
 agents:
   queue: derecho
+  pbs_l_mem: 8G
   modules: climacommon/2024_05_27
-   
+
 env:
+  JULIA_LOAD_PATH: "${JULIA_LOAD_PATH}:${BUILDKITE_BUILD_CHECKOUT_PATH}/.buildkite"
   OPENBLAS_NUM_THREADS: 1
-  SLURM_KILL_BAD_EXIT: 1
+  JULIA_NVTX_CALLBACKS: gc
   JULIA_MAX_NUM_PRECOMPILE_FILES: 100
   JULIA_DEPOT_PATH: "${BUILDKITE_BUILD_PATH}/${BUILDKITE_PIPELINE_SLUG}/depot/default"
+  CONFIG_PATH: "config/model_configs"
+  GPU_CONFIG_PATH: "config/gpu_configs"
+  PERF_CONFIG_PATH: "config/perf_configs"
+  MPI_CONFIG_PATH: "config/mpi_configs"
 
 steps:
   - label: "init :computer:"
+    key: "init_cpu_env"
+    concurrency: 1
+    concurrency_group: 'depot/climaatmos-ci'
     command:
-      - echo "--- Instantiate SurfaceFluxes calibration project"
-      - julia -e 'sleep(600)'
+      - "echo $$JULIA_DEPOT_PATH"
+
+      - echo "--- Instantiate project"
+      - "julia --project -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
+      - "julia --project -e 'using Pkg; Pkg.precompile()'"
+      - "julia --project -e 'using Pkg; Pkg.status()'"
+
+      - echo "--- Instantiate examples"
+      - "julia --project=examples -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
+      - "julia --project=examples -e 'using Pkg; Pkg.precompile()'"
+      - "julia --project=examples -e 'using CUDA; CUDA.precompile_runtime()'"
+      - "julia --project=examples -e 'using Pkg; Pkg.status()'"
+
+      - echo "--- Instantiate perf"
+      - "julia --project=perf -e 'using Pkg; Pkg.instantiate(;verbose=true)'"
+      - "julia --project=perf -e 'using Pkg; Pkg.precompile()'"
+      - "julia --project=perf -e 'using Pkg; Pkg.status()'"
+
+      - echo "--- Instantiate calibration/test"
+      - "julia --project=calibration/test -e 'using Pkg; Pkg.develop(;path=\".\"); Pkg.instantiate(;verbose=true)'"
+      - "julia --project=calibration/test -e 'using Pkg; Pkg.precompile()'"
+      - "julia --project=calibration/test -e 'using Pkg; Pkg.status()'"
+
+      - echo "--- Download artifacts"
+      - "julia --project=examples artifacts/download_artifacts.jl"
+
     agents:
-      pbs_q: develop
-      pbs_l_select: "1:ncpus=1"
-      pbs_l_walltime: "00:05:00"
+      pbs_l_select: "1:ncpus=8:ngpus=1"
+    env:
+      JULIA_NUM_PRECOMPILE_TASKS: 8
+      JULIA_MAX_NUM_PRECOMPILE_FILES: 50
+
+  - wait
+
+  - group: "Reproducibility tests"
+    steps:
+
+      - label: ":computer: Ensure mse tables are reset when necessary"
+        command: "julia --color=yes --project=examples reproducibility_tests/test_reset.jl"
+
+  - group: "Radiation"
+    steps:
+
+      - label: ":computer: single column radiative equilibrium gray"
+        command: >
+          julia --color=yes --project=examples examples/hybrid/driver.jl
+          --config_file $CONFIG_PATH/single_column_radiative_equilibrium_gray.yml
+          --job_id single_column_radiative_equilibrium_gray
+        artifact_paths: "single_column_radiative_equilibrium_gray/output_active/*"
