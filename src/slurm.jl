@@ -141,15 +141,36 @@ Submit a job to the Slurm scheduler using sbatch, removing unwanted environment 
 
 Unset variables: "SLURM_MEM_PER_CPU", "SLURM_MEM_PER_GPU", "SLURM_MEM_PER_NODE"
 """
-function submit_slurm_job(sbatch_filepath; env = deepcopy(ENV))
-    # Ensure that we don't inherit unwanted environment variables
-    unset_env_vars =
-        ("SLURM_MEM_PER_CPU", "SLURM_MEM_PER_GPU", "SLURM_MEM_PER_NODE")
-    for k in unset_env_vars
-        haskey(env, k) && delete!(env, k)
+function submit_slurm_job(sbatch_filepath; env=deepcopy(ENV))
+    # List of SLURM environment variables to unset
+    unset_env_vars = [
+        "SLURM_MEM_PER_CPU",
+        "SLURM_MEM_PER_GPU",
+        "SLURM_MEM_PER_NODE",
+        "SLURM_CPUS_PER_TASK",
+        "SLURM_NTASKS",
+        "SLURM_JOB_NAME",
+        "SLURM_SUBMIT_DIR",
+        "SLURM_JOB_ID"
+    ]
+    # Create a new environment without the SLURM variables
+    for var in unset_env_vars
+        delete!(clean_env, var)
     end
-    jobid = readchomp(setenv(`sbatch --parsable $sbatch_filepath`, env))
-    return parse(Int, jobid)
+    
+    try
+        cmd = `sbatch --parsable $sbatch_filepath`
+        output = readchomp(setenv(cmd, clean_env))
+        # Parse job ID, handling potential format issues
+        jobid = match(r"^\d+", output)
+        if jobid === nothing
+            error("Failed to parse job ID from output: $output")
+        end
+        
+        return parse(Int, jobid.match)
+    catch e
+        error("Failed to submit SLURM job: $e")
+    end
 end
 
 """
@@ -205,7 +226,7 @@ function generate_sbatch_script(
     model_interface = "$model_interface"; include(model_interface)
 
     experiment_dir = "$experiment_dir"
-    CAL.run_forward_model(CAL.set_up_forward_model(member, iteration, experiment_dir))'
+    CAL.forward_model(iteration, member)'
     exit 0
     """
     return sbatch_contents

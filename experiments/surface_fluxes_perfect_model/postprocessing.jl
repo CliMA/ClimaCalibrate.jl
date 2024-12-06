@@ -12,17 +12,17 @@ using Statistics
 using ClimaCalibrate
 
 experiment_dir = dirname(Base.active_project())
-experiment_config = ClimaCalibrate.ExperimentConfig(experiment_dir)
-output_dir = experiment_config.output_dir
+experiment_config = ExperimentConfig(experiment_dir)
 N_iter = experiment_config.n_iterations
 N_mem = experiment_config.ensemble_size
+output_dir = experiment_config.output_dir
 
 function convergence_plot(
     eki,
     prior,
     theta_star_vec,
     param_names,
-    output_dir = experiment_config.output_dir,
+    output_dir = output_dir,
 )
 
     # per parameter
@@ -97,12 +97,12 @@ function convergence_plot(
         Makie.hlines!(ax, [theta_star], color = :red, linestyle = :dash)
 
         Makie.save(joinpath(output_dir, "convergence_$param_name.png"), f)
+        println(joinpath(output_dir, "convergence_$param_name.png"))
     end
 end
 
 
 pkg_dir = pkgdir(ClimaCalibrate)
-model_config = YAML.load_file(joinpath(experiment_dir, "model_config.yml"))
 
 eki_path = joinpath(
     ClimaCalibrate.path_to_iteration(output_dir, N_iter),
@@ -110,7 +110,6 @@ eki_path = joinpath(
 );
 eki = JLD2.load_object(eki_path);
 EKP.get_u(eki)
-prior = experiment_config.prior
 
 theta_star_vec =
     (; coefficient_a_m_businger = 4.7, coefficient_a_h_businger = 4.7)
@@ -130,11 +129,21 @@ include(joinpath(experiment_dir, "model_interface.jl"))
 f = Makie.Figure()
 ax = Makie.Axis(f[1, 1], xlabel = "Iteration", ylabel = "Model Ustar")
 ustar_obs = JLD2.load_object(
-    joinpath(pkg_dir, "$experiment_dir/data/synthetic_ustar_array_noisy.jld2"),
+    joinpath(experiment_dir, "data", "synthetic_ustar_array_noisy.jld2"),
 )
-x_inputs = load_profiles(model_config["x_data_file"])
+
+x_data_file = joinpath(
+    pkgdir_CC,
+    "experiments",
+    "surface_fluxes_perfect_model",
+    "data",
+    "synthetic_profile_data.jld2",
+)
+x_inputs = load_profiles(x_data_file)
 
 ustar_mod = 0
+model_config = Dict()
+model_config["output_dir"] = output_dir
 for iter in 0:N_iter
     for i in 1:N_mem
         model_config["toml"] = [
@@ -173,3 +182,4 @@ Makie.lines!(
 )
 
 Makie.save(joinpath(output_dir, "scatter_iter.png"), f)
+println(joinpath(output_dir, "scatter_iter.png"))

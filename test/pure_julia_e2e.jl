@@ -6,11 +6,11 @@ using EnsembleKalmanProcesses.TOMLInterface
 import ClimaParams as CP
 
 import ClimaCalibrate:
-    run_forward_model,
-    set_up_forward_model,
+    forward_model,
     JuliaBackend,
     ExperimentConfig,
     calibrate,
+    project_dir,
     observation_map
 
 import JLD2
@@ -22,7 +22,7 @@ n_iterations = 1
 ensemble_size = 20
 observations = [20.0]
 noise = [0.01;;]
-output_dir = joinpath("test", "e2e_test_output")
+output_dir = mktempdir()
 
 experiment_config = ExperimentConfig(
     n_iterations,
@@ -36,25 +36,12 @@ experiment_config = ExperimentConfig(
 # Model interface
 # This "model" just samples parameters and returns them, we are checking that the 
 # results are reproducible.
-function set_up_forward_model(
-    member,
-    iteration,
-    experiment_config::ExperimentConfig,
-)
-    model_config = Dict()
-    output_dir = (experiment_config.output_dir)
+function forward_model(iteration, member)
     member_path = path_to_ensemble_member(output_dir, iteration, member)
-    model_config["output_dir"] = member_path
     parameter_path = joinpath(member_path, "parameters.toml")
-    model_config["toml"] = parameter_path
-    return model_config
-end
-
-function run_forward_model(config)
-    toml_dict = CP.create_toml_dict(Float64; override_file = config["toml"])
+    toml_dict = CP.create_toml_dict(Float64; override_file = parameter_path)
     (; test_param) = CP.get_parameter_values(toml_dict, "test_param")
-    output = test_param
-    JLD2.save_object(joinpath(config["output_dir"], output_file), output)
+    JLD2.save_object(joinpath(member_path, output_file), test_param)
 end
 
 function observation_map(iteration)
@@ -79,5 +66,3 @@ ekp = calibrate(JuliaBackend, experiment_config)
     @test parameter_values[1][1] ≈ 8.507 rtol = 0.01
     @test parameter_values[end][1] ≈ 11.852161842745355 rtol = 0.01
 end
-
-rm(output_dir; recursive = true)

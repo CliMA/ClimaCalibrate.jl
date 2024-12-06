@@ -55,12 +55,13 @@ iteration = 1; member = 1
 model_interface = "model_interface.jl"; include(model_interface)
 
 experiment_dir = "exp/dir"
-CAL.run_forward_model(CAL.set_up_forward_model(member, iteration, experiment_dir))'
+CAL.forward_model(iteration, member)'
 exit 0
 """
 
 for (generated_str, test_str) in
     zip(split(sbatch_file, "\n"), split(expected_sbatch_contents, "\n"))
+    # Test one line at a time to see discrepancies
     @test generated_str == test_str
 end
 

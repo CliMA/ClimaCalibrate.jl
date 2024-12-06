@@ -67,7 +67,7 @@ end
 original_julia_file = """\
 import ClimaCalibrate as CAL
 include("/glade/u/home/nefrathe/clima/ClimaCalibrate.jl/model_interface.jl")
-CAL.run_forward_model(CAL.set_up_forward_model(1, 1, "exp/dir"))
+CAL.forward_model(1, 1)
 """
 @test julia_file == original_julia_file
 

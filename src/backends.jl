@@ -100,7 +100,7 @@ function calibrate(
     for i in 0:(n_iterations - 1)
         @info "Running iteration $i"
         pmap(1:ensemble_size; retry_delays = reruns, on_error) do m
-            run_forward_model(set_up_forward_model(m, i, config))
+            forward_model(i, m)
             @info "Completed member $m"
         end
         G_ensemble = observation_map(i)
