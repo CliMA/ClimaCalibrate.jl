@@ -6,5 +6,6 @@ include("slurm.jl")
 include("pbs.jl")
 include("backends.jl")
 include("emulate_sample.jl")
+include("slurm_workers.jl")
 
 end # module ClimaCalibrate

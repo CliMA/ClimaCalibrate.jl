@@ -4,6 +4,7 @@ authors = ["Climate Modeling Alliance"]
 version = "0.0.5"
 
 [deps]
+ClusterManagers = "34f1f09b-3a8b-5176-ab39-66d58a4d544e"
 Distributed = "8ba89e20-285c-5b6f-9357-94700520ee1b"
 Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
 EnsembleKalmanProcesses = "aa8a2aa5-91d8-4396-bcef-d4f2ec43552d"
@@ -20,6 +21,7 @@ CESExt = "CalibrateEmulateSample"
 
 [compat]
 CalibrateEmulateSample = "0.5"
+ClusterManagers = "0.4.6"
 Distributed = "1"
 Distributions = "0.25"
 EnsembleKalmanProcesses = "1, 2"

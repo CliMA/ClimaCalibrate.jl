@@ -267,7 +267,7 @@ function _initialize(
     rng_ekp = Random.MersenneTwister(rng_seed)
     initial_ensemble =
         EKP.construct_initial_ensemble(rng_ekp, prior, ensemble_size)
-
+    @show typeof(initial_ensemble)
     ekp_str_kwargs = Dict([string(k) => v for (k, v) in ekp_kwargs])
     eki_constructor =
         (args...) -> EKP.EnsembleKalmanProcess(
@@ -275,7 +275,6 @@ function _initialize(
             merge(EKP.default_options_dict(EKP.Inversion()), ekp_str_kwargs);
             rng = rng_ekp,
         )
-
     eki = if isnothing(noise)
         eki_constructor(initial_ensemble, observations, EKP.Inversion())
     else
