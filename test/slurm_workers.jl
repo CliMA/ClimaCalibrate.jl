@@ -13,18 +13,9 @@ import ClimaCalibrate:
     kwargs,
     ExperimentConfig,
     DerechoBackend
+using Distributed
 using Test
 import EnsembleKalmanProcesses: get_ϕ_mean_final, get_g_mean_final
-
-experiment_dir = dirname(Base.active_project())
-model_interface = joinpath(experiment_dir, "model_interface.jl")
-
-# Generate observational data and include observational map 
-include(joinpath(experiment_dir, "generate_data.jl"))
-include(joinpath(experiment_dir, "observation_map.jl"))
-include(model_interface)
-
-prior = get_prior(joinpath(experiment_dir, "prior.toml"))
 
 function test_sf_calibration_output(eki, prior)
     @testset "End to end test using file config (surface fluxes perfect model)" begin
@@ -42,12 +33,41 @@ function test_sf_calibration_output(eki, prior)
     end
 end
 
-@everywhere 
-eki = worker_calibrate(config; model_interface, hpc_kwargs, verbose = true)
-test_sf_calibration_output(eki, prior)
+addprocs(ClimaCalibrate.SlurmManager(10); exeflags="--project=$(dirname(Base.active_project()))")
 
-# Pure Julia calibration, this should run anywhere
-eki = calibrate(JuliaBackend, experiment_dir)
+@everywhere begin
+    experiment_dir = dirname(Base.active_project())
+    model_interface = joinpath(experiment_dir, "model_interface.jl")
+
+    # Generate observational data and include observational map 
+    include(joinpath(experiment_dir, "generate_data.jl"))
+    include(joinpath(experiment_dir, "observation_map.jl"))
+    include(model_interface)
+
+    prior = get_prior(joinpath(experiment_dir, "prior.toml"))
+
+end
+eki = worker_calibrate(config; model_interface, hpc_kwargs, verbose = true)
+
 test_sf_calibration_output(eki, prior)
 
 include(joinpath(experiment_dir, "postprocessing.jl"))
+
+# Slurm Worker Unit Tests
+@testset "Slurm Worker Unit Tests" begin
+	out_file = "my_slurm_job.out"
+    p = addprocs(ClimaCalibrate.SlurmManager(1); o=out_file)
+    @test nprocs() == 2
+    @test workers() == p
+    @test fetch(@spawnat :any myid()) == p[1]
+    @test remotecall_fetch(+,p[1],1,1) == 2
+    rmprocs(p)
+    @test nprocs() == 1
+    @test workers() == [1]
+
+	# Check output file creation
+	@test isfile(out_file)
+	rm(out_file)
+
+    @test_throws TaskFailedException p = addprocs(ClimaCalibrate.SlurmManager(1); o=out_file, output=out_file)
+end

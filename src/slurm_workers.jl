@@ -95,56 +95,50 @@ function Distributed.launch(sm::SlurmManager,params::Dict, instances_arr::Array,
     exeflags = params[:exeflags]
 
     stdkeys = keys(Distributed.default_addprocs_params())
-
     slurm_params = filter(x->(!(x[1] in stdkeys) && x[1] != :job_file_loc), params)
-
     srunargs = []
 
-    for k in keys(slurm_params)
+    for (k, v) in slurm_params
         if length(string(k)) == 1
             push!(srunargs, "-$k")
-            val = p[k]
-            if length(val) > 0
-                push!(srunargs, "$(p[k])")
+            if length(v) > 0
+                push!(srunargs, v)
             end
         else
             k2 = replace(string(k), "_"=>"-")
-            val = p[k]
-            if length(val) > 0
-                push!(srunargs, "--$(k2)=$(p[k])")
+            if length(v) > 0
+                push!(srunargs, "--$k2=$v)")
             else
-                push!(srunargs, "--$(k2)")
+                push!(srunargs, "--$k2")
             end
         end
     end
-    # Get job file location from parameter dictionary.
+
+    # Get job file location from parameter dictionary
     job_file_loc = joinpath(exehome, get(params, :job_file_loc, "."))
 
-    # Make directory if not already made.
+    # Make directory if not already made
     if !isdir(job_file_loc)
         mkdir(job_file_loc)
     end
-
     # Check for given output file name
     jobname = "julia-$(getpid())"
+
     default_template = ".$jobname-$(trunc(Int, Base.time() * 10))"
-    default_output(x) = "$default_template-$x.out"
+    default_output(x) = joinpath(job_file_loc, "$default_template-$x.out")
 
     # Set output name
-    has_output_name = ("-o" in srunargs) | ("--output" in srunargs)
-    job_output_file = if has_output_name
+    has_output_name = any(arg -> occursin("-o", arg) || occursin("--output", arg), srunargs)
+    if has_output_name
         # if has_output_name, ensure there is only one output arg
-        loc = findfirst(x-> x == "-o" || x == "--output", srunargs)
-        job_output = srunargs[loc+1]
-        # Remove output argument to reappend
-        filter!(x -> x != "-o" && x != "--output", srunargs)
-        filter!(x -> !occursin(r"^-[oe]", x), srunargs)
-        job_output
+        locs = findall(x -> startswith(x, "-o") || startswith(x, "--output"), srunargs)
+        length(locs) > 1 && error("Slurm Error: Multiple output files specified: $srunargs")
+        job_output_file = srunargs[locs[1]+1]
     else
         # Slurm interpolates %4t to the task ID padded with up to four zeros
-        default_output("%4t")
+        push!(srunargs, "-o", default_output("%4t"))
     end
-    push!(srunargs, "-o", job_output_file)
+    
     ntasks = sm.ntasks
     srun_cmd = `srun -J $jobname -n $ntasks -D $exehome $(srunargs) $exename $exeflags $(worker_arg())`
 
@@ -163,7 +157,7 @@ function Distributed.launch(sm::SlurmManager,params::Dict, instances_arr::Array,
         slurm_spec_match::Union{RegexMatch,Nothing} = nothing
         worker_errors = String[]
         if !has_output_name
-            job_output_file = default_output("0000")
+            job_output_file = default_output(lpad(i, 4, "0"))
         end
         for retry_delay in push!(collect(retry_delays), 0)
             t_waited = round(Int, time() - t_start)

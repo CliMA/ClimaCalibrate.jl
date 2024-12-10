@@ -1,7 +1,8 @@
 import EnsembleKalmanProcesses as EKP
 using ClimaCalibrate
-import ClimaCalibrate: set_up_forward_model, run_forward_model, ExperimentConfig
-import YAML
+import ClimaCalibrate: forward_model
+
+pkgdir_CC = pkgdir(ClimaCalibrate)
 
 """
     SurfaceFluxModel
@@ -29,65 +30,24 @@ We need to follow the following steps for the calibration:
 """
 
 experiment_dir = joinpath(
-    pkgdir(ClimaCalibrate),
+    pkgdir_CC,
     "experiments",
     "surface_fluxes_perfect_model",
 )
 include(joinpath(experiment_dir, "sf_model.jl"))
 include(joinpath(experiment_dir, "observation_map.jl"))
 
-function set_up_forward_model(member, iteration, experiment_dir::AbstractString)
-    return set_up_forward_model(
-        member,
-        iteration,
-        ExperimentConfig(experiment_dir),
-    )
-end
-
-"""
-    set_up_forward_model(member, iteration, experiment_dir::AbstractString)
-    set_up_forward_model(member, iteration, experiment_config::ExperimentConfig)
-
-Returns an config dictionary object for the given member and iteration.
-Given an experiment dir, it will load the ExperimentConfig
-This assumes that the config dictionary has the `output_dir` key.
-"""
-function set_up_forward_model(
-    member,
-    iteration,
-    experiment_config::ExperimentConfig,
-)
+function forward_model(iteration, member)
     # Specify member path for output_dir
-    model_config = YAML.load_file(
-        joinpath(
-            "experiments",
-            "surface_fluxes_perfect_model",
-            "model_config.yml",
-        ),
-    )
-    output_dir = (experiment_config.output_dir)
+    model_config = Dict()
+    output_dir = joinpath(pkgdir_CC, "output", "surface_fluxes_perfect_model")
     # Set TOML to use EKP parameter(s)
     member_path =
         EKP.TOMLInterface.path_to_ensemble_member(output_dir, iteration, member)
     model_config["output_dir"] = member_path
-    parameter_path = joinpath(member_path, "parameters.toml")
-    if haskey(model_config, "toml")
-        push!(model_config["toml"], parameter_path)
-    else
-        model_config["toml"] = [parameter_path]
-    end
-
-    return model_config
-end
-
-"""
-    run_forward_model(config::AbstractDict)
-
-Runs the model with the given an AbstractDict object.
-"""
-
-function run_forward_model(config::AbstractDict)
-    x_inputs = load_profiles(config["x_data_file"])
+    model_config["toml"] = [joinpath(member_path, "parameters.toml")]
+    x_data_file = joinpath(pkgdir_CC, "experiments", "surface_fluxes_perfect_model", "data", "synthetic_profile_data.jld2")
+    x_inputs = load_profiles(x_data_file)
     FT = typeof(x_inputs.profiles_int[1].T)
-    obtain_ustar(FT, x_inputs, config)
+    obtain_ustar(FT, x_inputs, model_config)
 end
