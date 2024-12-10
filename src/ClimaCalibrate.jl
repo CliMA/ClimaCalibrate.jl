@@ -1,5 +1,7 @@
 module ClimaCalibrate
 
+project_dir() = dirname(Base.active_project())
+
 include("ekp_interface.jl")
 include("model_interface.jl")
 include("slurm.jl")

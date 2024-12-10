@@ -2,7 +2,7 @@ using Distributed
 import EnsembleKalmanProcesses as EKP
 export worker_calibrate, add_slurm_workers
 
-function run_iteration(iter, ensemble_size, output_dir; worker_pool = default_worker_pool(), failure_rate = 0.5)
+function run_iteration(iter, ensemble_size, output_dir; worker_pool, failure_rate)
     # Create a channel to collect results
     results = Channel{Any}(ensemble_size)
     nfailures = 0
@@ -12,9 +12,9 @@ function run_iteration(iter, ensemble_size, output_dir; worker_pool = default_wo
                 worker = take!(worker_pool)
                 @info "Running particle $m on worker $worker"
                 try
-                    remotecall( forward_model, worker, m, iter)
+                    remotecall_wait(forward_model, worker, iter, m)
                 catch e
-                    @error "Error running member $m" exception = e
+                    @warn "Error running member $m" exception = e
                     nfailures += 1
                 finally
                     # Always return worker to pool
@@ -45,7 +45,7 @@ function worker_calibrate(ensemble_size, n_iterations, observations, noise, prio
         ekp_kwargs...,
     )
     for iter in 0:(n_iterations)
-        (; time) = @timed run_iteration(iter, config; worker_pool, failure_rate)
+        (; time) = @timed run_iteration(iter, ensemble_size, output_dir; worker_pool, failure_rate)
         @info "Iteration $iter time: $time"
         # Process results
         G_ensemble = observation_map(iter)
@@ -53,7 +53,7 @@ function worker_calibrate(ensemble_size, n_iterations, observations, noise, prio
         update_ensemble(output_dir, iter, prior)
         iter_path = path_to_iteration(output_dir, iter)
     end
-    return JLD2.load_object(joinpath(path_to_iteration(output_dir, n_iterations)), "eki_file.jld2")
+    return JLD2.load_object(joinpath(path_to_iteration(output_dir, n_iterations), "eki_file.jld2"))
 end
 
 function worker_calibrate(ekp::EKP.EnsembleKalmanProcess, ensemble_size,n_iterations, observations, noise, prior, output_dir; failure_rate = 0.5, worker_pool = default_worker_pool(), ekp_kwargs...)
@@ -86,6 +86,8 @@ function Distributed.manage(manager::SlurmManager, id::Integer, config::WorkerCo
 # This function needs to exist, but so far we don't do anything
 end
 
+# Main SlurmManager function, mostly copied from the unmaintained ClusterManagers.jl
+# Original code: https://github.com/JuliaParallel/ClusterManagers.jl
 function Distributed.launch(sm::SlurmManager,params::Dict, instances_arr::Array,
     c::Condition)
     default_params = Distributed.default_addprocs_params()
@@ -93,6 +95,8 @@ function Distributed.launch(sm::SlurmManager,params::Dict, instances_arr::Array,
     exehome = params[:dir]
     exename = params[:exename]
     exeflags = params[:exeflags]
+    
+    exeflags = exeflags == `` ? "--project=$(project_dir())" : exeflags
 
     stdkeys = keys(Distributed.default_addprocs_params())
     slurm_params = filter(x->(!(x[1] in stdkeys) && x[1] != :job_file_loc), params)
@@ -144,7 +148,8 @@ function Distributed.launch(sm::SlurmManager,params::Dict, instances_arr::Array,
 
     @info "Starting SLURM job $jobname: $srun_cmd"
     srun_proc = open(srun_cmd)
-
+    # This Regex will match the worker's socket and IP address
+    # Example: julia_worker:9015#169.254.3.1
     slurm_spec_regex = r"([\w]+):([\d]+)#(\d{1,3}.\d{1,3}.\d{1,3}.\d{1,3})"
     could_not_connect_regex = r"could not connect"
     exiting_regex = r"exiting."
@@ -154,7 +159,7 @@ function Distributed.launch(sm::SlurmManager,params::Dict, instances_arr::Array,
     t_waited = round(Int, time() - t_start)
     retry_delays = ExponentialBackOff(10, 1.0, 512.0, 2.0, 0.1)
     for i in 0:ntasks - 1
-        slurm_spec_match::Union{RegexMatch,Nothing} = nothing
+        slurm_spec_match = nothing
         worker_errors = String[]
         if !has_output_name
             job_output_file = default_output(lpad(i, 4, "0"))
@@ -163,16 +168,16 @@ function Distributed.launch(sm::SlurmManager,params::Dict, instances_arr::Array,
             t_waited = round(Int, time() - t_start)
 
             # Wait for output log to be created and populated, then parse
-
             if isfile(job_output_file)
                 if filesize(job_output_file) > 0
                     open(job_output_file) do f
-                        # Due to error and warning messages, the specification
-                        # may not appear on the file's first line
+                        # Due to error and warning messages, we need to check
+                        # for a regex match on each line
                         for line in eachline(f)
                             re_match = match(slurm_spec_regex, line)
                             if !isnothing(re_match)
                                 slurm_spec_match = re_match
+                                break # We have found the match
                             end
                             for expr in [could_not_connect_regex, exiting_regex]
                                 if !isnothing(match(expr, line))
@@ -197,9 +202,9 @@ function Distributed.launch(sm::SlurmManager,params::Dict, instances_arr::Array,
         end
 
         if !isempty(worker_errors)
-            throw(SlurmException("Worker $i failed after $t_waited s: $(join(worker_errors, " "))"))
+            throw(ErrorException("Worker $i failed after $t_waited s: $(join(worker_errors, " "))"))
         elseif isnothing(slurm_spec_match)
-            throw(SlurmException("Timeout after $t_waited s while waiting for worker $i to get ready."))
+            throw(ErrorException("Timeout after $t_waited s while waiting for worker $i to get ready."))
         end
 
         config = WorkerConfig()

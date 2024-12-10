@@ -1,18 +1,7 @@
 # Tests for SurfaceFluxes example calibration on HPC, used in buildkite testing
 # To run, open the REPL: julia --project=experiments/surface_fluxes_perfect_model test/hpc_backend_e2e.jl
 
-using Pkg
-Pkg.instantiate(; verbose = true)
-
-import ClimaCalibrate:
-    get_backend,
-    HPCBackend,
-    JuliaBackend,
-    calibrate,
-    get_prior,
-    kwargs,
-    ExperimentConfig,
-    DerechoBackend
+using ClimaCalibrate
 using Distributed
 using Test
 import EnsembleKalmanProcesses: get_ϕ_mean_final, get_g_mean_final
@@ -33,21 +22,30 @@ function test_sf_calibration_output(eki, prior)
     end
 end
 
+experiment_dir = dirname(Base.active_project())
 addprocs(ClimaCalibrate.SlurmManager(10); exeflags="--project=$(dirname(Base.active_project()))")
+include(joinpath(experiment_dir, "generate_data.jl"))
 
 @everywhere begin
+    using ClimaCalibrate
     experiment_dir = dirname(Base.active_project())
-    model_interface = joinpath(experiment_dir, "model_interface.jl")
-
-    # Generate observational data and include observational map 
-    include(joinpath(experiment_dir, "generate_data.jl"))
-    include(joinpath(experiment_dir, "observation_map.jl"))
-    include(model_interface)
-
+    output_dir = joinpath("output", "surface_fluxes_perfect_model")
     prior = get_prior(joinpath(experiment_dir, "prior.toml"))
-
+    ensemble_size = 10
+    n_iterations = 6
 end
-eki = worker_calibrate(config; model_interface, hpc_kwargs, verbose = true)
+
+@everywhere begin
+    include(joinpath(experiment_dir, "observation_map.jl"))
+    ustar =
+    JLD2.load_object(joinpath(experiment_dir, "data", "synthetic_ustar_array_noisy.jld2"))
+    (; observation, variance) = process_member_data(ustar; output_variance = true)
+
+    model_interface = joinpath(experiment_dir, "model_interface.jl")
+    include(model_interface)
+end
+
+eki = worker_calibrate(ensemble_size, n_iterations, observation, variance, prior, output_dir)
 
 test_sf_calibration_output(eki, prior)
 

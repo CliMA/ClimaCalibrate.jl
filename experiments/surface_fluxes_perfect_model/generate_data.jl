@@ -8,8 +8,7 @@ import SurfaceFluxes.Parameters: SurfaceFluxesParameters
 using ClimaCalibrate
 
 pkg_dir = pkgdir(ClimaCalibrate)
-experiment_path =
-    joinpath(pkg_dir, "experiments", "surface_fluxes_perfect_model")
+experiment_path = dirname(Base.active_project())
 data_path = joinpath(experiment_path, "data")
 include(joinpath(experiment_path, "model_interface.jl"))
 
@@ -125,5 +124,4 @@ JLD2.save_object(
 ustar =
     JLD2.load_object(joinpath(data_path, "synthetic_ustar_array_noisy.jld2"))
 (; observation, variance) = process_member_data(ustar; output_variance = true)
-JLD2.save_object(joinpath(data_path, "obs_mean.jld2"), observation)
-JLD2.save_object(joinpath(data_path, "obs_noise_cov.jld2"), variance)
+nothing
