@@ -62,7 +62,7 @@ function worker_calibrate(ekp::EKP.EnsembleKalmanProcess, ensemble_size,n_iterat
         ;
         rng_seed = 1234,
     )
-    for iter in 0:(n_iterations)
+    for iter in 0:n_iterations
         (; time) = @timed run_iteration(iter, ensemble_size, output_dir; worker_pool, failure_rate)
         @info "Iteration $iter time: $time"
         # Process results
@@ -79,6 +79,10 @@ worker_arg() = `--worker=$(worker_cookie())`
 
 struct SlurmManager <: ClusterManager
     ntasks::Integer
+
+    function SlurmManager(ntasks::Integer = parse(Int, get(ENV, "SLURM_NTASKS", "1")))
+        new(ntasks)
+    end
 end
 
 function Distributed.manage(manager::SlurmManager, id::Integer, config::WorkerConfig,
@@ -88,6 +92,7 @@ end
 
 # Main SlurmManager function, mostly copied from the unmaintained ClusterManagers.jl
 # Original code: https://github.com/JuliaParallel/ClusterManagers.jl
+# TODO: Log per member
 function Distributed.launch(sm::SlurmManager,params::Dict, instances_arr::Array,
     c::Condition)
     default_params = Distributed.default_addprocs_params()
