@@ -82,7 +82,7 @@ end
 """
     path_to_ensemble_member(output_dir, iteration, member)
 
-Constructs the path to an ensemble member's directory for a given iteration and member number.
+Return the path to an ensemble member's directory for a given iteration and member number.
 """
 path_to_ensemble_member(output_dir, iteration, member) =
     EKP.TOMLInterface.path_to_ensemble_member(output_dir, iteration, member)
@@ -90,7 +90,7 @@ path_to_ensemble_member(output_dir, iteration, member) =
 """
     path_to_model_log(output_dir, iteration, member)
 
-Constructs the path to an ensemble member's forward model log for a given iteration and member number.
+Return the path to an ensemble member's forward model log for a given iteration and member number.
 """
 path_to_model_log(output_dir, iteration, member) = joinpath(
     path_to_ensemble_member(output_dir, iteration, member),
@@ -100,7 +100,7 @@ path_to_model_log(output_dir, iteration, member) = joinpath(
 """
     path_to_iteration(output_dir, iteration)
 
-Creates the path to the directory for a specific iteration within the specified output directory.
+Return the path to the directory for a given iteration within the specified output directory.
 """
 path_to_iteration(output_dir, iteration) =
     joinpath(output_dir, join(["iteration", lpad(iteration, 3, "0")], "_"))
@@ -267,7 +267,6 @@ function _initialize(
     rng_ekp = Random.MersenneTwister(rng_seed)
     initial_ensemble =
         EKP.construct_initial_ensemble(rng_ekp, prior, ensemble_size)
-
     ekp_str_kwargs = Dict([string(k) => v for (k, v) in ekp_kwargs])
     eki_constructor =
         (args...) -> EKP.EnsembleKalmanProcess(
@@ -275,7 +274,6 @@ function _initialize(
             merge(EKP.default_options_dict(EKP.Inversion()), ekp_str_kwargs);
             rng = rng_ekp,
         )
-
     eki = if isnothing(noise)
         eki_constructor(initial_ensemble, observations, EKP.Inversion())
     else
