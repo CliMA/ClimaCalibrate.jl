@@ -1,3 +1,4 @@
+
 export kwargs, slurm_model_run, wait_for_jobs
 
 # Initial code is common to PBS and Slurm schedulers
@@ -104,8 +105,10 @@ end
 job_running(status::Symbol) = status == :RUNNING
 job_success(status::Symbol) = status == :COMPLETED
 job_failed(status::Symbol) = status == :FAILED
+job_pending(status::Symbol) = status == :PENDING
 job_completed(status::Symbol) = job_failed(status) || job_success(status)
 
+job_pending(jobid) = job_pending(job_status(jobid))
 job_running(jobid) = job_running(job_status(jobid))
 job_success(jobid) = job_success(job_status(jobid))
 job_failed(jobid) = job_failed(job_status(jobid))
@@ -281,22 +284,44 @@ wait_for_jobs(
 )
 
 """
-    job_status(jobid)
+    job_status(job_id)
 
-Parse the slurm jobid's state and return one of three status symbols: :COMPLETED, :FAILED, or :RUNNING.
+Parse the slurm job_id's state and return one of three status symbols: :PENDING, :RUNNING, or :COMPLETED.
 """
-function job_status(jobid::SlurmJobID)
-    failure_statuses = ("FAILED", "CANCELLED+", "CANCELLED")
-    output = readchomp(`sacct -j $jobid --format=State --noheader`)
-    # Jobs usually have multiple statuses
-    statuses = strip.(split(output, "\n"))
-    if all(s -> s == "COMPLETED", statuses)
-        return :COMPLETED
-    elseif any(s -> s in failure_statuses, statuses)
-        return :FAILED
-    else
-        return :RUNNING
-    end
+function job_status(job_id::SlurmJobID)
+    cmd = `squeue -j $job_id --format=%T --noheader`
+    # Obtain stderr, difficult to do otherwise
+    stdout = Pipe()
+    stderr = Pipe()
+    process = run(pipeline(ignorestatus(cmd), stdout = stdout, stderr = stderr))
+    close(stdout.in)
+    close(stderr.in)
+    status = String(read(stdout))
+    stderr = String(read(stderr))
+    exit_code = process.exitcode
+
+    # https://slurm.schedmd.com/job_state_codes.html
+    pending_statuses = [
+        "PENDING",
+        "CONFIGURING",
+        "REQUEUE_FED",
+        "REQUEUE_HOLD",
+        "REQUEUED",
+        "RESIZING",
+    ]
+    running_statuses =
+        ["RUNNING", "COMPLETING", "STAGED", "SUSPENDED", "STOPPED", "RESIZING"]
+    invalid_job_err = "slurm_load_jobs error: Invalid job id specified"
+    @debug job_id status exit_code stderr
+
+    status == "" && exit_code == 0 && stderr == "" && return :COMPLETED
+    exit_code != 0 && contains(stderr, invalid_job_err) && return :COMPLETED
+
+    any(str -> contains(status, str), pending_statuses) && return :PENDING
+    any(str -> contains(status, str), running_statuses) && return :RUNNING
+
+    @warn "Job ID $job_id has unknown status `$status`. Marking as completed"
+    return :COMPLETED
 end
 
 """
