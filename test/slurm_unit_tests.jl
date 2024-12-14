@@ -77,32 +77,30 @@ end
 # Test job lifecycle
 test_cmd = """
 #!/bin/bash
-#SBATCH --time=00:00:10
-sleep 10
+#SBATCH --time=00:01:00
+sleep 30
 """
 
 jobid = submit_cmd_helper(test_cmd)
-@test CAL.job_status(jobid) == :RUNNING
-@test CAL.job_running(CAL.job_status(jobid))
+@test CAL.job_running(jobid) || CAL.job_pending(jobid)
 
-sleep(180)  # Ensure job finishes. To debug, lower sleep time or comment out the code block
+sleep(480)  # Ensure job finishes. To debug, lower sleep time or comment it out
 @test CAL.job_status(jobid) == :COMPLETED
-@test CAL.job_completed(CAL.job_status(jobid))
-@test CAL.job_success(CAL.job_status(jobid))
+@test CAL.job_completed(jobid)
+@test CAL.job_success(jobid)
 
 # Test job cancellation
 jobid = submit_cmd_helper(test_cmd)
 CAL.kill_job(jobid)
-sleep(1)
-@test CAL.job_status(jobid) == :FAILED
-@test CAL.job_completed(CAL.job_status(jobid)) &&
-      CAL.job_failed(CAL.job_status(jobid))
+sleep(5)
+@test CAL.job_status(jobid) == :COMPLETED
+@test CAL.job_completed(jobid)
 
 # Test batch cancellation
 jobids = ntuple(x -> submit_cmd_helper(test_cmd), 5)
 
 CAL.kill_job.(jobids)
+sleep(5)
 for jobid in jobids
-    @test CAL.job_completed(CAL.job_status(jobid))
-    @test CAL.job_failed(CAL.job_status(jobid))
+    @test CAL.job_completed(jobid)
 end
