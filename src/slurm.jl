@@ -141,7 +141,8 @@ Submit a job to the Slurm scheduler using sbatch, removing unwanted environment 
 
 Unset variables: "SLURM_MEM_PER_CPU", "SLURM_MEM_PER_GPU", "SLURM_MEM_PER_NODE"
 """
-function submit_slurm_job(sbatch_filepath; env=deepcopy(ENV))
+function submit_slurm_job(sbatch_filepath; env = ENV)
+    clean_env = deepcopy(env)
     # List of SLURM environment variables to unset
     unset_env_vars = [
         "SLURM_MEM_PER_CPU",
@@ -151,13 +152,13 @@ function submit_slurm_job(sbatch_filepath; env=deepcopy(ENV))
         "SLURM_NTASKS",
         "SLURM_JOB_NAME",
         "SLURM_SUBMIT_DIR",
-        "SLURM_JOB_ID"
+        "SLURM_JOB_ID",
     ]
     # Create a new environment without the SLURM variables
     for var in unset_env_vars
         delete!(clean_env, var)
     end
-    
+
     try
         cmd = `sbatch --parsable $sbatch_filepath`
         output = readchomp(setenv(cmd, clean_env))
@@ -166,7 +167,7 @@ function submit_slurm_job(sbatch_filepath; env=deepcopy(ENV))
         if jobid === nothing
             error("Failed to parse job ID from output: $output")
         end
-        
+
         return parse(Int, jobid.match)
     catch e
         error("Failed to submit SLURM job: $e")

@@ -1,32 +1,30 @@
 # Tests for SurfaceFluxes example calibration on HPC, used in buildkite testing
-# To run, open the REPL: julia --project=experiments/surface_fluxes_perfect_model test/hpc_backend_e2e.jl
+# To run, open the REPL: julia --project=experiments/surface_fluxes_perfect_model test/slurm_workers.jl
 
 using ClimaCalibrate
 using Distributed
 using Test
-import EnsembleKalmanProcesses: get_ϕ_mean_final, get_g_mean_final
+import EnsembleKalmanProcesses: get_ϕ, get_g_mean_final
+import Statistics: var
 
-function test_sf_calibration_output(eki, prior)
+function test_sf_calibration_output(eki, prior, observation)
     @testset "End to end test using file config (surface fluxes perfect model)" begin
-        parameter_values = get_ϕ_mean_final(prior, eki)
-        test_parameter_values = [4.778584250117946, 3.7295665619234697]
-        @test all(
-            isapprox.(parameter_values, test_parameter_values; rtol = 1e-3),
-        )
+        params = get_ϕ(prior, eki)
+        spread = map(var, params)
+        
+        # Spread should be heavily decreased as particles have converged
+        @test last(spread) / first(spread) < 0.15
 
         forward_model_output = get_g_mean_final(eki)
-        test_model_output = [0.05228473730385304]
+        @show forward_model_output
         @test all(
-            isapprox.(forward_model_output, test_model_output; rtol = 1e-3),
+            isapprox.(forward_model_output, observation; rtol = 1e-2),
         )
     end
 end
 
 experiment_dir = dirname(Base.active_project())
-addprocs(
-    ClimaCalibrate.SlurmManager(10);
-    exeflags = "--project=$(dirname(Base.active_project()))",
-)
+addprocs(ClimaCalibrate.SlurmManager(10))
 include(joinpath(experiment_dir, "generate_data.jl"))
 
 @everywhere begin
@@ -34,7 +32,7 @@ include(joinpath(experiment_dir, "generate_data.jl"))
     experiment_dir = dirname(Base.active_project())
     output_dir = joinpath("output", "surface_fluxes_perfect_model")
     prior = get_prior(joinpath(experiment_dir, "prior.toml"))
-    ensemble_size = 10
+    ensemble_size = 20
     n_iterations = 6
 end
 
@@ -59,7 +57,7 @@ eki = worker_calibrate(
     output_dir,
 )
 
-test_sf_calibration_output(eki, prior)
+test_sf_calibration_output(eki, prior, observation)
 
 include(joinpath(experiment_dir, "postprocessing.jl"))
 

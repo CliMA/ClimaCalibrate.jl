@@ -1,6 +1,6 @@
 using Distributed
 import EnsembleKalmanProcesses as EKP
-export worker_calibrate, add_slurm_workers
+export worker_calibrate, SlurmManager
 
 function run_iteration(
     iter,
