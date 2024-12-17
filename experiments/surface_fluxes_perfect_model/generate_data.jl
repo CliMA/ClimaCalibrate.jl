@@ -11,7 +11,6 @@ pkg_dir = pkgdir(ClimaCalibrate)
 experiment_path = dirname(Base.active_project())
 data_path = joinpath(experiment_path, "data")
 include(joinpath(experiment_path, "model_interface.jl"))
-
 FT = Float32
 
 """
@@ -48,7 +47,6 @@ Base.@kwdef mutable struct TestAtmosProfile{FT}
     T::FT = FT(300)
     z::FT = FT(0)
 end
-
 
 """
     save_profiles(FT; data_path = "data", x_data_file = "data/surface_fluxes_test_data.jld2")
@@ -102,27 +100,36 @@ function synthetic_observed_y(x_inputs; data_path = "data", apply_noise = false)
     return y, y_noisy
 end
 
-# generate x inputs
-profile_file = "synthetic_profile_data.jld2"
-save_profiles(FT, data_path = data_path, x_data_file = profile_file)
+data_files = [
+    joinpath(data_path, "obs_mean.jld2")
+    joinpath(data_path, "obs_noise_cov.jld2")
+]
+if any(x -> !isfile(x), data_files)
 
-# read x inputs
-x_inputs = load_profiles(joinpath(data_path, profile_file))
+    profile_file = "synthetic_profile_data.jld2"
+    save_profiles(FT, data_path = data_path, x_data_file = profile_file)
 
-# generate synthetic observed y
-y, y_noisy = synthetic_observed_y(x_inputs, data_path = data_path)
+    # read x inputs
+    x_inputs = load_profiles(joinpath(data_path, profile_file))
 
-# save the mean of y_noisy to file
-nanmean(x) = mean(filter(!isnan, x))
-ustar = y_noisy
-JLD2.save_object(
-    joinpath(data_path, "synthetic_ustar_array_noisy_mean.jld2"),
-    ustar,
-)
+    # generate synthetic observed y
+    y, y_noisy = synthetic_observed_y(x_inputs, data_path = data_path)
 
-# save the mean and variance of y_noisy to file
-ustar =
-    JLD2.load_object(joinpath(data_path, "synthetic_ustar_array_noisy.jld2"))
-(; observation, variance) = process_member_data(ustar; output_variance = true)
-JLD2.save_object(joinpath(data_path, "obs_mean.jld2"), observation)
-JLD2.save_object(joinpath(data_path, "obs_noise_cov.jld2"), variance)
+    # save the mean of y_noisy to file
+    nanmean(x) = mean(filter(!isnan, x))
+    ustar = y_noisy
+    JLD2.save_object(
+        joinpath(data_path, "synthetic_ustar_array_noisy_mean.jld2"),
+        ustar,
+    )
+
+    # save the mean and variance of y_noisy to file
+    ustar = JLD2.load_object(
+        joinpath(data_path, "synthetic_ustar_array_noisy.jld2"),
+    )
+    (; observation, variance) =
+        process_member_data(ustar; output_variance = true)
+    JLD2.save_object(joinpath(data_path, "obs_mean.jld2"), observation)
+    JLD2.save_object(joinpath(data_path, "obs_noise_cov.jld2"), variance)
+
+end

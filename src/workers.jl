@@ -79,6 +79,7 @@ function Distributed.launch(
     exename = params[:exename]
     exeflags = params[:exeflags]
 
+    # TODO: Inherit full env
     exeflags = exeflags == `` ? "--project=$(project_dir())" : exeflags
 
     stdkeys = keys(Distributed.default_addprocs_params())
