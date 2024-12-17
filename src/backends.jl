@@ -130,7 +130,7 @@ const DEFAULT_FAILURE_RATE = 0.5
 
 """
     calibrate(backend, ensemble_size, n_iterations, observations, noise, prior, output_dir; ekp_kwargs...)
-    calibrate(backend, ekp::EnsembleKalmanProcess, ensemble_size, n_iterations, observations, noise, prior, output_dir)
+    calibrate(backend, ekp::EnsembleKalmanProcess, ensemble_size, n_iterations, prior, output_dir)
     calibrate(backend, config::ExperimentConfig; ekp_kwargs...)
 
 Run a full calibration on the given backend.
@@ -191,8 +191,6 @@ function calibrate(
         eki,
         ensemble_size,
         n_iterations,
-        observations,
-        noise,
         prior,
         output_dir;
         worker_pool,
@@ -205,8 +203,6 @@ function calibrate(
     ekp::EKP.EnsembleKalmanProcess,
     ensemble_size,
     n_iterations,
-    observations,
-    noise,
     prior,
     output_dir;
     failure_rate = DEFAULT_FAILURE_RATE,
@@ -283,8 +279,6 @@ function calibrate(
         ekp,
         ensemble_size,
         n_iterations,
-        observations,
-        noise,
         prior,
         output_dir;
         experiment_dir,
@@ -300,8 +294,6 @@ function calibrate(
     ekp::EKP.EnsembleKalmanProcess,
     ensemble_size,
     n_iterations,
-    observations,
-    noise,
     prior,
     output_dir;
     experiment_dir = project_dir(),

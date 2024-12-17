@@ -17,12 +17,25 @@ steps:
     key: "init_cpu_env"
     command:
       - echo "--- Instantiate SurfaceFluxes calibration project"
-      - julia --project=experiments/surface_fluxes_perfect_model -e 'using Pkg; Pkg.precompile()'
+      - julia --project=experiments/surface_fluxes_perfect_model -e 'using Pkg; Pkg.instantiate(;verbose=true)'
 
   - wait
+
   - label: "SurfaceFluxes perfect model calibration"
-    command: julia --project=experiments/surface_fluxes_perfect_model test/hpc_backend_e2e.jl
+    command: 
+    - julia --project=experiments/surface_fluxes_perfect_model test/worker_backend.jl
+    - rm -rf output/surface_fluxes_perfect_model/*
+    - julia --project=experiments/surface_fluxes_perfect_model test/hpc_backend.jl
     artifact_paths: output/surface_fluxes_perfect_model/*
-    
+    agents:
+      slurm_ntasks: 5
+      slurm_cpus_per_task: 1
+
   - label: "Slurm job controller unit tests"
     command: julia --project=experiments/surface_fluxes_perfect_model test/slurm_unit_tests.jl
+
+  - label: "SlurmManager tests"
+    command: julia --project=experiments/surface_fluxes_perfect_model test/slurm_manager_unit_tests.jl
+    agents:
+      slurm_ntasks: 2
+      slurm_cpus_per_task: 1
