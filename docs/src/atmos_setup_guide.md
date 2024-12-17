@@ -185,7 +185,7 @@ Example YAML file:
 ```
 output_dir: output/sphere_held_suarez_rhoe_equilmoist
 prior: prior.toml
-ensemble_size: 10
+ensemble_size: 20
 n_iterations: 3
 observations: obs_mean.jld2
 noise: obs_noise_cov.jld2

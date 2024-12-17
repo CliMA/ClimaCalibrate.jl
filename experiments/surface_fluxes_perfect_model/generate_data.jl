@@ -4,13 +4,11 @@ import SurfaceFluxes as SF
 import SurfaceFluxes.Parameters as SFPP
 import SurfaceFluxes.UniversalFunctions as UF
 import Thermodynamics as TD
-using YAML
 import SurfaceFluxes.Parameters: SurfaceFluxesParameters
 using ClimaCalibrate
 
 pkg_dir = pkgdir(ClimaCalibrate)
-experiment_path =
-    joinpath(pkg_dir, "experiments", "surface_fluxes_perfect_model")
+experiment_path = dirname(Base.active_project())
 data_path = joinpath(experiment_path, "data")
 include(joinpath(experiment_path, "model_interface.jl"))
 
@@ -81,7 +79,8 @@ Generate synthetic observed y from the model truth.
 """
 function synthetic_observed_y(x_inputs; data_path = "data", apply_noise = false)
     FT = typeof(x_inputs.profiles_int[1].T)
-    config = YAML.load_file("$experiment_path/model_config.yml")
+    config = Dict()
+    config["toml"] = []
     config["output_dir"] = data_path
     y = obtain_ustar(FT, x_inputs, config, return_ustar = true)
     if apply_noise
