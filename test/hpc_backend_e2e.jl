@@ -1,17 +1,7 @@
 # Tests for SurfaceFluxes example calibration on HPC, used in buildkite testing
 # To run, open the REPL: julia --project=experiments/surface_fluxes_perfect_model test/hpc_backend_e2e.jl
 
-using Pkg
-Pkg.instantiate(; verbose = true)
-
-import ClimaCalibrate:
-    get_backend,
-    HPCBackend,
-    JuliaBackend,
-    calibrate,
-    get_prior,
-    kwargs,
-    DerechoBackend
+using ClimaCalibrate
 using Test
 import EnsembleKalmanProcesses: get_ϕ_mean_final, get_g_mean_final
 import Statistics: var
@@ -41,16 +31,16 @@ function test_sf_calibration_output(eki, prior)
     end
 end
 
-# @assert get_backend() <: HPCBackend
-# hpc_kwargs = kwargs(time = 5, ntasks = 1, cpus_per_task = 1)
-# if get_backend() == DerechoBackend
-#     hpc_kwargs[:queue] = "develop"
-# end
-# eki = calibrate(experiment_dir; model_interface, hpc_kwargs, verbose = true)
-# test_sf_calibration_output(eki, prior)
+@assert get_backend() <: HPCBackend
+hpc_kwargs = kwargs(time = 5, ntasks = 1, cpus_per_task = 1)
+if get_backend() == DerechoBackend
+    hpc_kwargs[:queue] = "develop"
+end
+eki = calibrate(experiment_config; model_interface, hpc_kwargs, verbose = true)
+test_sf_calibration_output(eki, prior)
 
 # Pure Julia calibration, this should run anywhere
-eki = calibrate(JuliaBackend, experiment_dir)
+eki = calibrate(JuliaBackend, experiment_config)
 test_sf_calibration_output(eki, prior)
 
 include(joinpath(experiment_dir, "postprocessing.jl"))

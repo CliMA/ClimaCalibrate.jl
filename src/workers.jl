@@ -1,8 +1,10 @@
 using Distributed
 import EnsembleKalmanProcesses as EKP
-export worker_calibrate, SlurmManager
+export SlurmManager, default_worker_pool
 
-function run_iteration(
+default_worker_pool() = WorkerPool(workers())
+
+function run_worker_iteration(
     iter,
     ensemble_size,
     output_dir;
@@ -35,98 +37,6 @@ function run_iteration(
             "Ensemble for iter $iter had a $(iter_failure_rate * 100)% failure rate",
         )
     end
-end
-
-function worker_calibrate(
-    config;
-    failure_rate = 0.5,
-    worker_pool = default_worker_pool(),
-    ekp_kwargs...,
-)
-    (; ensemble_size, n_iterations, observations, noise, prior, output_dir) =
-        config
-    return worker_calibrate(
-        ensemble_size,
-        n_iterations,
-        observations,
-        noise,
-        prior,
-        output_dir;
-        failure_rate,
-        worker_pool,
-        ekp_kwargs...,
-    )
-end
-
-function worker_calibrate(
-    ensemble_size,
-    n_iterations,
-    observations,
-    noise,
-    prior,
-    output_dir;
-    failure_rate = 0.5,
-    worker_pool = default_worker_pool(),
-    ekp_kwargs...,
-)
-    initialize(
-        ensemble_size,
-        observations,
-        noise,
-        prior,
-        output_dir;
-        rng_seed = 1234,
-        ekp_kwargs...,
-    )
-    for iter in 0:(n_iterations)
-        (; time) = @timed run_iteration(
-            iter,
-            ensemble_size,
-            output_dir;
-            worker_pool,
-            failure_rate,
-        )
-        @info "Iteration $iter time: $time"
-        # Process results
-        G_ensemble = observation_map(iter)
-        save_G_ensemble(output_dir, iter, G_ensemble)
-        update_ensemble(output_dir, iter, prior)
-        iter_path = path_to_iteration(output_dir, iter)
-    end
-    return JLD2.load_object(
-        joinpath(path_to_iteration(output_dir, n_iterations), "eki_file.jld2"),
-    )
-end
-
-function worker_calibrate(
-    ekp::EKP.EnsembleKalmanProcess,
-    ensemble_size,
-    n_iterations,
-    observations,
-    noise,
-    prior,
-    output_dir;
-    failure_rate = 0.5,
-    worker_pool = default_worker_pool(),
-    ekp_kwargs...,
-)
-    initialize(ekp, prior, output_dir; rng_seed = 1234)
-    for iter in 0:n_iterations
-        (; time) = @timed run_iteration(
-            iter,
-            ensemble_size,
-            output_dir;
-            worker_pool,
-            failure_rate,
-        )
-        @info "Iteration $iter time: $time"
-        # Process results
-        G_ensemble = observation_map(iter)
-        save_G_ensemble(output_dir, iter, G_ensemble)
-        update_ensemble(output_dir, iter, prior)
-        iter_path = path_to_iteration(output_dir, iter)
-    end
-    return JLD2.load_object(path_to_iteration(output_dir, n_iterations))
 end
 
 worker_cookie() = begin

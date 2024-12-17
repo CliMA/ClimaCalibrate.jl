@@ -188,11 +188,7 @@ function env_member_number(env = ENV)
 end
 
 """
-    initialize(ensemble_size, observations, noise, prior, output_dir; kwargs...)
-    initialize(ensemble_size, observations, prior, output_dir; kwargs...)
-    initialize(eki::EnsembleKalmanProcess, prior, output_dir)
-    initialize(config::ExperimentConfig; kwargs...)
-    initialize(filepath::AbstractString; kwargs...)
+    ekp_constructor(ensemble_size, prior, observations, noise = nothing)
 
 Initialize the EnsembleKalmanProcess object and parameter files.
 
@@ -203,73 +199,23 @@ Noise is optional when the observation is an EKP.ObservationSeries.
 
 Additional kwargs may be passed through to the EnsembleKalmanProcess constructor.
 """
-initialize(filepath::AbstractString; kwargs...) =
-    initialize(ExperimentConfig(filepath); kwargs...)
 
-initialize(config::ExperimentConfig; kwargs...) = initialize(
-    config.ensemble_size,
-    config.observations,
-    config.noise,
-    config.prior,
-    config.output_dir;
-    kwargs...,
-)
-
-initialize(
+function ekp_constructor(
     ensemble_size,
-    observations,
     prior,
-    output_dir;
+    observations,
+    noise = nothing;
     rng_seed = 1234,
     ekp_kwargs...,
-) = _initialize(
-    ensemble_size,
-    observations,
-    prior,
-    output_dir;
-    rng_seed,
-    ekp_kwargs...,
 )
 
-initialize(
-    ensemble_size,
-    observations,
-    noise,
-    prior,
-    output_dir;
-    rng_seed = 1234,
-    ekp_kwargs...,
-) = _initialize(
-    ensemble_size,
-    observations,
-    prior,
-    output_dir;
-    noise,
-    rng_seed,
-    ekp_kwargs...,
-)
-
-function initialize(eki::EKP.EnsembleKalmanProcess, prior, output_dir)
-    save_eki_state(eki, output_dir, 0, prior)
-    return eki
-end
-
-function _initialize(
-    ensemble_size,
-    observations,
-    prior,
-    output_dir;
-    noise = nothing,
-    rng_seed,
-    ekp_kwargs...,
-)
     Random.seed!(rng_seed)
     rng_ekp = Random.MersenneTwister(rng_seed)
     initial_ensemble =
         EKP.construct_initial_ensemble(rng_ekp, prior, ensemble_size)
 
     # EKP 2.0 and later require the `default_options_dict`
-    eki_constructor = if hasproperty(EKP, :default_options_dict)
+    eki_constr = if hasproperty(EKP, :default_options_dict)
         ekp_kwargs = Dict([string(k) => v for (k, v) in ekp_kwargs])
         (args...) -> EKP.EnsembleKalmanProcess(
             args...,
@@ -277,30 +223,76 @@ function _initialize(
             rng = rng_ekp,
         )
     else
-        eki_constructor =
-            (args...) -> EKP.EnsembleKalmanProcess(
-                args...;
-                rng = rng_ekp,
-                failure_handler_method = EKP.SampleSuccGauss(),
-                ekp_kwargs...,
-            )
-    end
-    eki = if isnothing(noise)
-        eki_constructor(initial_ensemble, observations, EKP.Inversion())
-    else
-        eki_constructor(initial_ensemble, observations, noise, EKP.Inversion())
+        (args...) -> EKP.EnsembleKalmanProcess(
+            args...;
+            rng = rng_ekp,
+            failure_handler_method = EKP.SampleSuccGauss(),
+            ekp_kwargs...,
+        )
     end
 
-    save_eki_state(eki, output_dir, 0, prior)
+    eki = if isnothing(noise)
+        eki_constr(initial_ensemble, observations, EKP.Inversion())
+    else
+        eki_constr(initial_ensemble, observations, noise, EKP.Inversion())
+    end
     return eki
 end
 
 """
-    save_eki_state(eki, output_dir, iteration, prior)
+    initialize(ensemble_size, observations, noise, prior, output_dir)
+    initialize(eki::EKP.EnsembleKalmanProcess, prior, output_dir)
+    initialize(config)
+
+Initialize a calibration, saving the initial parameter ensemble to a folder within `output_dir`.
+
+If no EKP struct is given, construct an EKP struct and return it.
+"""
+function initialize(config::ExperimentConfig; rng_seed = 1234, ekp_kwargs...)
+    (; ensemble_size, observations, noise, prior, output_dir) = config
+    return initialize(
+        ensemble_size,
+        observations,
+        noise,
+        prior,
+        output_dir;
+        ekp_kwargs...,
+        rng_seed,
+    )
+end
+
+function initialize(
+    ensemble_size,
+    observations,
+    noise,
+    prior,
+    output_dir;
+    rng_seed = 1234,
+    ekp_kwargs...,
+)
+    eki = ekp_constructor(
+        ensemble_size,
+        prior,
+        observations,
+        noise;
+        rng_seed,
+        ekp_kwargs...,
+    )
+    save_eki_and_parameters(eki, output_dir, 0, prior)
+    return eki
+end
+
+function initialize(eki::EKP.EnsembleKalmanProcess, prior, output_dir)
+    save_eki_and_parameters(eki, output_dir, 0, prior)
+    return eki
+end
+
+"""
+    save_eki_and_parameters(eki, output_dir, iteration, prior)
 
 Save EKI state and parameters. Helper function for [`initialize`](@ref) and [`update_ensemble`](@ref)
 """
-function save_eki_state(eki, output_dir, iteration, prior)
+function save_eki_and_parameters(eki, output_dir, iteration, prior)
     param_dict = get_param_dict(prior)
     save_parameter_ensemble(
         EKP.get_u_final(eki),
@@ -338,6 +330,7 @@ function update_ensemble(output_dir::AbstractString, iteration, prior)
     G_ens = JLD2.load_object(joinpath(iter_path, "G_ensemble.jld2"))
 
     terminate = EKP.update_ensemble!(eki, G_ens)
-    save_eki_state(eki, output_dir, iteration + 1, prior)
+    save_eki_and_parameters(eki, output_dir, iteration + 1, prior)
+    # TODO: Return EKI struct again
     return terminate
 end
