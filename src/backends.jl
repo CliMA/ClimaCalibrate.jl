@@ -221,8 +221,8 @@ function calibrate(
         end
         G_ensemble = observation_map(iter)
         save_G_ensemble(output_dir, iter, G_ensemble)
-        update_ensemble(output_dir, iter, prior)
-        ekp = load_ekp_struct(output_dir, iter)
+        terminate = update_ensemble!(ekp, G_ensemble, output_dir, iter, prior)
+        !isnothing(terminate) && break
     end
     return ekp
 end
@@ -322,8 +322,8 @@ function calibrate(
         # Process results
         G_ensemble = observation_map(iter)
         save_G_ensemble(output_dir, iter, G_ensemble)
-        update_ensemble(output_dir, iter, prior)
-        ekp = load_ekp_struct(output_dir, iter)
+        terminate = update_ensemble!(ekp, G_ensemble, output_dir, iter, prior)
+        !isnothing(terminate) && break
     end
     return ekp
 end
@@ -442,9 +442,8 @@ function calibrate(
         @info "Completed iteration $i, updating ensemble"
         G_ensemble = observation_map(i)
         save_G_ensemble(output_dir, i, G_ensemble)
-        terminate = update_ensemble(output_dir, i, prior)
+        terminate = update_ensemble!(ekp, G_ensemble, output_dir, i, prior)
         !isnothing(terminate) && break
-        ekp = load_ekp_struct(output_dir, i)
     end
     return ekp
 end

@@ -1,6 +1,13 @@
 using ClimaCalibrate
 
-include(joinpath(pkgdir(ClimaCalibrate), "test", "sf_calibration_utils.jl"))
+include(
+    joinpath(
+        pkgdir(ClimaCalibrate),
+        "experiments",
+        "surface_fluxes_perfect_model",
+        "utils.jl",
+    ),
+)
 experiment_config = ExperimentConfig(
     n_iterations,
     ensemble_size,

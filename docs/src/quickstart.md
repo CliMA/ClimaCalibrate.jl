@@ -96,7 +96,7 @@ This example can be run on the most common backend, the WorkerBackend, with the 
 ```julia
 using ClimaCalibrate
 
-include(joinpath(pkgdir(ClimaCalibrate), "test", "sf_calibration_utils.jl"))
+include(joinpath(pkgdir(ClimaCalibrate), "experiments", "surface_fluxes_perfect_model", "utils.jl"))
 @show ensemble_size n_iterations observation variance prior
 
 eki = calibrate(
