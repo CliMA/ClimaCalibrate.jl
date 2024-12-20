@@ -3,11 +3,12 @@ import JLD2
 import Random
 using Distributions
 import EnsembleKalmanProcesses as EKP
-using EnsembleKalmanProcesses.ParameterDistributions
-using EnsembleKalmanProcesses.TOMLInterface
+import EnsembleKalmanProcesses.ParameterDistributions as PD
+import EnsembleKalmanProcesses.TOMLInterface as TI
 
 export ExperimentConfig, get_prior, initialize, update_ensemble, save_G_ensemble
-export path_to_ensemble_member, path_to_model_log, path_to_iteration
+export path_to_ensemble_member,
+    path_to_model_log, path_to_iteration, parameter_path
 
 """
     ExperimentConfig(
@@ -30,7 +31,7 @@ Base.@kwdef struct ExperimentConfig
     ensemble_size::Integer
     observations::Any
     noise::Any
-    prior::ParameterDistribution
+    prior::PD.ParameterDistribution
     output_dir::Any
 end
 
@@ -85,7 +86,18 @@ end
 Return the path to an ensemble member's directory for a given iteration and member number.
 """
 path_to_ensemble_member(output_dir, iteration, member) =
-    EKP.TOMLInterface.path_to_ensemble_member(output_dir, iteration, member)
+    TI.path_to_ensemble_member(output_dir, iteration, member)
+
+const DEFAULT_PARAMETER_FILE = "parameters.toml"
+"""
+    parameter_path(output_dir, iteration, member)
+
+Return the path to an ensemble member's parameter file.
+"""
+parameter_path(output_dir, iteration, member) = joinpath(
+    path_to_ensemble_member(output_dir, iteration, member),
+    DEFAULT_PARAMETER_FILE,
+)
 
 """
     path_to_model_log(output_dir, iteration, member)
@@ -119,8 +131,8 @@ end
 
 function get_prior(param_dict::AbstractDict; names = nothing)
     names = isnothing(names) ? keys(param_dict) : names
-    prior_vec = [get_parameter_distribution(param_dict, n) for n in names]
-    prior = combine_distributions(prior_vec)
+    prior_vec = [TI.get_parameter_distribution(param_dict, n) for n in names]
+    prior = PD.combine_distributions(prior_vec)
     return prior
 end
 
@@ -131,12 +143,10 @@ Generates a dictionary for parameters based on the specified distribution, assum
 If `names` is not provided, the distribution's names will be used.
 """
 function get_param_dict(
-    distribution::PD;
+    distribution::PDD;
     names = distribution.name,
-) where {PD <: ParameterDistributions.ParameterDistribution}
-    return Dict(
-        name => Dict{Any, Any}("type" => "float") for name in distribution.name
-    )
+) where {PDD <: PD.ParameterDistribution}
+    return Dict(name => Dict{Any, Any}("type" => "float") for name in names)
 end
 
 """
@@ -294,12 +304,12 @@ Save EKI state and parameters. Helper function for [`initialize`](@ref) and [`up
 """
 function save_eki_and_parameters(eki, output_dir, iteration, prior)
     param_dict = get_param_dict(prior)
-    save_parameter_ensemble(
+    TI.save_parameter_ensemble(
         EKP.get_u_final(eki),
         prior,
         param_dict,
         output_dir,
-        "parameters.toml",
+        DEFAULT_PARAMETER_FILE,
         iteration,
     )
 

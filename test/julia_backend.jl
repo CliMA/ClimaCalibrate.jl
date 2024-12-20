@@ -5,14 +5,7 @@ using EnsembleKalmanProcesses.ParameterDistributions
 using EnsembleKalmanProcesses.TOMLInterface
 import ClimaParams as CP
 
-import ClimaCalibrate:
-    forward_model,
-    JuliaBackend,
-    ExperimentConfig,
-    calibrate,
-    project_dir,
-    observation_map
-
+import ClimaCalibrate as CAL
 import JLD2
 
 # Experiment Info
@@ -24,7 +17,7 @@ observations = [20.0]
 noise = [0.01;;]
 output_dir = mktempdir()
 
-experiment_config = ExperimentConfig(
+experiment_config = CAL.ExperimentConfig(
     n_iterations,
     ensemble_size,
     observations,
@@ -36,15 +29,15 @@ experiment_config = ExperimentConfig(
 # Model interface
 # This "model" just samples parameters and returns them, we are checking that the 
 # results are reproducible.
-function forward_model(iteration, member)
-    member_path = path_to_ensemble_member(output_dir, iteration, member)
-    parameter_path = joinpath(member_path, "parameters.toml")
-    toml_dict = CP.create_toml_dict(Float64; override_file = parameter_path)
+function CAL.forward_model(iteration, member)
+    member_path = CAL.path_to_ensemble_member(output_dir, iteration, member)
+    param_path = CAL.parameter_path(output_dir, iteration, member)
+    toml_dict = CP.create_toml_dict(Float64; override_file = param_path)
     (; test_param) = CP.get_parameter_values(toml_dict, "test_param")
     JLD2.save_object(joinpath(member_path, output_file), test_param)
 end
 
-function observation_map(iteration)
+function CAL.observation_map(iteration)
     (; ensemble_size) = experiment_config
     dims = 1
     G_ensemble = Array{Float64}(undef, dims..., ensemble_size)
@@ -58,7 +51,7 @@ function observation_map(iteration)
 end
 
 # Test!
-ekp = calibrate(JuliaBackend, experiment_config)
+ekp = CAL.calibrate(CAL.JuliaBackend, experiment_config)
 
 @testset "Test end-to-end calibration" begin
     parameter_values =

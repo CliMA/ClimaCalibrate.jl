@@ -9,16 +9,43 @@ export HPCBackend, ClimaGPUBackend, DerechoBackend, CaltechHPCBackend
 
 abstract type AbstractBackend end
 
+"""
+    JuliaBackend
+
+The simplest backend, used to run a calibration in Julia without any parallelization.
+"""
 struct JuliaBackend <: AbstractBackend end
 
 abstract type HPCBackend <: AbstractBackend end
 abstract type SlurmBackend <: HPCBackend end
 
+"""
+    CaltechHPCBackend
+
+Used for Caltech's [high-performance computing cluster](https://www.hpc.caltech.edu/).
+"""
 struct CaltechHPCBackend <: SlurmBackend end
+
+"""
+    ClimaGPUBackend
+
+Used for CliMA's private GPU server.
+"""
 struct ClimaGPUBackend <: SlurmBackend end
 
+"""
+    DerechoBackend
+
+Used for NSF NCAR's [Derecho supercomputing system](https://ncar-hpc-docs.readthedocs.io/en/latest/compute-systems/derecho/).
+"""
 struct DerechoBackend <: HPCBackend end
 
+"""
+    WorkerBackend
+
+Used to run calibrations on Distributed.jl's workers.
+For use on a Slurm cluster, see [`SlurmManager`](@ref).
+"""
 struct WorkerBackend <: AbstractBackend end
 
 """
@@ -28,6 +55,7 @@ Get ideal backend for deploying forward model runs.
 Each backend is found via `gethostname()`. Defaults to JuliaBackend if none is found.
 """
 function get_backend()
+    # TODO: Add WorkerBackend as default if there are multiple workers
     HOSTNAMES = [
         (r"^clima.gps.caltech.edu$", ClimaGPUBackend),
         (r"^login[1-4].cm.cluster$", CaltechHPCBackend),
@@ -112,9 +140,13 @@ function calibrate(
             (e, catch_backtrace())
     for i in 0:(n_iterations - 1)
         @info "Running iteration $i"
-        pmap(1:ensemble_size; retry_delays = 0, on_error) do m
-            forward_model(i, m)
-            @info "Completed member $m"
+        foreach(1:ensemble_size) do m
+            try
+                forward_model(i, m)
+                @info "Completed member $m"
+            catch e
+                on_error(e)
+            end
         end
         G_ensemble = observation_map(i)
         save_G_ensemble(config, i, G_ensemble)
