@@ -95,12 +95,20 @@ function module_load_string(::Type{DerechoBackend})
     """
 end
 
-calibrate(
+function calibrate(
     config::ExperimentConfig;
     model_interface = nothing,
     hpc_kwargs = Dict(),
     ekp_kwargs...,
-) = calibrate(get_backend(), config; model_interface, hpc_kwargs, ekp_kwargs...)
+)
+    backend = get_backend()
+    if backend isa HPCBackend
+        calibrate(backend, config; model_interface, hpc_kwargs, ekp_kwargs...)
+    else
+        # If not HPCBackend, strip out model_interface and hpc_kwargs
+        calibrate(backend, config; ekp_kwargs...)
+    end
+end
 
 function calibrate(
     ensemble_size::Int,
@@ -113,47 +121,110 @@ function calibrate(
     hpc_kwargs = Dict(),
     ekp_kwargs...,
 )
+    backend = get_backend()
+    if backend isa HPCBackend
+        calibrate(
+            backend,
+            ensemble_size,
+            n_iterations,
+            observations,
+            noise,
+            prior,
+            output_dir;
+            model_interface,
+            hpc_kwargs,
+            ekp_kwargs...,
+        )
+    else
+        # If not HPCBackend, strip out model_interface and hpc_kwargs
+        calibrate(
+            backend,
+            ensemble_size,
+            n_iterations,
+            observations,
+            noise,
+            prior,
+            output_dir;
+            ekp_kwargs...,
+        )
+    end
+end
+
+function calibrate(
+    b::Type{JuliaBackend},
+    config::ExperimentConfig;
+    ekp_kwargs...,
+)
+    (; ensemble_size, n_iterations, observations, noise, prior, output_dir) =
+        config
     return calibrate(
-        get_backend(),
+        b,
         ensemble_size,
         n_iterations,
         observations,
         noise,
         prior,
         output_dir;
-        model_interface,
-        hpc_kwargs,
         ekp_kwargs...,
     )
 end
 
 function calibrate(
-    ::Type{JuliaBackend},
-    config::ExperimentConfig;
+    b::Type{JuliaBackend},
+    ensemble_size,
+    n_iterations,
+    observations,
+    noise,
+    prior,
+    output_dir;
     ekp_kwargs...,
 )
-    (; n_iterations, output_dir, ensemble_size) = config
-    ekp = initialize(config; ekp_kwargs...)
+    ekp = ekp_constructor(
+        ensemble_size,
+        prior,
+        observations,
+        noise;
+        ekp_kwargs...,
+    )
+    return calibrate(b, ekp, ensemble_size, n_iterations, prior, output_dir)
+end
+
+function calibrate(
+    ::Type{JuliaBackend},
+    ekp::EKP.EnsembleKalmanProcess,
+    ensemble_size,
+    n_iterations,
+    prior,
+    output_dir,
+)
+    initialize(ekp, prior, output_dir)
+
     on_error(e::InterruptException) = rethrow(e)
     on_error(e) =
         @error "Single ensemble member has errored. See stacktrace" exception =
             (e, catch_backtrace())
-    for i in 0:(n_iterations - 1)
-        @info "Running iteration $i"
+
+    for iter in 0:n_iterations
+        errors = 0
+        @info "Running iteration $iter"
         foreach(1:ensemble_size) do m
             try
-                forward_model(i, m)
+                forward_model(iter, m)
                 @info "Completed member $m"
             catch e
+                errors += 1
                 on_error(e)
             end
         end
-        G_ensemble = observation_map(i)
-        save_G_ensemble(config, i, G_ensemble)
-        terminate = update_ensemble(config, i)
-        !isnothing(terminate) && break
-        iter_path = path_to_iteration(output_dir, i + 1)
-        ekp = JLD2.load_object(joinpath(iter_path, "eki_file.jld2"))
+        if errors == ensemble_size
+            error("Full ensemble has failed, aborting calibration.")
+        end
+        G_ensemble = observation_map(iter)
+        save_G_ensemble(output_dir, iter, G_ensemble)
+        update_ensemble(output_dir, iter, prior)
+        eki_path =
+            joinpath(path_to_iteration(output_dir, iter + 1), "eki_file.jld2")
+        ekp = JLD2.load_object(eki_path)
     end
     return ekp
 end
@@ -305,7 +376,13 @@ function calibrate(
     hpc_kwargs,
     ekp_kwargs...,
 )
-    ekp = ekp_constructor(ensemble_size, prior, observations, noise)
+    ekp = ekp_constructor(
+        ensemble_size,
+        prior,
+        observations,
+        noise;
+        ekp_kwargs...,
+    )
     return calibrate(
         b,
         ekp,
@@ -379,7 +456,7 @@ function calibrate(
 end
 
 # Dispatch on backend type to unify `calibrate` for all HPCBackends
-# Scheduler interfaces should not depend on backend struct
+# This keeps the scheduled interface independent from the backends
 """
     model_run(backend, iter, member, output_dir, experiment_dir; model_interface, verbose, hpc_kwargs)
 
