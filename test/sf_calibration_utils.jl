@@ -169,8 +169,7 @@ function g_vs_iter_plot(eki)
             model_config["toml"] = [
                 joinpath(
                     pkg_dir,
-                    ClimaCalibrate.path_to_ensemble_member(output_dir, iter, i),
-                    "parameters.toml",
+                    ClimaCalibrate.parameter_path(output_dir, iter, i),
                 ),
             ]
             ustar_mod =

@@ -149,8 +149,7 @@ for iter in 0:N_iter
         model_config["toml"] = [
             joinpath(
                 pkg_dir,
-                ClimaCalibrate.path_to_ensemble_member(output_dir, iter, i),
-                "parameters.toml",
+                ClimaCalibrate.parameter_path(output_dir, iter, i),
             ),
         ]
         ustar_mod =

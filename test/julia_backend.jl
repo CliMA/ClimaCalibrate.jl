@@ -38,7 +38,7 @@ experiment_config = ExperimentConfig(
 # results are reproducible.
 function forward_model(iteration, member)
     member_path = path_to_ensemble_member(output_dir, iteration, member)
-    parameter_path = joinpath(member_path, "parameters.toml")
+    parameter_path = parameter_path(output_dir, iteration, member)
     toml_dict = CP.create_toml_dict(Float64; override_file = parameter_path)
     (; test_param) = CP.get_parameter_values(toml_dict, "test_param")
     JLD2.save_object(joinpath(member_path, output_file), test_param)

@@ -3,11 +3,12 @@ import JLD2
 import Random
 using Distributions
 import EnsembleKalmanProcesses as EKP
-using EnsembleKalmanProcesses.ParameterDistributions
-using EnsembleKalmanProcesses.TOMLInterface
+import EnsembleKalmanProcesses.ParameterDistributions as PD
+import EnsembleKalmanProcesses.TOMLInterface
 
 export ExperimentConfig, get_prior, initialize, update_ensemble, save_G_ensemble
-export path_to_ensemble_member, path_to_model_log, path_to_iteration
+export path_to_ensemble_member,
+    path_to_model_log, path_to_iteration, parameter_path
 
 """
     ExperimentConfig(
@@ -30,7 +31,7 @@ Base.@kwdef struct ExperimentConfig
     ensemble_size::Integer
     observations::Any
     noise::Any
-    prior::ParameterDistribution
+    prior::PD.ParameterDistribution
     output_dir::Any
 end
 
@@ -87,6 +88,17 @@ Return the path to an ensemble member's directory for a given iteration and memb
 path_to_ensemble_member(output_dir, iteration, member) =
     EKP.TOMLInterface.path_to_ensemble_member(output_dir, iteration, member)
 
+const DEFAULT_PARAMETER_FILE = "parameters.toml"
+"""
+    parameter_path(output_dir, iteration, member)
+
+Return the path to an ensemble member's parameter file.
+"""
+parameter_path(output_dir, iteration, member) = joinpath(
+    path_to_ensemble_member(output_dir, iteration, member),
+    DEFAULT_PARAMETER_FILE,
+)
+
 """
     path_to_model_log(output_dir, iteration, member)
 
@@ -133,10 +145,8 @@ If `names` is not provided, the distribution's names will be used.
 function get_param_dict(
     distribution::PD;
     names = distribution.name,
-) where {PD <: ParameterDistributions.ParameterDistribution}
-    return Dict(
-        name => Dict{Any, Any}("type" => "float") for name in distribution.name
-    )
+) where {PD <: PD.ParameterDistribution}
+    return Dict(name => Dict{Any, Any}("type" => "float") for name in names)
 end
 
 """
@@ -299,7 +309,7 @@ function save_eki_and_parameters(eki, output_dir, iteration, prior)
         prior,
         param_dict,
         output_dir,
-        "parameters.toml",
+        DEFAULT_PARAMETER_FILE,
         iteration,
     )
 
