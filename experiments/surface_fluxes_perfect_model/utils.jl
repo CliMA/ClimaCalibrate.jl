@@ -28,14 +28,19 @@ include(joinpath(experiment_dir, "generate_data.jl"))
 
 @everywhere begin
     using ClimaCalibrate
-    experiment_dir = dirname(Base.active_project())
+    import EnsembleKalmanProcesses.ParameterDistributions as PD
     output_dir = joinpath("output", "surface_fluxes_perfect_model")
-    prior = get_prior(joinpath(experiment_dir, "prior.toml"))
+    prior_vec = [
+        PD.constrained_gaussian("coefficient_a_m_businger", 4.7, 0.5, 2, 6),
+        PD.constrained_gaussian("coefficient_a_h_businger", 4.6, 3, 0, 10),
+    ]
+    prior = PD.combine_distributions(prior_vec)
     ensemble_size = 20
-    n_iterations = 6
+    n_iterations = 8
 end
 
 @everywhere begin
+    experiment_dir = project_dir()
     include(joinpath(experiment_dir, "observation_map.jl"))
     ustar = JLD2.load_object(
         joinpath(experiment_dir, "data", "synthetic_ustar_array_noisy.jld2"),
