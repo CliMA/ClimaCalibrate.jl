@@ -24,6 +24,7 @@ makedocs(
     pages = [
         "Home" => "index.md",
         "Getting Started" => "quickstart.md",
+        "Backends" => "backends.md",
         "ClimaAtmos Setup Guide" => "atmos_setup_guide.md",
         "Emulate and Sample" => "emulate_sample.md",
         "API" => "api.md",
