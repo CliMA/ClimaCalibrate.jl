@@ -1,6 +1,9 @@
 using ClimaCalibrate, Distributed
 
-addprocs(SlurmManager(5))
+if nworkers() == 1
+    addprocs(SlurmManager(5))
+end
+
 include(joinpath(pkgdir(ClimaCalibrate), "test", "sf_calibration_utils.jl"))
 
 eki = calibrate(

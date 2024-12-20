@@ -102,7 +102,7 @@ function calibrate(
     ekp_kwargs...,
 )
     backend = get_backend()
-    if backend isa HPCBackend
+    if backend <: HPCBackend
         calibrate(backend, config; model_interface, hpc_kwargs, ekp_kwargs...)
     else
         # If not HPCBackend, strip out model_interface and hpc_kwargs
@@ -122,7 +122,7 @@ function calibrate(
     ekp_kwargs...,
 )
     backend = get_backend()
-    if backend isa HPCBackend
+    if backend <: HPCBackend
         calibrate(
             backend,
             ensemble_size,
@@ -197,14 +197,14 @@ function calibrate(
     prior,
     output_dir,
 )
-    initialize(ekp, prior, output_dir)
+    ekp = initialize(ekp, prior, output_dir)
 
     on_error(e::InterruptException) = rethrow(e)
     on_error(e) =
         @error "Single ensemble member has errored. See stacktrace" exception =
             (e, catch_backtrace())
 
-    for iter in 0:n_iterations
+    for iter in 0:(n_iterations - 1)
         errors = 0
         @info "Running iteration $iter"
         foreach(1:ensemble_size) do m
@@ -222,9 +222,7 @@ function calibrate(
         G_ensemble = observation_map(iter)
         save_G_ensemble(output_dir, iter, G_ensemble)
         update_ensemble(output_dir, iter, prior)
-        eki_path =
-            joinpath(path_to_iteration(output_dir, iter + 1), "eki_file.jld2")
-        ekp = JLD2.load_object(eki_path)
+        ekp = load_ekp_struct(output_dir, iter)
     end
     return ekp
 end
@@ -311,8 +309,8 @@ function calibrate(
     failure_rate = DEFAULT_FAILURE_RATE,
     worker_pool = default_worker_pool(),
 )
-    initialize(ekp, prior, output_dir)
-    for iter in 0:n_iterations
+    ekp = initialize(ekp, prior, output_dir)
+    for iter in 0:(n_iterations - 1)
         (; time) = @timed run_worker_iteration(
             iter,
             ensemble_size,
@@ -325,11 +323,9 @@ function calibrate(
         G_ensemble = observation_map(iter)
         save_G_ensemble(output_dir, iter, G_ensemble)
         update_ensemble(output_dir, iter, prior)
-        iter_path = path_to_iteration(output_dir, iter)
+        ekp = load_ekp_struct(output_dir, iter)
     end
-    return JLD2.load_object(
-        joinpath(path_to_iteration(output_dir, n_iterations), "eki_file.jld2"),
-    )
+    return ekp
 end
 
 function calibrate(
@@ -414,8 +410,7 @@ function calibrate(
     ekp_kwargs...,
 )
     @info "Initializing calibration" n_iterations ensemble_size output_dir
-
-    initialize(ekp, prior, output_dir)
+    ekp = initialize(ekp, prior, output_dir)
     module_load_str = module_load_string(b)
     for i in 0:(n_iterations - 1)
         @info "Iteration $i"
@@ -449,8 +444,7 @@ function calibrate(
         save_G_ensemble(output_dir, i, G_ensemble)
         terminate = update_ensemble(output_dir, i, prior)
         !isnothing(terminate) && break
-        iter_path = path_to_iteration(output_dir, i + 1)
-        ekp = JLD2.load_object(joinpath(iter_path, "eki_file.jld2"))
+        ekp = load_ekp_struct(output_dir, i)
     end
     return ekp
 end

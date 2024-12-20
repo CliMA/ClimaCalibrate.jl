@@ -99,6 +99,23 @@ parameter_path(output_dir, iteration, member) = joinpath(
     DEFAULT_PARAMETER_FILE,
 )
 
+const DEFAULT_EKP_FILE = "eki_file.jld2"
+"""
+    load_ekp_struct(output_dir, iteration)
+
+Return the EnsembleKalmanProcess struct for a completed iteration.
+"""
+load_ekp_struct(output_dir, iteration) =
+    JLD2.load_object(ekp_path(output_dir, iteration))
+
+"""
+    ekp_path(output_dir, iteration)
+
+Return the path to the serialized EnsembleKalmanProcess struct file for a given iteration.
+"""
+ekp_path(output_dir, iteration) =
+    joinpath(path_to_iteration(output_dir, iteration), DEFAULT_EKP_FILE)
+
 """
     path_to_model_log(output_dir, iteration, member)
 
@@ -312,11 +329,7 @@ function save_eki_and_parameters(eki, output_dir, iteration, prior)
         DEFAULT_PARAMETER_FILE,
         iteration,
     )
-
-    # Save the EKI object in the 'iteration_xxx' folder
-    iter_path = path_to_iteration(output_dir, iteration)
-    eki_path = joinpath(iter_path, "eki_file.jld2")
-    JLD2.save_object(eki_path, eki)
+    JLD2.save_object(ekp_path(output_dir, iteration), eki)
 end
 
 """
@@ -334,7 +347,7 @@ update_ensemble(configuration::ExperimentConfig, iteration) =
 
 function update_ensemble(output_dir::AbstractString, iteration, prior)
     iter_path = path_to_iteration(output_dir, iteration)
-    eki = JLD2.load_object(joinpath(iter_path, "eki_file.jld2"))
+    eki = load_ekp_struct(output_dir, iteration)
 
     # Load data from the ensemble
     G_ens = JLD2.load_object(joinpath(iter_path, "G_ensemble.jld2"))
