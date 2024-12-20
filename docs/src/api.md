@@ -10,8 +10,14 @@ ClimaCalibrate.observation_map
 ## Backend Interface
 
 ```@docs
-ClimaCalibrate.get_backend
 ClimaCalibrate.calibrate
+ClimaCalibrate.JuliaBackend
+ClimaCalibrate.WorkerBackend
+ClimaCalibrate.SlurmManager
+ClimaCalibrate.DerechoBackend
+ClimaCalibrate.CaltechHPCBackend
+ClimaCalibrate.ClimaGPUBackend
+ClimaCalibrate.get_backend
 ClimaCalibrate.model_run
 ClimaCalibrate.module_load_string
 ```
@@ -44,4 +50,5 @@ ClimaCalibrate.get_param_dict
 ClimaCalibrate.path_to_iteration
 ClimaCalibrate.path_to_ensemble_member
 ClimaCalibrate.path_to_model_log
+ClimaCalibrate.parameter_path
 ```
