@@ -1,10 +1,9 @@
 # Getting Started
 
-## Minimal Requirements
-Every calibration using Ensemble Kalman Inversion requires the following information:
-- A forward model that uses parameters to predict output
-- Observational data
-- Model parameters to calibrate on
+Every calibration requires
+- a forward model, which uses input parameters to return diagnostic output
+- observational data, which can be a Vector or an [`EnsembleKalmanProcess.Observation`](https://clima.github.io/EnsembleKalmanProcesses.jl/dev/API/Observations/#EnsembleKalmanProcesses.Observation)
+- a prior parameter distribution. The easiest way to construct a distribution is with the [`EnsembleKalmanProcess.constrained_gaussian`](https://clima.github.io/EnsembleKalmanProcesses.jl/dev/API/ParameterDistributions/#EnsembleKalmanProcesses.ParameterDistributions.constrained_gaussian) function.
 
 ## Implementing your experiment
 
@@ -77,6 +76,21 @@ Now all of the pieces should be in place:
 And we can put it all together:
 
 `calibrate(ensemble_size, n_iterations, observations, noise, prior, output_dir)`
+
+Lastly, you need to set the output directory, ensemble size and the number of iterations to run for. A good rule of thumb for your ensemble size is 10x the number of free parameters.
+
+```julia
+n_iterations = 7
+ensemble_size = 10
+output_dir = "output/my_experiment"
+```
+Once all of this has been set up, you can call put it all together using the [`calibrate`](@ref) function:
+
+```julia
+calibrate(ensemble_size, n_iterations, observations, noise, prior, output_dir)
+```
+
+For more information on parallelizing your calibration, see the [Backends](https://clima.github.io/ClimaCalibrate.jl/dev/backends/) page.
 
 # Example Calibration
 
