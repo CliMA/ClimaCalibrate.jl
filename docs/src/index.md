@@ -1,11 +1,14 @@
 # ClimaCalibrate.jl
 
-ClimaCalibrate.jl is a toolkit for developing scalable and reproducible model 
-calibration pipelines using [EnsembleKalmanProcesses.jl](https://github.com/CliMA/EnsembleKalmanProcesses.jl/) with minimal boilerplate.
+ClimaCalibrate provides a scalable framework for calibrating forward models models using 
+the Ensemble Kalman Process (EKP). It integrates with [EnsembleKalmanProcesses.jl](https://github.com/CliMA/EnsembleKalmanProcesses.jl/) 
+to enable distributed model calibration with minimal boilerplate code.
 
-This documentation assumes basical familiarity with inverse problems and [Ensemble Kalman Inversion](https://clima.github.io/EnsembleKalmanProcesses.jl/dev/ensemble_kalman_inversion/#eki) in particular.
+Key Features
 
-To use this framework, component models define their own versions of the functions provided in the interface.
-Calibrations can either be run using just Julia, the Caltech central cluster, NCAR Derecho, or CliMA's GPU server.
+- Distributed computing support for multiple HPC environments
+- Integration with EnsembleKalmanProcesses.jl for parameter estimation
+- Flexible model interface for different component models
+- Support for emulation and sampling workflows
 
 For more information, see our [Getting Started page](https://clima.github.io/ClimaCalibrate.jl/dev/quickstart/).
