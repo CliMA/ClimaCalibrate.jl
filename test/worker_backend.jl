@@ -1,9 +1,5 @@
 using ClimaCalibrate, Distributed
 
-if nworkers() == 1
-    addprocs(SlurmManager(5))
-end
-
 include(
     joinpath(
         pkgdir(ClimaCalibrate),
@@ -12,6 +8,31 @@ include(
         "utils.jl",
     ),
 )
+
+if nworkers() == 1
+    if get_backend() == ClimaCalibrate.DerechoBackend
+        addprocs(
+            PBSManager(5),
+            q = "preempt",
+            A = "UCIT0011",
+            l_select = "1:ncpus=1:ngpus=1",
+            l_walltime = "00:30:00",
+        )
+    else
+        addprocs(SlurmManager(5))
+    end
+end
+
+@everywhere using ClimaCalibrate
+@everywhere include(
+    joinpath(
+        pkgdir(ClimaCalibrate),
+        "experiments",
+        "surface_fluxes_perfect_model",
+        "model_interface.jl",
+    ),
+)
+
 eki = calibrate(
     WorkerBackend,
     ensemble_size,

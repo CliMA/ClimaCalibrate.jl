@@ -20,7 +20,8 @@ experiment_config = ExperimentConfig(
 @assert get_backend() <: HPCBackend
 hpc_kwargs = kwargs(time = 5, ntasks = 1, cpus_per_task = 1)
 if get_backend() == DerechoBackend
-    hpc_kwargs[:queue] = "develop"
+    hpc_kwargs[:queue] = "preempt"
+    hpc_kwargs[:gpus_per_task] = 1
 end
 eki = calibrate(experiment_config; model_interface, hpc_kwargs, verbose = true)
 test_sf_calibration_output(eki, prior, experiment_config.observations)

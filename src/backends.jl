@@ -61,7 +61,7 @@ function get_backend()
         (r"^login[1-4].cm.cluster$", CaltechHPCBackend),
         (r"^hpc-(\d\d)-(\d\d).cm.cluster$", CaltechHPCBackend),
         (r"derecho([1-8])$", DerechoBackend),
-        (r"dec(\d\d\d\d)$", DerechoBackend), # This should be more specific
+        (r"deg(\d\d\d\d)$", DerechoBackend), # This should be more specific
     ]
 
     for (pattern, backend) in HOSTNAMES

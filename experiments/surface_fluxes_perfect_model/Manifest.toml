@@ -1,6 +1,6 @@
 # This file is machine-generated - editing it directly is not advised
 
-julia_version = "1.11.0"
+julia_version = "1.11.3"
 manifest_format = "2.0"
 project_hash = "c588c67f67784e1b4e65633bdcbfa5bcaa6ddf91"
 
@@ -199,10 +199,10 @@ weakdeps = ["SparseArrays"]
     ChainRulesCoreSparseArraysExt = "SparseArrays"
 
 [[deps.ClimaCalibrate]]
-deps = ["ClusterManagers", "Distributed", "Distributions", "EnsembleKalmanProcesses", "JLD2", "Random", "TOML", "YAML"]
+deps = ["Distributed", "Distributions", "EnsembleKalmanProcesses", "JLD2", "Logging", "Random", "TOML", "YAML"]
 path = "../.."
 uuid = "4347a170-ebd6-470c-89d3-5c705c0cacc2"
-version = "0.0.5"
+version = "0.0.9"
 
     [deps.ClimaCalibrate.extensions]
     CESExt = "CalibrateEmulateSample"
@@ -215,12 +215,6 @@ deps = ["TOML"]
 git-tree-sha1 = "b43ca371c435056129295445122ea87fd843b505"
 uuid = "5c42b081-d73a-476f-9059-fd94b934656c"
 version = "0.10.14"
-
-[[deps.ClusterManagers]]
-deps = ["Distributed", "Logging", "Pkg", "Sockets"]
-git-tree-sha1 = "6a678b98d5ea4d2773e92c7ae607cf7371043684"
-uuid = "34f1f09b-3a8b-5176-ab39-66d58a4d544e"
-version = "0.4.6"
 
 [[deps.CodecBzip2]]
 deps = ["Bzip2_jll", "TranscodingStreams"]

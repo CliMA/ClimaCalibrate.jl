@@ -7,13 +7,21 @@ ClimaCalibrate.forward_model
 ClimaCalibrate.observation_map
 ```
 
+## Worker Interface
+```@docs
+ClimaCalibrate.WorkerBackend
+ClimaCalibrate.SlurmManager
+ClimaCalibrate.PBSManager
+ClimaCalibrate.set_worker_loggers
+ClimaCalibrate.map_remotecall_fetch
+ClimaCalibrate.foreach_remotecall_wait
+```
+
 ## Backend Interface
 
 ```@docs
 ClimaCalibrate.calibrate
 ClimaCalibrate.JuliaBackend
-ClimaCalibrate.WorkerBackend
-ClimaCalibrate.SlurmManager
 ClimaCalibrate.DerechoBackend
 ClimaCalibrate.CaltechHPCBackend
 ClimaCalibrate.ClimaGPUBackend
