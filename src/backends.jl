@@ -286,7 +286,13 @@ function calibrate(
     worker_pool = default_worker_pool(),
     ekp_kwargs...,
 )
-    eki = ekp_constructor(ensemble_size, prior, observations, noise)
+    eki = ekp_constructor(
+        ensemble_size,
+        prior,
+        observations,
+        noise;
+        ekp_kwargs...,
+    )
     return calibrate(
         b,
         eki,
@@ -295,7 +301,6 @@ function calibrate(
         prior,
         output_dir;
         worker_pool,
-        ekp_kwargs...,
     )
 end
 
