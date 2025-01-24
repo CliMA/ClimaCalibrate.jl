@@ -14,6 +14,7 @@ ClimaCalibrate.calibrate
 ClimaCalibrate.JuliaBackend
 ClimaCalibrate.WorkerBackend
 ClimaCalibrate.SlurmManager
+ClimaCalibrate.PBSManager
 ClimaCalibrate.DerechoBackend
 ClimaCalibrate.CaltechHPCBackend
 ClimaCalibrate.ClimaGPUBackend
