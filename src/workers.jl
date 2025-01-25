@@ -43,7 +43,7 @@ worker_cookie() = begin
     Distributed.init_multi()
     cluster_cookie()
 end
-worker_arg() = `--worker=$(worker_cookie())`
+worker_cookie_arg() = `--worker=$(worker_cookie())`
 
 """
     SlurmManager(ntasks=get(ENV, "SLURM_NTASKS", 1))
@@ -106,7 +106,7 @@ function Distributed.launch(
 
     ntasks = sm.ntasks
     jobname = worker_jobname()
-    srun_cmd = `srun -J $jobname -n $ntasks -D $exehome $(worker_args) $exename $exeflags $(worker_arg())`
+    srun_cmd = `srun -J $jobname -n $ntasks -D $exehome $worker_args $exename $exeflags $(worker_cookie_arg())`
 
     @info "Starting SLURM job $jobname: $srun_cmd"
     srun_pid = open(addenv(srun_cmd, env))
@@ -144,7 +144,7 @@ function parse_worker_params(params::Dict)
         else
             k2 = replace(string(k), "_" => "-")
             if length(v) > 0
-                push!(worker_args, "--$k2=$v)")
+                push!(worker_args, "--$k2=$v")
             else
                 push!(worker_args, "--$k2")
             end
