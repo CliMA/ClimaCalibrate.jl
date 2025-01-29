@@ -1,6 +1,6 @@
 using Distributed
 import EnsembleKalmanProcesses as EKP
-export SlurmManager, default_worker_pool
+export SlurmManager, PBSManager, default_worker_pool
 
 default_worker_pool() = WorkerPool(workers())
 
@@ -70,14 +70,13 @@ struct SlurmManager <: ClusterManager
     end
 end
 
+# This function needs to exist
 function Distributed.manage(
     manager::SlurmManager,
     id::Integer,
     config::WorkerConfig,
     op::Symbol,
-)
-    # This function needs to exist, but so far we don't do anything
-end
+) end
 
 # Main SlurmManager function, mostly copied from the unmaintained ClusterManagers.jl
 # Original code: https://github.com/JuliaParallel/ClusterManagers.jl
@@ -88,25 +87,22 @@ function Distributed.launch(
     instances_arr::Array,
     c::Condition,
 )
-    default_params = Distributed.default_addprocs_params()
-    params = merge(default_params, Dict{Symbol, Any}(params))
+    params = add_default_worker_params(params)
     exehome = params[:dir]
     exename = params[:exename]
     exeflags = params[:exeflags]
     env = Dict{String, String}(params[:env])
-
-    # Taken from Distributed.LocalManager
     propagate_env_vars!(env)
 
-    worker_args = parse_worker_params(params)
+    worker_args = parse_slurm_worker_params(params)
     # Get job file location from parameter dictionary
     job_directory = setup_job_directory(exehome, params)
 
-    output_path_func = configure_output_args!(job_directory, worker_args)
+    output_path_func = configure_srun_output_args!(job_directory, worker_args)
 
     ntasks = sm.ntasks
     jobname = worker_jobname()
-    srun_cmd = `srun -J $jobname -n $ntasks -D $exehome $worker_args $exename $exeflags $(worker_cookie_arg())`
+    srun_cmd = `srun -J $jobname -n $ntasks -D $exehome $worker_args -- $exename $exeflags $(worker_cookie_arg())`
 
     @info "Starting SLURM job $jobname: $srun_cmd"
     srun_pid = open(addenv(srun_cmd, env))
@@ -123,13 +119,13 @@ function Distributed.launch(
 end
 
 """
-    parse_worker_params(params::Dict)
+    parse_slurm_worker_params(params::Dict)
 
 Parse params into string arguments for the worker launch command.
 
 Uses all keys that are not in `Distributed.default_addprocs_params()`.
 """
-function parse_worker_params(params::Dict)
+function parse_slurm_worker_params(params::Dict)
     stdkeys = keys(Distributed.default_addprocs_params())
     worker_params =
         filter(x -> (!(x[1] in stdkeys) && x[1] != :job_file_loc), params)
@@ -156,7 +152,7 @@ end
 
 worker_jobname() = "julia-$(getpid())"
 
-function configure_output_args!(job_directory, worker_args)
+function configure_srun_output_args!(job_directory, worker_args)
     default_template = ".$(worker_jobname())-$(trunc(Int, Base.time() * 10))"
     default_output(x) = joinpath(job_directory, "$default_template-$x.out")
 
@@ -183,7 +179,14 @@ function setup_job_directory(exehome::String, params::Dict)
     return job_directory
 end
 
+function add_default_worker_params(params)
+    default_params = Distributed.default_addprocs_params()
+    params = merge(default_params, Dict{Symbol, Any}(params))
+    return params
+end
+
 function propagate_env_vars!(env)
+    # Taken from Distributed.jl
     if get(env, "JULIA_LOAD_PATH", nothing) === nothing
         env["JULIA_LOAD_PATH"] = join(LOAD_PATH, ":")
     end
@@ -268,5 +271,136 @@ function poll_worker_startup(
     # Keep a reference to the proc, so it's properly closed once
     # the last worker exits.
     @info "Worker $worker_index ready after $t_waited s on host $(config.host), port $(config.port)"
+
     return config
+end
+
+# TODO: Add examples of usage for SlurmManager and PBSManager in the docstrings
+# Things like `addprocs(SlurmManager(2), t = "00:10:00",ngpus=4)`, then `remotecall` or `calibrate`
+"""
+    PBSManager(ntasks)
+
+The ClusterManager for PBS/Torque clusters, taking in the number of tasks to request with `qsub`.
+
+To execute the `qsub` command, run `addprocs(PBSManager(ntasks))`. 
+Unlike the [`SlurmManager`](@ref), this will not nest scheduled jobs, but will acquire new resources.
+
+Keyword arguments can be passed to `qsub`: `addprocs(PBSManager(ntasks), nodes=2)`
+
+By default, the workers will inherit the running Julia environment.
+
+To run a calibration, call `calibrate(WorkerBackend, ...)`
+
+To run functions on a worker, call `remotecall(func, worker_id, args...)`
+"""
+struct PBSManager <: ClusterManager
+    ntasks::Integer
+end
+
+function Distributed.manage(
+    manager::PBSManager,
+    id::Integer,
+    config::WorkerConfig,
+    op::Symbol,
+) end
+
+function Distributed.launch(
+    pm::PBSManager,
+    params::Dict,
+    instances_arr::Array,
+    c::Condition,
+)
+    params = add_default_worker_params(params)
+    exehome = params[:dir]
+    exename = params[:exename]
+    exeflags = params[:exeflags]
+    env = Dict{String, String}(params[:env])
+    propagate_env_vars!(env)
+
+    worker_args = parse_pbs_worker_params(params)
+    job_directory = setup_job_directory(exehome, params)
+    jobname = worker_jobname()
+    submission_time = (trunc(Int, Base.time() * 10))
+
+    # Create an output path for each task
+    output_path_func =
+        x -> if any(startswith("-o"), worker_args)
+            job_output_file = worker_args[locs[1] + 1]
+            return job_output_file
+        else
+            default_template = ".$jobname-$submission_time"
+            return joinpath(job_directory, "$default_template-$x.out")
+        end
+
+    qsub_cmd(i, o) =
+        `qsub -V -N $jobname-$i -j oe $worker_args -o $o -- $exename $exeflags $(worker_cookie_arg())`
+
+    # PBS does not allow different output filenames per task ID, so we schedule each task separately
+    ntasks = pm.ntasks
+    qsub_procs = Vector{Base.Process}(undef, ntasks)
+    for i in 1:ntasks
+        output_path = (output_path_func(i))
+        @info "Starting PBS job $jobname-$i: $(qsub_cmd(i, output_path))"
+        qsub_procs[i] = open(addenv(qsub_cmd(i, output_path), env))
+    end
+
+    # TODO Make this asynchronous. Jobs can terminate if they are not contacted 
+    # by the main process after 60s, which occurs if enough jobs are being spun up.
+    t_start = time()
+    for i in 1:ntasks
+        output_file = output_path_func(i)
+        worker_config =
+            poll_worker_startup(output_file, i, t_start, qsub_procs[i])
+        push!(instances_arr, worker_config)
+        notify(c)
+    end
+end
+
+"""
+    parse_pbs_worker_params(params::Dict)
+
+Parse params into string arguments for the worker launch command.
+
+Uses all keys that are not in `Distributed.default_addprocs_params()`.
+Keys that start with `l_` will be treated as `-l` arguments to `qsub`. For example, l_walltime = "00:10:00" is transformed into `-l walltime=00:10:00`.
+"""
+function parse_pbs_worker_params(params::Dict)
+    stdkeys = keys(Distributed.default_addprocs_params())
+    excepted_keys = (:job_file_loc,)
+    worker_params =
+        filter(x -> !(x[1] in stdkeys || x[1] in excepted_keys), params)
+    worker_args = []
+
+    for (k, v) in worker_params
+        if startswith(string(k), "l_")
+            str_k = string(k)[3:end]
+            # Special handling for ` -l select=...` parameter
+            if str_k == "select"
+                v = "1:$v"
+            end
+            append!(worker_args, ["-l", "$str_k=$v"])
+            continue
+        end
+
+        k2 = replace(string(k), "_" => "-")
+        if length(v) > 0
+            append!(worker_args, ["-$k2", "$v"])
+        else
+            push!(worker_args, "-$k2")
+        end
+    end
+    return worker_args
+end
+
+"""
+    worker_cd(dir = pwd())
+
+Calls `cd(dir)` for all workers.
+
+Helper function because `@everywhere cd(pwd())` is not useful for workers
+"""
+function worker_cd(dir = pwd())
+    foreach(workers()) do id
+        remotecall_wait(cd, id, dir)
+    end
 end
