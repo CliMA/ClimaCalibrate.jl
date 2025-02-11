@@ -1,5 +1,9 @@
 using Distributed
+using Logging
+import LoggingExtras
 import EnsembleKalmanProcesses as EKP
+
+
 export SlurmManager, PBSManager, default_worker_pool
 
 default_worker_pool() = WorkerPool(workers())
@@ -199,6 +203,7 @@ function propagate_env_vars!(env)
     end
 end
 
+# Poll a single file for a single worker, used for SlurmManager
 function poll_worker_startup(
     job_output_file::String,
     worker_index::Int,
@@ -264,10 +269,7 @@ function poll_worker_startup(
             ),
         )
     end
-    config = WorkerConfig()
-    config.port = parse(Int, worker_launch_details[2])
-    config.host = strip(worker_launch_details[3])
-    config.userdata = pid
+    config = worker_config(worker_launch_details, pid)
     # Keep a reference to the proc, so it's properly closed once
     # the last worker exits.
     @info "Worker $worker_index ready after $t_waited s on host $(config.host), port $(config.port)"
@@ -275,6 +277,73 @@ function poll_worker_startup(
     return config
 end
 
+# Poll a single file for multiple workers. Used with PBSManager.
+function poll_single_file_worker_startup(
+    job_output_file::String,
+    ntasks::Int,
+    pid,
+    instances_arr,
+    c,
+)
+    t_start = time()
+    # This Regex will match the worker's socket and IP address
+    # Example: julia_worker:9015#169.254.3.1
+    julia_worker_regex = r"([\w]+):([\d]+)#(\d{1,3}.\d{1,3}.\d{1,3}.\d{1,3})"
+    could_not_connect_regex = r"could not connect"
+    exiting_regex = r"exiting."
+    worker_launch_details = nothing
+    worker_errors = String[]
+    retry_delays = ExponentialBackOff(10, 1.0, 512.0, 2.0, 0.1)
+    t_waited = nothing
+    launched = 0
+    for retry_delay in push!(collect(retry_delays), 0)
+        t_waited = round(Int, time() - t_start)
+
+        # Wait for output log to be created and populated, then parse
+        if isfile(job_output_file)
+            if filesize(job_output_file) > 0
+                open(job_output_file) do f
+                    for line in eachline(f)
+                        re_match = match(julia_worker_regex, line)
+                        if !isnothing(re_match)
+                            worker_launch_details = re_match
+                            config = worker_config(worker_launch_details, pid)
+                            if !(config in instances_arr)
+                                launched += 1
+                                push!(instances_arr, config)
+                                @info "Worker ready after $(t_waited)s on host $(config.host), port $(config.port)"
+                                notify(c)
+                            end
+                        end
+                    end
+                end
+            end
+            launched == ntasks && break
+        else
+            @info "Worker launch (after $t_waited s): No output file \"$job_output_file\" yet"
+        end
+
+        # Sleep for some time to limit resource usage while waiting for the job to start
+        sleep(retry_delay)
+    end
+
+    if launched != ntasks
+        throw(
+            ErrorException(
+                "Timeout after $t_waited s while waiting for worker(s) to get ready.",
+            ),
+        )
+    end
+    return nothing
+end
+
+function worker_config(worker_launch_details, pid)
+    config = WorkerConfig()
+    config.port = parse(Int, worker_launch_details[2])
+    config.host = strip(worker_launch_details[3])
+    config.userdata = pid
+    return config
+end
 # TODO: Add examples of usage for SlurmManager and PBSManager in the docstrings
 # Things like `addprocs(SlurmManager(2), t = "00:10:00",ngpus=4)`, then `remotecall` or `calibrate`
 """
@@ -302,7 +371,95 @@ function Distributed.manage(
     id::Integer,
     config::WorkerConfig,
     op::Symbol,
-) end
+)
+    if op == :register
+        working_dir = pwd()
+        remotecall(cd, id, working_dir)
+        remotecall(id) do
+            @eval Main using Logging, ClimaCalibrate
+            ClimaCalibrate.set_worker_logger()
+        end
+    end
+end
+
+# TODO: test this!
+function set_worker_logger()
+    @eval Main using Logging
+    io = open("worker_$(myid()).log", "a")  # Open the log file
+    logger = SimpleLogger(io)
+    Base.global_logger(logger)
+    @info "Started worker $(myid())"
+    flush(io)
+end
+
+# function WorkerLogger(
+#     filepath;
+#     log_stdout = true,
+#     min_level::Logging.LogLevel = Logging.Info,
+# )
+
+#     return WorkerLogger(stdout, filepath; log_stdout, min_level)
+# end
+
+# function WorkerLogger(
+#     io,
+#     filepath;
+#     log_stdout = true,
+#     min_level::Logging.LogLevel = Logging.Info,
+# )
+
+#     function min_level_filter(log_args)
+#         return log_args.level >= min_level
+#     end
+
+#     file_logger = LoggingExtras.FormatLogger(
+#         format_log,
+#         filepath,
+#         append = true,
+#         always_flush = true,
+#     )
+
+#     filtered_logger =
+#         LoggingExtras.EarlyFilteredLogger(min_level_filter, file_logger)
+
+#     if log_stdout
+#         return LoggingExtras.TeeLogger((
+#             Logging.ConsoleLogger(io),
+#             filtered_logger,
+#         ))
+#     else
+#         return filtered_logger
+#     end
+# end
+
+# function FileLogger(
+#     filepath::AbstractString;
+#     log_stdout = true,
+#     min_level::Logging.LogLevel = Logging.Info,
+# )
+#     !isdir(log_dir) && mkpath(log_dir)
+#     filepath = joinpath(log_dir, "output.log")
+
+#     function min_level_filter(log_args)
+#         return log_args.level >= min_level
+#     end
+
+#     file_logger =
+#         LoggingExtras.FileLogger(filepath, append = true, always_flush = true)
+
+#     filtered_logger =
+#         LoggingExtras.EarlyFilteredLogger(min_level_filter, file_logger)
+
+#     if log_stdout
+#         return LoggingExtras.TeeLogger((
+#             Logging.ConsoleLogger(io),
+#             filtered_logger,
+#         ))
+#     else
+#         return filtered_logger
+#     end
+# end
+
 
 function Distributed.launch(
     pm::PBSManager,
@@ -314,6 +471,8 @@ function Distributed.launch(
     exehome = params[:dir]
     exename = params[:exename]
     exeflags = params[:exeflags]
+    # TODO: figure out why the project is not being passed, this is not needed for SlurmManager
+    exeflags = exeflags == `` ? `--project=$(project_dir())` : exeflags
     env = Dict{String, String}(params[:env])
     propagate_env_vars!(env)
 
@@ -322,38 +481,22 @@ function Distributed.launch(
     jobname = worker_jobname()
     submission_time = (trunc(Int, Base.time() * 10))
 
-    # Create an output path for each task
-    output_path_func =
-        x -> if any(startswith("-o"), worker_args)
-            job_output_file = worker_args[locs[1] + 1]
-            return job_output_file
-        else
-            default_template = ".$jobname-$submission_time"
-            return joinpath(job_directory, "$default_template-$x.out")
-        end
-
-    qsub_cmd(i, o) =
-        `qsub -V -N $jobname-$i -j oe $worker_args -o $o -- $exename $exeflags $(worker_cookie_arg())`
-
-    # PBS does not allow different output filenames per task ID, so we schedule each task separately
     ntasks = pm.ntasks
-    qsub_procs = Vector{Base.Process}(undef, ntasks)
-    for i in 1:ntasks
-        output_path = (output_path_func(i))
-        @info "Starting PBS job $jobname-$i: $(qsub_cmd(i, output_path))"
-        qsub_procs[i] = open(addenv(qsub_cmd(i, output_path), env))
-    end
+    default_output = ".$jobname-$submission_time.out"
+    # TODO: Document what each option does
+    job_array_option = ntasks > 1 ? `-J 1-$ntasks` : ``
+    output_path = get(params, :o, default_output)
+    qsub_cmd = `qsub -V -N $jobname -j oe $job_array_option $worker_args -o $output_path -- $exename $exeflags $(worker_cookie_arg())`
+    @info "Starting PBS job $jobname: $qsub_cmd"
+    qsub_pid = open(addenv(qsub_cmd, env))
 
-    # TODO Make this asynchronous. Jobs can terminate if they are not contacted 
-    # by the main process after 60s, which occurs if enough jobs are being spun up.
-    t_start = time()
-    for i in 1:ntasks
-        output_file = output_path_func(i)
-        worker_config =
-            poll_worker_startup(output_file, i, t_start, qsub_procs[i])
-        push!(instances_arr, worker_config)
-        notify(c)
-    end
+    poll_single_file_worker_startup(
+        output_path,
+        ntasks,
+        qsub_pid,
+        instances_arr,
+        c,
+    )
 end
 
 """
@@ -372,13 +515,17 @@ function parse_pbs_worker_params(params::Dict)
     worker_args = []
 
     for (k, v) in worker_params
+        # Exceptions for `-l` and `-o` options
         if startswith(string(k), "l_")
             str_k = string(k)[3:end]
             # Special handling for ` -l select=...` parameter
+            # Each job can only have one task
             if str_k == "select"
                 v = "1:$v"
             end
             append!(worker_args, ["-l", "$str_k=$v"])
+            continue
+        elseif string(k) == "o"
             continue
         end
 
