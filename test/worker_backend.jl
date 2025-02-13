@@ -14,6 +14,7 @@ if nworkers() == 1
     end
 end
 
+@everyhere using ClimaCalibrate
 @everywhere include(
     joinpath(
         pkgdir(ClimaCalibrate),
