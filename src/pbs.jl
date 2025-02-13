@@ -31,10 +31,6 @@ function generate_pbs_script(
     cpus_per_node = get(hpc_kwargs, :cpus_per_task, 1)
     gpus_per_node = get(hpc_kwargs, :gpus_per_task, 0)
 
-    if queue != "develop" && cpus_per_node != 128 && cpus_per_node != 0
-        @warn "Most Derecho nodes are exclusive and charge for the full node"
-    end
-
     if gpus_per_node > 0
         ranks_per_node = gpus_per_node
         set_gpu_rank = "set_gpu_rank"
