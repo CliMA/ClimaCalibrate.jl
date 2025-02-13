@@ -4,6 +4,7 @@ using Logging
 export SlurmManager, PBSManager, default_worker_pool, set_worker_loggers
 
 # Set the time limit for the Julia worker to be contacted by the main process, default = "60.0s"
+# https://docs.julialang.org/en/v1/manual/environment-variables/#JULIA_WORKER_TIMEOUT
 ENV["JULIA_WORKER_TIMEOUT"] = "300.0"
 
 default_worker_pool() = WorkerPool(workers())
@@ -483,7 +484,7 @@ function parse_pbs_worker_params(params::Dict)
             # Special handling for ` -l select=...` parameter
             # Each job can only have one task
             if str_k == "select"
-                v = "1:$v"
+                v = "$v"
             end
             append!(worker_args, ["-l", "$str_k=$v"])
             continue

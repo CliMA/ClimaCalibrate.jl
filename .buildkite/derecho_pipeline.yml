@@ -2,6 +2,8 @@ agents:
   queue: derecho
   modules: climacommon
   pbs_q: preempt
+  pbs_l_select: "1:ngpus=1:ncpus=1" # We are out of CPU-only hours...
+
 env:
   OPENBLAS_NUM_THREADS: 1
   SLURM_KILL_BAD_EXIT: 1
@@ -25,13 +27,9 @@ steps:
     - rm -rf output/surface_fluxes_perfect_model/*
     - julia --project=experiments/surface_fluxes_perfect_model test/hpc_backend.jl
     artifact_paths: output/surface_fluxes_perfect_model/*
-    agents:
-      pbs_l_select: "5:ngpus=1:ncpus=1" # We are out of CPU-only hours...
 
   - label: "PBS job controller unit tests"
     command: julia --project=experiments/surface_fluxes_perfect_model test/pbs_unit_tests.jl
 
   - label: "PBSManager tests"
     command: julia --project=experiments/surface_fluxes_perfect_model test/pbs_manager_unit_tests.jl
-    agents:
-      pbs_l_select: "2:ngpus=1:ncpus=1"
