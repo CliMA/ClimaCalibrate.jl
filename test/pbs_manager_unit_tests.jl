@@ -8,16 +8,17 @@ using Test, ClimaCalibrate, Distributed
         l_select = "ngpus=1",
         l_walltime = "00:05:00",
     )
-    @test nprocs() == 2
+    @test nprocs() == length(p) + 1
     @test workers() == p
-    @test fetch(@spawnat :any myid()) == p[1]
+    @test remotecall_fetch(myid, 2) == 2
     @test remotecall_fetch(+, p[1], 1, 1) == 2
+
     rmprocs(p)
     @test nprocs() == 1
     @test workers() == [1]
 end
 
-@testset "PBSManager Output file" begin
+@testset "PBSManager - multiple processes" begin
     out_file = "pbs_unit_test.out"
     p = addprocs(
         PBSManager(2),
@@ -27,10 +28,35 @@ end
         l_select = "ngpus=1",
         l_walltime = "00:05:00",
     )
-    @test nprocs() == 2
+    @test nprocs() == length(p) + 1
     @test workers() == p
-    @test fetch(@spawnat :any myid()) == p[1]
     @test remotecall_fetch(+, p[1], 1, 1) == 2
+
+    @everywhere using ClimaCalibrate
+    # Test function with no arguments
+    p = workers()
+    @test ClimaCalibrate.map_remotecall_fetch(myid) == p
+
+    # single argument 
+    x = rand(5)
+    @test ClimaCalibrate.map_remotecall_fetch(identity, x) == fill(x, length(p))
+
+    # multiple arguments
+    @test ClimaCalibrate.map_remotecall_fetch(+, 2, 3) == fill(5, length(p))
+
+    # Test specified workers list
+    @test length(
+        ClimaCalibrate.map_remotecall_fetch(myid; workers = workers()[1:2]),
+    ) == 2
+
+    # Test with more complex data structure
+    d = Dict("a" => 1, "b" => 2)
+    @test ClimaCalibrate.map_remotecall_fetch(identity, d) == fill(d, length(p))
+
+    loggers = ClimaCalibrate.set_worker_loggers()
+    @test length(loggers) == length(p)
+    @test typeof(loggers) == Vector{Base.CoreLogging.SimpleLogger}
+
     rmprocs(p)
     @test nprocs() == 1
     @test workers() == [1]

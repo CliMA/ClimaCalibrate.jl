@@ -3,8 +3,10 @@ using Logging
 import LoggingExtras
 import EnsembleKalmanProcesses as EKP
 
+export SlurmManager, PBSManager, default_worker_pool, set_worker_loggers
 
-export SlurmManager, PBSManager, default_worker_pool
+# Set the time limit for the Julia worker to be contacted by the main process, default = "60.0s"
+ENV["JULIA_WORKER_TIMEOUT"] = "300.0"
 
 default_worker_pool() = WorkerPool(workers())
 
@@ -83,8 +85,6 @@ function Distributed.manage(
 ) end
 
 # Main SlurmManager function, mostly copied from the unmaintained ClusterManagers.jl
-# Original code: https://github.com/JuliaParallel/ClusterManagers.jl
-# TODO: Log per member
 function Distributed.launch(
     sm::SlurmManager,
     params::Dict,
@@ -270,8 +270,6 @@ function poll_worker_startup(
         )
     end
     config = worker_config(worker_launch_details, pid)
-    # Keep a reference to the proc, so it's properly closed once
-    # the last worker exits.
     @info "Worker $worker_index ready after $t_waited s on host $(config.host), port $(config.port)"
 
     return config
@@ -295,7 +293,8 @@ function poll_single_file_worker_startup(
     worker_errors = String[]
     retry_delays = ExponentialBackOff(10, 1.0, 512.0, 2.0, 0.1)
     t_waited = nothing
-    launched = 0
+    launched_workers = 0
+
     for retry_delay in push!(collect(retry_delays), 0)
         t_waited = round(Int, time() - t_start)
 
@@ -309,7 +308,7 @@ function poll_single_file_worker_startup(
                             worker_launch_details = re_match
                             config = worker_config(worker_launch_details, pid)
                             if !(config in instances_arr)
-                                launched += 1
+                                launched_workers += 1
                                 push!(instances_arr, config)
                                 @info "Worker ready after $(t_waited)s on host $(config.host), port $(config.port)"
                                 notify(c)
@@ -318,7 +317,7 @@ function poll_single_file_worker_startup(
                     end
                 end
             end
-            launched == ntasks && break
+            launched_workers == ntasks && break
         else
             @info "Worker launch (after $t_waited s): No output file \"$job_output_file\" yet"
         end
@@ -327,7 +326,7 @@ function poll_single_file_worker_startup(
         sleep(retry_delay)
     end
 
-    if launched != ntasks
+    if launched_workers != ntasks
         throw(
             ErrorException(
                 "Timeout after $t_waited s while waiting for worker(s) to get ready.",
@@ -344,6 +343,7 @@ function worker_config(worker_launch_details, pid)
     config.userdata = pid
     return config
 end
+
 # TODO: Add examples of usage for SlurmManager and PBSManager in the docstrings
 # Things like `addprocs(SlurmManager(2), t = "00:10:00",ngpus=4)`, then `remotecall` or `calibrate`
 """
@@ -377,89 +377,53 @@ function Distributed.manage(
         remotecall(cd, id, working_dir)
         remotecall(id) do
             @eval Main using Logging, ClimaCalibrate
-            ClimaCalibrate.set_worker_logger()
+            ClimaCalibrate.worker_set_logger()
         end
     end
 end
 
-# TODO: test this!
-function set_worker_logger()
+function worker_set_logger()
     @eval Main using Logging
     io = open("worker_$(myid()).log", "a")  # Open the log file
     logger = SimpleLogger(io)
     Base.global_logger(logger)
-    @info "Started worker $(myid())"
+    @info "Logging from worker $(myid())"
     flush(io)
+    return logger
 end
 
-# function WorkerLogger(
-#     filepath;
-#     log_stdout = true,
-#     min_level::Logging.LogLevel = Logging.Info,
-# )
+function map_remotecall_fetch(f::Function, args...; workers = workers())
+    return map(workers) do worker_id
+        remotecall_fetch(worker_id) do
+            if isempty(args)
+                f()
+            else
+                f(args...)
+            end
+        end
+    end
+end
 
-#     return WorkerLogger(stdout, filepath; log_stdout, min_level)
-# end
+function foreach_remotecall(f::Function, args...; workers = workers())
+    foreach(workers) do worker_id
+        remotecall(worker_id) do
+            if isempty(args)
+                f()
+            else
+                f(args...)
+            end
+        end
+    end
+end
 
-# function WorkerLogger(
-#     io,
-#     filepath;
-#     log_stdout = true,
-#     min_level::Logging.LogLevel = Logging.Info,
-# )
-
-#     function min_level_filter(log_args)
-#         return log_args.level >= min_level
-#     end
-
-#     file_logger = LoggingExtras.FormatLogger(
-#         format_log,
-#         filepath,
-#         append = true,
-#         always_flush = true,
-#     )
-
-#     filtered_logger =
-#         LoggingExtras.EarlyFilteredLogger(min_level_filter, file_logger)
-
-#     if log_stdout
-#         return LoggingExtras.TeeLogger((
-#             Logging.ConsoleLogger(io),
-#             filtered_logger,
-#         ))
-#     else
-#         return filtered_logger
-#     end
-# end
-
-# function FileLogger(
-#     filepath::AbstractString;
-#     log_stdout = true,
-#     min_level::Logging.LogLevel = Logging.Info,
-# )
-#     !isdir(log_dir) && mkpath(log_dir)
-#     filepath = joinpath(log_dir, "output.log")
-
-#     function min_level_filter(log_args)
-#         return log_args.level >= min_level
-#     end
-
-#     file_logger =
-#         LoggingExtras.FileLogger(filepath, append = true, always_flush = true)
-
-#     filtered_logger =
-#         LoggingExtras.EarlyFilteredLogger(min_level_filter, file_logger)
-
-#     if log_stdout
-#         return LoggingExtras.TeeLogger((
-#             Logging.ConsoleLogger(io),
-#             filtered_logger,
-#         ))
-#     else
-#         return filtered_logger
-#     end
-# end
-
+function set_worker_loggers(worker_ids = workers())
+    return map_remotecall_fetch(worker_ids) do worker
+        @eval Main begin
+            using ClimaCalibrate
+            ClimaCalibrate.worker_set_logger()
+        end
+    end
+end
 
 function Distributed.launch(
     pm::PBSManager,
@@ -483,7 +447,7 @@ function Distributed.launch(
 
     ntasks = pm.ntasks
     default_output = ".$jobname-$submission_time.out"
-    # TODO: Document what each option does
+    # TODO: Document what each used PBS option does
     job_array_option = ntasks > 1 ? `-J 1-$ntasks` : ``
     output_path = get(params, :o, default_output)
     qsub_cmd = `qsub -V -N $jobname -j oe $job_array_option $worker_args -o $output_path -- $exename $exeflags $(worker_cookie_arg())`
