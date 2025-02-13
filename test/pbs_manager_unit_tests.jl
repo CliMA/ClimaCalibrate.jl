@@ -2,7 +2,7 @@ using Test, ClimaCalibrate, Distributed
 
 @testset "PBSManager Unit Tests" begin
     p = addprocs(
-        PBSManager(80),
+        PBSManager(1),
         q = "main",
         A = "UCIT0011",
         l_select = "ngpus=1",

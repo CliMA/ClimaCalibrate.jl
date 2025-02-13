@@ -2,7 +2,13 @@ using ClimaCalibrate, Distributed
 
 if nworkers() == 1
     if get_backend() == ClimaCalibrate.DerechoBackend
-        addprocs(PBSManager(5), q = "preempt", A = "UCIT0011", l_select = "1:ncpus=1:ngpus=1", l_walltime = "00:30:00" )
+        addprocs(
+            PBSManager(5),
+            q = "preempt",
+            A = "UCIT0011",
+            l_select = "1:ncpus=1:ngpus=1",
+            l_walltime = "00:30:00",
+        )
     else
         addprocs(SlurmManager(5))
     end

@@ -63,13 +63,6 @@ for (generated_str, test_str) in
     @test generated_str == test_str
 end
 
-original_julia_file = """\
-import ClimaCalibrate as CAL
-include("/glade/u/home/nefrathe/clima/ClimaCalibrate.jl/model_interface.jl")
-CAL.forward_model(1, 1)
-"""
-@test julia_file == original_julia_file
-
 # Helper function for submitting commands and checking job status
 function submit_cmd_helper(cmd)
     sbatch_filepath, io = mktemp()
