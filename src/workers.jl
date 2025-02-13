@@ -1,7 +1,5 @@
 using Distributed
 using Logging
-import LoggingExtras
-import EnsembleKalmanProcesses as EKP
 
 export SlurmManager, PBSManager, default_worker_pool, set_worker_loggers
 
