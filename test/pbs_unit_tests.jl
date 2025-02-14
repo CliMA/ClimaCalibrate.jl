@@ -55,21 +55,13 @@ module list
 export JULIA_MPI_HAS_CUDA=true
 export CLIMACOMMS_DEVICE="CUDA"
 export CLIMACOMMS_CONTEXT="MPI"
-\$MPITRAMPOLINE_MPIEXEC -n 4 -ppn 2 set_gpu_rank julia --project=exp/dir file.jl
+\$MPITRAMPOLINE_MPIEXEC -n 4 -ppn 2 set_gpu_rank julia --project=exp/dir test/iteration_001/member_001/model_run.jl
 """
 
 for (generated_str, test_str) in
-    zip(split(pbs_file("file.jl"), "\n"), split(expected_pbs_contents, "\n"))
+    zip(split(pbs_file, "\n"), split(expected_pbs_contents, "\n"))
     @test generated_str == test_str
 end
-
-
-original_julia_file = """\
-import ClimaCalibrate as CAL
-include("/glade/u/home/nefrathe/clima/ClimaCalibrate.jl/model_interface.jl")
-CAL.forward_model(1, 1)
-"""
-@test julia_file == original_julia_file
 
 # Helper function for submitting commands and checking job status
 function submit_cmd_helper(cmd)
@@ -86,9 +78,10 @@ test_cmd = """
 #!/bin/bash
 #PBS -j oe
 #PBS -A UCIT0011
-#PBS -q develop
+#PBS -q preempt
 #PBS -l walltime=00:00:12
-#PBS -l select=1:ncpus=1
+#PBS -l select=1:ncpus=1:ngpus=1
+# The GPU isn't needed, but we are currently overspent on the CPU queue
 
 sleep 10
 """

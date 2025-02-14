@@ -1,7 +1,9 @@
 agents:
-  queue: new-central
-  modules: climacommon/2024_10_09
-   
+  queue: derecho
+  modules: climacommon
+  pbs_q: preempt
+  pbs_l_select: "1:ngpus=1:ncpus=1" # We are out of CPU-only hours...
+
 env:
   OPENBLAS_NUM_THREADS: 1
   SLURM_KILL_BAD_EXIT: 1
@@ -25,15 +27,9 @@ steps:
     - rm -rf output/surface_fluxes_perfect_model/*
     - julia --project=experiments/surface_fluxes_perfect_model test/hpc_backend.jl
     artifact_paths: output/surface_fluxes_perfect_model/*
-    agents:
-      slurm_ntasks: 5
-      slurm_cpus_per_task: 1
 
-  - label: "Slurm job controller unit tests"
-    command: julia --project=experiments/surface_fluxes_perfect_model test/slurm_unit_tests.jl
+  - label: "PBS job controller unit tests"
+    command: julia --project=experiments/surface_fluxes_perfect_model test/pbs_unit_tests.jl
 
-  - label: "SlurmManager tests"
-    command: julia --project=experiments/surface_fluxes_perfect_model test/slurm_manager_unit_tests.jl
-    agents:
-      slurm_ntasks: 2
-      slurm_cpus_per_task: 1
+  - label: "PBSManager tests"
+    command: julia --project=experiments/surface_fluxes_perfect_model test/pbs_manager_unit_tests.jl
