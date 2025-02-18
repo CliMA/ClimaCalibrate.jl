@@ -5,7 +5,8 @@ export SlurmManager, PBSManager, default_worker_pool, set_worker_loggers
 
 # Set the time limit for the Julia worker to be contacted by the main process, default = "60.0s"
 # https://docs.julialang.org/en/v1/manual/environment-variables/#JULIA_WORKER_TIMEOUT
-ENV["JULIA_WORKER_TIMEOUT"] = "300.0"
+worker_timeout() = "300.0"
+ENV["JULIA_WORKER_TIMEOUT"] = worker_timeout()
 
 default_worker_pool() = WorkerPool(workers())
 
@@ -13,8 +14,8 @@ function run_worker_iteration(
     iter,
     ensemble_size,
     output_dir;
-    worker_pool,
-    failure_rate,
+    worker_pool = default_worker_pool(),
+    failure_rate = DEFAULT_FAILURE_RATE,
 )
     # Create a channel to collect results
     results = Channel{Any}(ensemble_size)
@@ -201,6 +202,7 @@ function propagate_env_vars!(env)
     if project !== nothing && get(env, "JULIA_PROJECT", nothing) === nothing
         env["JULIA_PROJECT"] = project
     end
+    env["WORKER_TIMEOUT"] = worker_timeout()
 end
 
 # Poll a single file for a single worker, used for SlurmManager
