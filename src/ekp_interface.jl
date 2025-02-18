@@ -81,6 +81,14 @@ function ExperimentConfig(filepath::AbstractString; kwargs...)
 end
 
 """
+    load_ekp_struct(output_dir, iteration)
+
+Return the EnsembleKalmanProcess struct for a completed iteration.
+"""
+load_ekp_struct(output_dir, iteration) =
+    JLD2.load_object(ekp_path(output_dir, iteration))
+
+"""
     path_to_ensemble_member(output_dir, iteration, member)
 
 Return the path to an ensemble member's directory for a given iteration and member number.
@@ -89,6 +97,8 @@ path_to_ensemble_member(output_dir, iteration, member) =
     TI.path_to_ensemble_member(output_dir, iteration, member)
 
 const DEFAULT_PARAMETER_FILE = "parameters.toml"
+const DEFAULT_EKP_FILE = "eki_file.jld2"
+const DEFAULT_G_ENSEMBLE = "G_ensemble.jld2"
 """
     parameter_path(output_dir, iteration, member)
 
@@ -98,15 +108,6 @@ parameter_path(output_dir, iteration, member) = joinpath(
     path_to_ensemble_member(output_dir, iteration, member),
     DEFAULT_PARAMETER_FILE,
 )
-
-const DEFAULT_EKP_FILE = "eki_file.jld2"
-"""
-    load_ekp_struct(output_dir, iteration)
-
-Return the EnsembleKalmanProcess struct for a completed iteration.
-"""
-load_ekp_struct(output_dir, iteration) =
-    JLD2.load_object(ekp_path(output_dir, iteration))
 
 """
     ekp_path(output_dir, iteration)
@@ -133,6 +134,9 @@ Return the path to the directory for a given iteration within the specified outp
 """
 path_to_iteration(output_dir, iteration) =
     joinpath(output_dir, join(["iteration", lpad(iteration, 3, "0")], "_"))
+
+path_to_G_ensemble(output_dir, iteration) =
+    joinpath(path_to_iteration(output_dir, iteration), DEFAULT_G_ENSEMBLE)
 
 """
     get_prior(param_dict::AbstractDict; names = nothing)
@@ -178,7 +182,7 @@ save_G_ensemble(config::ExperimentConfig, iteration, G_ensemble) =
 
 function save_G_ensemble(output_dir::AbstractString, iteration, G_ensemble)
     iter_path = path_to_iteration(output_dir, iteration)
-    JLD2.save_object(joinpath(iter_path, "G_ensemble.jld2"), G_ensemble)
+    JLD2.save_object(path_to_G_ensemble(output_dir, iteration), G_ensemble)
     return G_ensemble
 end
 
@@ -345,9 +349,10 @@ update_ensemble(config_file::AbstractString, iteration) =
 update_ensemble(configuration::ExperimentConfig, iteration) =
     update_ensemble(configuration.output_dir, iteration, configuration.prior)
 
+# TODO: test that this is working as intended
 function update_ensemble(output_dir::AbstractString, iteration, prior)
     iter_path = path_to_iteration(output_dir, iteration)
-    G_ens = JLD2.load_object(joinpath(iter_path, "G_ensemble.jld2"))
+    G_ens = JLD2.load_object(path_to_G_ensemble(output_dir, iteration))
 
     ekp = load_ekp_struct(output_dir, iteration)
     update_ensemble!(ekp, G_ens, output_dir, iteration, prior)
@@ -363,4 +368,19 @@ function update_ensemble!(ekp, G_ens, output_dir, iteration, prior)
     terminate = EKP.update_ensemble!(ekp, G_ens)
     save_eki_and_parameters(ekp, output_dir, iteration + 1, prior)
     return terminate
+end
+
+"""
+    last_completed_iteration(output_dir)
+
+Determines the last completed iteration given an `output_dir` containing a calibration run.
+
+If no iteration has been completed yet, return -1.
+"""
+function last_completed_iteration(output_dir)
+    last_completed_iter = -1
+    while isfile(path_to_G_ensemble(output_dir, last_completed_iter + 1))
+        last_completed_iter += 1
+    end
+    return last_completed_iter
 end

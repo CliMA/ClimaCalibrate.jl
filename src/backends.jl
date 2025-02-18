@@ -204,7 +204,8 @@ function calibrate(
         @error "Single ensemble member has errored. See stacktrace" exception =
             (e, catch_backtrace())
 
-    for iter in 0:(n_iterations - 1)
+    first_iter = last_completed_iteration(output_dir) + 1
+    for iter in first_iter:(n_iterations - 1)
         errors = 0
         @info "Running iteration $iter"
         foreach(1:ensemble_size) do m
@@ -221,6 +222,7 @@ function calibrate(
         end
         G_ensemble = observation_map(iter)
         save_G_ensemble(output_dir, iter, G_ensemble)
+        ekp = load_ekp_struct(output_dir, iter)
         terminate = update_ensemble!(ekp, G_ensemble, output_dir, iter, prior)
         !isnothing(terminate) && break
     end
@@ -315,7 +317,10 @@ function calibrate(
     worker_pool = default_worker_pool(),
 )
     ekp = initialize(ekp, prior, output_dir)
-    for iter in 0:(n_iterations - 1)
+    first_iter = last_completed_iteration(output_dir) + 1
+
+    for iter in first_iter:(n_iterations - 1)
+        @info "Running Iteration $iter"
         (; time) = @timed run_worker_iteration(
             iter,
             ensemble_size,
@@ -327,6 +332,7 @@ function calibrate(
         # Process results
         G_ensemble = observation_map(iter)
         save_G_ensemble(output_dir, iter, G_ensemble)
+        ekp = load_ekp_struct(output_dir, iter)
         terminate = update_ensemble!(ekp, G_ensemble, output_dir, iter, prior)
         !isnothing(terminate) && break
     end
@@ -417,13 +423,15 @@ function calibrate(
     @info "Initializing calibration" n_iterations ensemble_size output_dir
     ekp = initialize(ekp, prior, output_dir)
     module_load_str = module_load_string(b)
-    for i in 0:(n_iterations - 1)
-        @info "Iteration $i"
+
+    first_iter = last_completed_iteration(output_dir) + 1
+    for iter in first_iter:(n_iterations - 1)
+        @info "Iteration $iter"
         jobids = map(1:ensemble_size) do member
             @info "Running ensemble member $member"
             model_run(
                 b,
-                i,
+                iter,
                 member,
                 output_dir,
                 experiment_dir,
@@ -436,7 +444,7 @@ function calibrate(
         wait_for_jobs(
             jobids,
             output_dir,
-            i,
+            iter,
             experiment_dir,
             model_interface,
             module_load_str;
@@ -444,10 +452,11 @@ function calibrate(
             verbose,
             reruns = 0,
         )
-        @info "Completed iteration $i, updating ensemble"
-        G_ensemble = observation_map(i)
-        save_G_ensemble(output_dir, i, G_ensemble)
-        terminate = update_ensemble!(ekp, G_ensemble, output_dir, i, prior)
+        @info "Completed iteration $iter, updating ensemble"
+        G_ensemble = observation_map(iter)
+        save_G_ensemble(output_dir, iter, G_ensemble)
+        ekp = load_ekp_struct(output_dir, iter)
+        terminate = update_ensemble!(ekp, G_ensemble, output_dir, iter, prior)
         !isnothing(terminate) && break
     end
     return ekp

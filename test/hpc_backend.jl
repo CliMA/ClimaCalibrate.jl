@@ -23,7 +23,27 @@ if get_backend() == DerechoBackend
     hpc_kwargs[:queue] = "preempt"
     hpc_kwargs[:gpus_per_task] = 1
 end
+
+@testset "Restarts" begin
+    initialize(ensemble_size, observation, variance, prior, output_dir)
+
+    last_iter = ClimaCalibrate.last_completed_iteration(output_dir)
+    @test last_iter == -1
+    ClimaCalibrate.run_worker_iteration(
+        last_iter + 1,
+        ensemble_size,
+        output_dir,
+    )
+    G_ensemble = observation_map(last_iter + 1)
+    save_G_ensemble(output_dir, last_iter + 1, G_ensemble)
+    update_ensemble(output_dir, last_iter + 1, prior)
+
+    @test ClimaCalibrate.last_completed_iteration(output_dir) == 0
+end
+
 eki = calibrate(experiment_config; model_interface, hpc_kwargs, verbose = true)
+
+@test ClimaCalibrate.last_completed_iteration(output_dir) == n_iterations - 1
 test_sf_calibration_output(eki, prior, experiment_config.observations)
 
 # Remove previous output - this is not necessary but safe for tests
