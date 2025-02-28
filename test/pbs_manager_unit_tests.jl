@@ -50,9 +50,8 @@ end
     @test ClimaCalibrate.map_remotecall_fetch(+, 2, 3) == fill(5, length(p))
 
     # Test specified workers list
-    @test length(
-        ClimaCalibrate.map_remotecall_fetch(myid; workers = workers()[1:2]),
-    ) == 2
+    @test length(ClimaCalibrate.map_remotecall_fetch(myid; workers = p[1:2])) ==
+          2
 
     # Test with more complex data structure
     d = Dict("a" => 1, "b" => 2)

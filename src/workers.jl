@@ -82,7 +82,7 @@ function Distributed.manage(
     id::Integer,
     config::WorkerConfig,
     op::Symbol,
-) 
+)
     if op == :register
         Distributed.remotecall_eval(Main, id, :(using ClimaCalibrate, Logging))
         remotecall(id) do
@@ -115,17 +115,11 @@ function Distributed.launch(
     output_path = get(params, :o, get(params, :output, default_output))
 
     ntasks = sm.ntasks
-    srun_cmd = `srun -J $jobname -n $ntasks -D $exehome $worker_args -o $default_output -- $exename $exeflags $(worker_cookie_arg())`
+    srun_cmd = `srun -J $jobname -n $ntasks -D $exehome $worker_args -o $output_path -- $exename $exeflags $(worker_cookie_arg())`
     @info "Starting SLURM job $jobname: $srun_cmd"
     pid = open(addenv(srun_cmd, env))
 
-    poll_file_for_worker_startup(
-        output_path,
-        ntasks,
-        pid,
-        instances_arr,
-        c
-    )
+    poll_file_for_worker_startup(output_path, ntasks, pid, instances_arr, c)
 end
 
 """
@@ -142,6 +136,9 @@ function parse_slurm_worker_params(params::Dict)
     worker_args = []
 
     for (k, v) in worker_params
+        if string(k) == "o" || string(k) == "output"
+            continue
+        end
         if length(string(k)) == 1
             push!(worker_args, "-$k")
             if length(v) > 0
@@ -205,6 +202,13 @@ function poll_file_for_worker_startup(
     launched_workers = 0
 
     for retry_delay in push!(collect(retry_delays), 0)
+        if process_exited(pid)
+            error(
+                """Worker launch process exited with code $(pid.exitcode).
+          Please check the terminal for error messages from the job scheduler.""",
+            )
+        end
+
         t_waited = round(Int, time() - t_start)
 
         # Wait for output log to be created and populated, then parse
@@ -325,13 +329,7 @@ function Distributed.launch(
     @info "Starting PBS job $jobname: $qsub_cmd"
     pid = open(addenv(qsub_cmd, env))
 
-    poll_file_for_worker_startup(
-        output_path,
-        ntasks,
-        pid,
-        instances_arr,
-        c,
-    )
+    poll_file_for_worker_startup(output_path, ntasks, pid, instances_arr, c)
 end
 
 """
