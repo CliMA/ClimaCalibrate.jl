@@ -202,7 +202,7 @@ function poll_file_for_worker_startup(
     launched_workers = 0
 
     for retry_delay in push!(collect(retry_delays), 0)
-        if process_exited(pid)
+        if process_exited(pid) && pid.exitcode != 0
             error(
                 """Worker launch process exited with code $(pid.exitcode).
           Please check the terminal for error messages from the job scheduler.""",
