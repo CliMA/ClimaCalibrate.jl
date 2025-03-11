@@ -52,31 +52,38 @@ end
 worker_cookie_arg() = `--worker=$(worker_cookie())`
 
 """
-    SlurmManager(ntasks=get(ENV, "SLURM_NTASKS", 1))
+    SlurmManager(; ntasks=get(ENV, "SLURM_NTASKS", 1), expr=:())
 
-The ClusterManager for Slurm clusters, taking in the number of tasks to request with `srun`.
+A ClusterManager implementation for Slurm job scheduling systems. Workers inherit the current Julia environment by default.
 
-To execute the `srun` command, run `addprocs(SlurmManager(ntasks))`
+# Arguments
+- `ntasks::Integer`: Number of tasks to allocate via `srun` (defaults to SLURM_NTASKS environment variable or 1)
+- `expr::Expr`: Expression to evaluate on each worker at initialization
 
-Keyword arguments can be passed to `srun`: `addprocs(SlurmManager(ntasks), gpus_per_task=1)`
+# Usage
+```julia
+# Add workers using default settings
+addprocs(SlurmManager(ntasks=4))
 
-By default the workers will inherit the running Julia environment.
+# Pass additional arguments to `srun`
+addprocs(SlurmManager(ntasks=4), gpus_per_task=1)
 
-To run a calibration, call `calibrate(WorkerBackend, ...)`
-
-To run functions on a worker, call `remotecall(func, worker_id, args...)`
+# Related functions
+- `calibrate(WorkerBackend, ...)`: Perform calibration using workers
+- `remotecall(func, worker_id, args...)`: Execute functions on specific workers
 """
 struct SlurmManager <: ClusterManager
     ntasks::Integer
+    expr::Expr
 
     function SlurmManager(
-        ntasks::Integer = parse(Int, get(ENV, "SLURM_NTASKS", "1")),
+        ntasks = parse(Int, get(ENV, "SLURM_NTASKS", "1"));
+        expr = :()
     )
-        new(ntasks)
+        new(ntasks, expr)
     end
 end
 
-# This function needs to exist
 function Distributed.manage(
     manager::SlurmManager,
     id::Integer,
@@ -84,10 +91,23 @@ function Distributed.manage(
     op::Symbol,
 )
     if op == :register
-        Distributed.remotecall_eval(Main, id, :(using ClimaCalibrate, Logging))
-        remotecall(id) do
-            ClimaCalibrate.set_worker_logger()
-        end
+        set_worker_logger(id)
+        evaluate_initial_expression(id, manager.expr)
+    end
+end
+
+function evaluate_initial_expression(id, expr)
+    try
+        Distributed.remotecall_eval(Main, id, expr)
+    catch e
+        @error "Initial worker expression errored:" exception = e
+    end
+end
+
+function set_worker_logger(id)
+    Distributed.remotecall_eval(Main, id, :(using ClimaCalibrate, Logging))
+    remotecall(id) do
+        ClimaCalibrate.set_worker_logger()
     end
 end
 
@@ -193,53 +213,45 @@ function poll_file_for_worker_startup(
     c,
 )
     t_start = time()
-    # This Regex will match the worker's socket and IP address
-    # Example: julia_worker:9015#169.254.3.1
+    # This regex will match the worker's socket, ex: julia_worker:9015#169.254.3.1
     julia_worker_regex = r"([\w]+):([\d]+)#(\d{1,3}.\d{1,3}.\d{1,3}.\d{1,3})"
-    worker_launch_details = nothing
-    retry_delays = ExponentialBackOff(120, 1.0, 60.0, 2.0, 0.1)
+    retry_delays = ExponentialBackOff(720, 1.0, 30.0, 1.5, 0.1)
     t_waited = nothing
-    launched_workers = 0
+    registered_workers = Set{String}()
 
-    for retry_delay in push!(collect(retry_delays), 0)
-        if process_exited(pid)
+    for retry_delay in [0., retry_delays...]
+        if process_exited(pid) && pid.exitcode != 0
             error(
                 """Worker launch process exited with code $(pid.exitcode).
           Please check the terminal for error messages from the job scheduler.""",
             )
         end
-
         t_waited = round(Int, time() - t_start)
-
         # Wait for output log to be created and populated, then parse
         if isfile(job_output_file)
             if filesize(job_output_file) > 0
                 open(job_output_file) do f
                     for line in eachline(f)
                         re_match = match(julia_worker_regex, line)
-                        if !isnothing(re_match)
-                            worker_launch_details = re_match
-                            config = worker_config(worker_launch_details, pid)
-                            if !(config in instances_arr)
-                                launched_workers += 1
-                                push!(instances_arr, config)
-                                @info "Worker ready after $(t_waited)s on host $(config.host), port $(config.port)"
-                                notify(c)
-                            end
+                        if !isnothing(re_match) && !(line in registered_workers)
+                            config = worker_config(re_match, pid)
+                            push!(registered_workers, line)
+                            push!(instances_arr, config)
+                            @info "Worker ready after $(t_waited)s on host $(config.host), port $(config.port)"
+                            notify(c)
                         end
                     end
                 end
             end
-            launched_workers == ntasks && break
+            length(registered_workers) == ntasks && break
         else
             @info "Worker launch (after $t_waited s): No output file \"$job_output_file\" yet"
         end
-
         # Sleep for some time to limit resource usage while waiting for the job to start
         sleep(retry_delay)
     end
 
-    if launched_workers != ntasks
+    if length(registered_workers) != ntasks
         throw(
             ErrorException(
                 "Timeout after $t_waited s while waiting for worker(s) to get ready.",
@@ -260,23 +272,52 @@ end
 # TODO: Add examples of usage for SlurmManager and PBSManager in the docstrings
 # Things like `addprocs(SlurmManager(2), t = "00:10:00",ngpus=4)`, then `remotecall` or `calibrate`
 """
-    PBSManager(ntasks)
+    PBSManager(ntasks; expr=:())
 
-The ClusterManager for PBS/Torque clusters, taking in the number of tasks to request with `qsub`.
+A ClusterManager implementation for PBS/Torque job scheduling systems.
 
-To execute the `qsub` command, run `addprocs(PBSManager(ntasks))`. 
-Unlike the [`SlurmManager`](@ref), this will not nest scheduled jobs, but will acquire new resources.
+# Arguments
+- `ntasks::Integer`: Number of tasks to request via `qsub`
+- `expr::Expr`: Expression to evaluate on each worker at initialization
 
-Keyword arguments can be passed to `qsub`: `addprocs(PBSManager(ntasks), nodes=2)`
+# Usage
+```julia
+# Add workers using default settings
+addprocs(PBSManager(4))
 
-By default, the workers will inherit the running Julia environment.
+# Pass additional arguments to `qsub`
+addprocs(PBSManager(4), nodes=2)
 
-To run a calibration, call `calibrate(WorkerBackend, ...)`
+# Use resource list options with l_ prefix
+addprocs(PBSManager(4), l_walltime="00:10:00", l_select="2:ncpus=4:mem=8gb")
 
-To run functions on a worker, call `remotecall(func, worker_id, args...)`
+# Specify initialization expression
+addprocs(PBSManager(4, expr=:(using MyPackage)))
+```
+
+Unlike the [`SlurmManager`](@ref), this will not nest scheduled jobs but will acquire new resources.
+Workers inherit the current Julia environment by default.
+
+# Resource Specification
+- Parameters with `l_` prefix are passed to qsub's `-l` option (e.g., `l_walltime="00:10:00"` becomes `-l walltime=00:10:00`)
+- Standard PBS/Torque options can be passed directly as keyword arguments
+
+# Related Functions
+- `calibrate(WorkerBackend, ...)`: Perform worker calibration
+- `remotecall(func, worker_id, args...)`: Execute functions on specific workers
+
+See also: [`addprocs`](@ref), [`Distributed`](@ref), [`SlurmManager`](@ref)
 """
 struct PBSManager <: ClusterManager
     ntasks::Integer
+    expr::Expr
+
+    function PBSManager(
+        ntasks;
+        expr = :()
+    )
+        new(ntasks, expr)
+    end
 end
 
 function Distributed.manage(
@@ -288,10 +329,8 @@ function Distributed.manage(
     if op == :register
         working_dir = pwd()
         remotecall(cd, id, working_dir)
-        Distributed.remotecall_eval(Main, id, :(using ClimaCalibrate, Logging))
-        remotecall(id) do
-            ClimaCalibrate.set_worker_logger()
-        end
+        set_worker_logger(id)
+        evaluate_initial_expression(id, manager.expr)
     end
 end
 
@@ -305,7 +344,6 @@ function Distributed.launch(
     exehome = params[:dir]
     exename = params[:exename]
     exeflags = params[:exeflags]
-    # TODO: figure out why the project is not being passed, this is not needed for SlurmManager
     exeflags = exeflags == `` ? `--project=$(project_dir())` : exeflags
     env = Dict{String, String}(params[:env])
     propagate_env_vars!(env)
