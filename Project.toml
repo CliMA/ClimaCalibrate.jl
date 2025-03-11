@@ -1,7 +1,7 @@
 name = "ClimaCalibrate"
 uuid = "4347a170-ebd6-470c-89d3-5c705c0cacc2"
 authors = ["Climate Modeling Alliance"]
-version = "0.0.11"
+version = "0.0.12"
 
 [deps]
 Distributed = "8ba89e20-285c-5b6f-9357-94700520ee1b"

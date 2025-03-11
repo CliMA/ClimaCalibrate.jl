@@ -1,7 +1,7 @@
 agents:
   queue: derecho
   modules: climacommon
-  pbs_q: preempt
+  pbs_q: main
   pbs_l_select: "1:ngpus=1:ncpus=1" # We are out of CPU-only hours...
 
 env:
