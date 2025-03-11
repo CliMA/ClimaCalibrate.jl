@@ -2,7 +2,13 @@ using Test, ClimaCalibrate, Distributed, Logging
 
 @testset "SlurmManager Unit Tests" begin
     out_file = "my_slurm_job.out"
-    p = addprocs(SlurmManager(1); o = out_file)
+    initial_expr = quote
+        @info "Running worker $(myid())"
+        using Test
+        using LinearAlgebra
+    end
+    p = addprocs(SlurmManager(1; expr = initial_expr); o = out_file)
+
     @test nprocs() == 2
     @test workers() == p
     @test fetch(@spawnat :any myid()) == p[1]
