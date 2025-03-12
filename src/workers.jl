@@ -1,42 +1,50 @@
 using Distributed
 using Logging
 
-export SlurmManager, PBSManager, default_worker_pool, set_worker_loggers
+export SlurmManager, PBSManager, set_worker_loggers
 
-# Set the time limit for the Julia worker to be contacted by the main process, default = "60.0s"
-# https://docs.julialang.org/en/v1/manual/environment-variables/#JULIA_WORKER_TIMEOUT
-worker_timeout() = "300.0"
-ENV["JULIA_WORKER_TIMEOUT"] = worker_timeout()
-
-default_worker_pool() = WorkerPool(workers())
+get_worker_pool() = workers() == [1] ? WorkerPool() : default_worker_pool()
 
 function run_worker_iteration(
     iter,
     ensemble_size,
     output_dir;
-    worker_pool = default_worker_pool(),
     failure_rate = DEFAULT_FAILURE_RATE,
 )
-    # Create a channel to collect results
-    results = Channel{Any}(ensemble_size)
     nfailures = 0
-    @sync begin
-        for m in 1:(ensemble_size)
-            @async begin
-                worker = take!(worker_pool)
-                @info "Running particle $m on worker $worker"
-                try
-                    remotecall_wait(forward_model, worker, iter, m)
-                catch e
-                    @warn "Error running member $m" exception = e
-                    nfailures += 1
-                finally
-                    # Always return worker to pool
-                    put!(worker_pool, worker)
-                end
-            end
+    worker_pool = get_worker_pool()
+    all_known_workers = get_worker_pool()
+
+    work_to_do = map(1:ensemble_size) do m
+        (w) -> begin
+            @info "Running particle $m on worker $w"
+            remotecall_wait(forward_model, w, iter, m)
         end
     end
+
+    @sync while !isempty(work_to_do)
+        # Add new workers to worker_pool
+        all_workers = get_worker_pool()
+        new_workers = setdiff(all_workers.workers, all_known_workers.workers)
+        foreach(x -> push!(worker_pool, x), new_workers)
+        all_known_workers = all_workers
+        if !isempty(worker_pool.workers)
+            worker = take!(worker_pool)
+            run_fwd_model = pop!(work_to_do)
+            @async try
+                run_fwd_model(worker)
+            catch e
+                @warn "Error running on worker $worker" exception = e
+                nfailures += 1
+            finally
+                push!(worker_pool, worker)
+            end
+        else
+            println("no workers available")
+            sleep(10) # Wait for workers to become available
+        end
+    end
+
     iter_failure_rate = nfailures / ensemble_size
     if iter_failure_rate > failure_rate
         error(
@@ -78,7 +86,7 @@ struct SlurmManager <: ClusterManager
 
     function SlurmManager(
         ntasks = parse(Int, get(ENV, "SLURM_NTASKS", "1"));
-        expr = :()
+        expr = :(),
     )
         new(ntasks, expr)
     end
@@ -219,7 +227,7 @@ function poll_file_for_worker_startup(
     t_waited = nothing
     registered_workers = Set{String}()
 
-    for retry_delay in [0., retry_delays...]
+    for retry_delay in [0.0, retry_delays...]
         if process_exited(pid) && pid.exitcode != 0
             error(
                 """Worker launch process exited with code $(pid.exitcode).
@@ -312,10 +320,7 @@ struct PBSManager <: ClusterManager
     ntasks::Integer
     expr::Expr
 
-    function PBSManager(
-        ntasks;
-        expr = :()
-    )
+    function PBSManager(ntasks; expr = :())
         new(ntasks, expr)
     end
 end
