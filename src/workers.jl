@@ -193,53 +193,45 @@ function poll_file_for_worker_startup(
     c,
 )
     t_start = time()
-    # This Regex will match the worker's socket and IP address
-    # Example: julia_worker:9015#169.254.3.1
+    # This regex will match the worker's socket, ex: julia_worker:9015#169.254.3.1
     julia_worker_regex = r"([\w]+):([\d]+)#(\d{1,3}.\d{1,3}.\d{1,3}.\d{1,3})"
-    worker_launch_details = nothing
-    retry_delays = ExponentialBackOff(120, 1.0, 60.0, 2.0, 0.1)
+    retry_delays = ExponentialBackOff(720, 1.0, 30.0, 1.5, 0.1)
     t_waited = nothing
-    launched_workers = 0
+    registered_workers = Set{String}()
 
-    for retry_delay in push!(collect(retry_delays), 0)
+    for retry_delay in [0.0, retry_delays...]
         if process_exited(pid) && pid.exitcode != 0
             error(
                 """Worker launch process exited with code $(pid.exitcode).
           Please check the terminal for error messages from the job scheduler.""",
             )
         end
-
         t_waited = round(Int, time() - t_start)
-
         # Wait for output log to be created and populated, then parse
         if isfile(job_output_file)
             if filesize(job_output_file) > 0
                 open(job_output_file) do f
                     for line in eachline(f)
                         re_match = match(julia_worker_regex, line)
-                        if !isnothing(re_match)
-                            worker_launch_details = re_match
-                            config = worker_config(worker_launch_details, pid)
-                            if !(config in instances_arr)
-                                launched_workers += 1
-                                push!(instances_arr, config)
-                                @info "Worker ready after $(t_waited)s on host $(config.host), port $(config.port)"
-                                notify(c)
-                            end
+                        if !isnothing(re_match) && !(line in registered_workers)
+                            config = worker_config(re_match, pid)
+                            push!(registered_workers, line)
+                            push!(instances_arr, config)
+                            @info "Worker ready after $(t_waited)s on host $(config.host), port $(config.port)"
+                            notify(c)
                         end
                     end
                 end
             end
-            launched_workers == ntasks && break
+            length(registered_workers) == ntasks && break
         else
             @info "Worker launch (after $t_waited s): No output file \"$job_output_file\" yet"
         end
-
         # Sleep for some time to limit resource usage while waiting for the job to start
         sleep(retry_delay)
     end
 
-    if launched_workers != ntasks
+    if length(registered_workers) != ntasks
         throw(
             ErrorException(
                 "Timeout after $t_waited s while waiting for worker(s) to get ready.",
