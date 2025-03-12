@@ -9,17 +9,29 @@ include(
     ),
 )
 
+# Expression to run on worker initialization, used instead of @everywhere
+expr = quote
+    include(
+        joinpath(
+            pkgdir(ClimaCalibrate),
+            "experiments",
+            "surface_fluxes_perfect_model",
+            "model_interface.jl",
+        ),
+    )
+end
+
 if nworkers() == 1
     if get_backend() == ClimaCalibrate.DerechoBackend
-        addprocs(
-            PBSManager(5),
+        @async addprocs(
+            PBSManager(5; expr),
             q = "preempt",
             A = "UCIT0011",
             l_select = "1:ncpus=1:ngpus=1",
             l_walltime = "00:30:00",
         )
     else
-        addprocs(SlurmManager(5))
+        @async addprocs(SlurmManager(5; expr))
     end
 end
 
