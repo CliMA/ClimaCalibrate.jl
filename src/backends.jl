@@ -257,7 +257,6 @@ function calibrate(
     b::Type{WorkerBackend},
     config::ExperimentConfig;
     failure_rate = DEFAULT_FAILURE_RATE,
-    worker_pool = default_worker_pool(),
     ekp_kwargs...,
 )
     (; ensemble_size, n_iterations, observations, noise, prior, output_dir) =
@@ -271,7 +270,6 @@ function calibrate(
         prior,
         output_dir;
         failure_rate,
-        worker_pool,
         ekp_kwargs...,
     )
 end
@@ -285,7 +283,6 @@ function calibrate(
     prior,
     output_dir;
     failure_rate = DEFAULT_FAILURE_RATE,
-    worker_pool = default_worker_pool(),
     ekp_kwargs...,
 )
     eki = ekp_constructor(
@@ -295,15 +292,7 @@ function calibrate(
         noise;
         ekp_kwargs...,
     )
-    return calibrate(
-        b,
-        eki,
-        ensemble_size,
-        n_iterations,
-        prior,
-        output_dir;
-        worker_pool,
-    )
+    return calibrate(b, eki, ensemble_size, n_iterations, prior, output_dir;)
 end
 
 function calibrate(
@@ -314,7 +303,6 @@ function calibrate(
     prior,
     output_dir;
     failure_rate = DEFAULT_FAILURE_RATE,
-    worker_pool = default_worker_pool(),
 )
     ekp = initialize(ekp, prior, output_dir)
     first_iter = last_completed_iteration(output_dir) + 1
@@ -325,7 +313,6 @@ function calibrate(
             iter,
             ensemble_size,
             output_dir;
-            worker_pool,
             failure_rate,
         )
         @info "Iteration $iter time: $time"
