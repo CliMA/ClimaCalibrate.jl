@@ -167,7 +167,8 @@ observations .= process_member_data(SimDir(simulation.output_dir))
 # The simplest backend is the `JuliaBackend`, which runs all ensemble members sequentially and does not require `Distributed.jl`.
 # For more information, see the [`Backends`](https://clima.github.io/ClimaCalibrate.jl/dev/backends/) page.
 eki = CAL.calibrate(
-    CAL.WorkerBackend,
+    CAL.JuliaBackend,
+    #md # CAL.WorkerBackend # We can't use this backend in Literate.jl
     ensemble_size,
     n_iterations,
     observations,

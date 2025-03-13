@@ -292,7 +292,7 @@ function calibrate(
         noise;
         ekp_kwargs...,
     )
-    return calibrate(b, eki, n_iterations, prior, output_dir; worker_pool)
+    return calibrate(b, eki, n_iterations, prior, output_dir)
 end
 
 function calibrate(
