@@ -3,6 +3,8 @@ using Logging
 
 export SlurmManager, PBSManager, set_worker_loggers
 
+worker_timeout() = parse(Float64, get(ENV, "JULIA_WORKER_TIMEOUT", "300.0"))
+
 get_worker_pool() = workers() == [1] ? WorkerPool() : default_worker_pool()
 
 function run_worker_iteration(
@@ -21,7 +23,7 @@ function run_worker_iteration(
             remotecall_wait(forward_model, w, iter, m)
         end
     end
-
+    isempty(all_known_workers.workers) && @info "No workers currently available"
     @sync while !isempty(work_to_do)
         # Add new workers to worker_pool
         all_workers = get_worker_pool()
@@ -40,7 +42,7 @@ function run_worker_iteration(
                 push!(worker_pool, worker)
             end
         else
-            println("no workers available")
+            @debug "no workers available"
             sleep(10) # Wait for workers to become available
         end
     end
@@ -100,7 +102,6 @@ function Distributed.manage(
 )
     if op == :register
         set_worker_logger(id)
-        evaluate_initial_expression(id, manager.expr)
     end
 end
 
@@ -477,4 +478,129 @@ function set_worker_loggers(workers = workers())
             ClimaCalibrate.set_worker_logger()
         end
     end
+end
+
+# Copied from Distributed.jl in order to evaluate the manager's expression on worker initialization
+function Distributed.create_worker(manager::Union{SlurmManager, PBSManager}, wconfig)
+    # only node 1 can add new nodes, since nobody else has the full list of address:port
+    @assert Distributed.LPROC.id == 1
+    timeout = worker_timeout()
+
+    # initiate a connect. Does not wait for connection completion in case of TCP.
+    w = Distributed.Worker()
+    local r_s, w_s
+    try
+        (r_s, w_s) = Distributed.connect(manager, w.id, wconfig)
+    catch ex
+        try
+            Distributed.deregister_worker(w.id)
+            kill(manager, w.id, wconfig)
+        finally
+            rethrow(ex)
+        end
+    end
+
+    w = Distributed.Worker(w.id, r_s, w_s, manager; config=wconfig)
+    # install a finalizer to perform cleanup if necessary
+    finalizer(w) do w
+        if myid() == 1
+            Distributed.manage(w.manager, w.id, w.config, :finalize)
+        end
+    end
+
+    # set when the new worker has finished connections with all other workers
+    ntfy_oid = Distributed.RRID()
+    rr_ntfy_join = Distributed.lookup_ref(ntfy_oid)
+    rr_ntfy_join.waitingfor = myid()
+
+    # Start a new task to handle inbound messages from connected worker in master.
+    # Also calls `wait_connected` on TCP streams.
+    Distributed.process_messages(w.r_stream, w.w_stream, false)
+
+    # send address information of all workers to the new worker.
+    # Cluster managers set the address of each worker in `WorkerConfig.connect_at`.
+    # A new worker uses this to setup an all-to-all network if topology :all_to_all is specified.
+    # Workers with higher pids connect to workers with lower pids. Except process 1 (master) which
+    # initiates connections to all workers.
+
+    # Connection Setup Protocol:
+    # - Master sends 16-byte cookie followed by 16-byte version string and a JoinPGRP message to all workers
+    # - On each worker
+    #   - Worker responds with a 16-byte version followed by a JoinCompleteMsg
+    #   - Connects to all workers less than its pid. Sends the cookie, version and an IdentifySocket message
+    #   - Workers with incoming connection requests write back their Version and an IdentifySocketAckMsg message
+    # - On master, receiving a JoinCompleteMsg triggers rr_ntfy_join (signifies that worker setup is complete)
+
+    join_list = []
+    if Distributed.PGRP.topology === :all_to_all
+        # need to wait for lower worker pids to have completed connecting, since the numerical value
+        # of pids is relevant to the connection process, i.e., higher pids connect to lower pids and they
+        # require the value of config.connect_at which is set only upon connection completion
+        for jw in Distributed.PGRP.workers
+            if (jw.id != 1) && (jw.id < w.id)
+                # wait for wl to join
+                # We should access this atomically using (@atomic jw.state) 
+                # but this is only recently supported
+                if jw.state === Distributed.W_CREATED
+                    lock(jw.c_state) do
+                        wait(jw.c_state)
+                    end
+                end
+                push!(join_list, jw)
+            end
+        end
+
+    elseif Distributed.PGRP.topology === :custom
+        # wait for requested workers to be up before connecting to them.
+        filterfunc(x) = (x.id != 1) && isdefined(x, :config) &&
+            (notnothing(x.config.ident) in something(wconfig.connect_idents, []))
+
+        wlist = filter(filterfunc, Distributed.PGRP.workers)
+        waittime = 0
+        while wconfig.connect_idents !== nothing &&
+              length(wlist) < length(wconfig.connect_idents)
+            if waittime >= timeout
+                error("peer workers did not connect within $timeout seconds")
+            end
+            sleep(1.0)
+            waittime += 1
+            wlist = filter(filterfunc, Distributed.PGRP.workers)
+        end
+
+        for wl in wlist
+            lock(wl.c_state) do
+                if (@atomic wl.state) === Distributed.W_CREATED
+                    # wait for wl to join
+                    wait(wl.c_state)
+                end
+            end
+            push!(join_list, wl)
+        end
+    end
+
+    all_locs = Base.mapany(x -> isa(x, Distributed.Worker) ?
+                      (something(x.config.connect_at, ()), x.id) :
+                      ((), x.id, true),
+                      join_list)
+    Distributed.send_connection_hdr(w, true)
+    enable_threaded_blas = something(wconfig.enable_threaded_blas, false)
+
+    join_message = Distributed.JoinPGRPMsg(w.id, all_locs, Distributed.PGRP.topology, enable_threaded_blas, Distributed.isclusterlazy())
+    Distributed.send_msg_now(w, Distributed.MsgHeader(Distributed.RRID(0,0), ntfy_oid), join_message)
+
+    # Ensure the initial expression is evaluated before any other code
+    @info "Evaluating initial expression on worker $(w.id)"
+    evaluate_initial_expression(w.id, manager.expr)
+
+    @async Distributed.manage(w.manager, w.id, w.config, :register)
+
+    # wait for rr_ntfy_join with timeout
+    if timedwait(() -> isready(rr_ntfy_join), timeout) === :timed_out
+        error("worker did not connect within $timeout seconds")
+    end
+    lock(Distributed.client_refs) do
+        delete!(Distributed.PGRP.refs, ntfy_oid)
+    end
+
+    return w.id
 end
