@@ -95,21 +95,7 @@ function module_load_string(::Type{DerechoBackend})
     """
 end
 
-function calibrate(
-    config::ExperimentConfig;
-    model_interface = nothing,
-    hpc_kwargs = Dict(),
-    ekp_kwargs...,
-)
-    backend = get_backend()
-    if backend <: HPCBackend
-        calibrate(backend, config; model_interface, hpc_kwargs, ekp_kwargs...)
-    else
-        # If not HPCBackend, strip out model_interface and hpc_kwargs
-        calibrate(backend, config; ekp_kwargs...)
-    end
-end
-
+# Entry points with automatic backend detection
 function calibrate(
     ensemble_size::Int,
     n_iterations::Int,
@@ -117,85 +103,79 @@ function calibrate(
     noise,
     prior,
     output_dir;
-    model_interface = nothing,
-    hpc_kwargs = Dict(),
-    ekp_kwargs...,
+    kwargs...
 )
     backend = get_backend()
-    if backend <: HPCBackend
-        calibrate(
-            backend,
-            ensemble_size,
-            n_iterations,
-            observations,
-            noise,
-            prior,
-            output_dir;
-            model_interface,
-            hpc_kwargs,
-            ekp_kwargs...,
-        )
-    else
-        # If not HPCBackend, strip out model_interface and hpc_kwargs
-        calibrate(
-            backend,
-            ensemble_size,
-            n_iterations,
-            observations,
-            noise,
-            prior,
-            output_dir;
-            ekp_kwargs...,
-        )
-    end
-end
-
-function calibrate(
-    b::Type{JuliaBackend},
-    config::ExperimentConfig;
-    ekp_kwargs...,
-)
-    (; ensemble_size, n_iterations, observations, noise, prior, output_dir) =
-        config
-    return calibrate(
-        b,
+    calibrate(
+        backend,
         ensemble_size,
         n_iterations,
         observations,
         noise,
         prior,
         output_dir;
-        ekp_kwargs...,
+        kwargs...
     )
 end
 
+# Helper to filter kwargs based on backend type
+function filter_kwargs(::Type{<:HPCBackend}, kwargs)
+    # Keep all kwargs for HPC backends
+    return kwargs
+end
+
+function filter_kwargs(::Type{<:AbstractBackend}, kwargs)
+    # Filter out HPC-specific kwargs for non-HPC backends
+    filtered = Dict{Symbol,Any}()
+    for (k, v) in kwargs
+        if k != :model_interface && k != :hpc_kwargs
+            filtered[k] = v
+        end
+    end
+    return filtered
+end
+
+# Create EKP struct and call main calibration function
 function calibrate(
-    b::Type{JuliaBackend},
+    backend::Type{<:AbstractBackend},
     ensemble_size,
     n_iterations,
     observations,
     noise,
     prior,
     output_dir;
-    ekp_kwargs...,
+    kwargs...
 )
+    # Extract EKP constructor kwargs
+    ekp_kwargs = filter(kv -> first(kv) != :model_interface && 
+                              first(kv) != :hpc_kwargs && 
+                              first(kv) != :experiment_dir && 
+                              first(kv) != :verbose && 
+                              first(kv) != :failure_rate, 
+                        kwargs)
+    
     ekp = ekp_constructor(
         ensemble_size,
         prior,
         observations,
         noise;
-        ekp_kwargs...,
+        ekp_kwargs...
     )
-    return calibrate(b, ekp, ensemble_size, n_iterations, prior, output_dir)
+    
+    return calibrate(backend, ekp, ensemble_size, n_iterations, prior, output_dir; kwargs...)
 end
 
+# Main calibration implementations for each backend type
+
+# JuliaBackend implementation
 function calibrate(
     ::Type{JuliaBackend},
     ekp::EKP.EnsembleKalmanProcess,
     ensemble_size,
     n_iterations,
     prior,
-    output_dir,
+    output_dir;
+    kwargs...
 )
     ekp = initialize(ekp, prior, output_dir)
 
@@ -228,6 +208,8 @@ function calibrate(
     end
     return ekp
 end
+
+# WorkerBackend implementation
 
 const DEFAULT_FAILURE_RATE = 0.5
 
@@ -339,74 +321,9 @@ function calibrate(
     return ekp
 end
 
+# HPCBackend implementation
 function calibrate(
-    b::Type{<:HPCBackend},
-    config::ExperimentConfig;
-    experiment_dir = project_dir(),
-    model_interface = abspath(
-        joinpath(experiment_dir, "..", "..", "model_interface.jl"),
-    ),
-    verbose = false,
-    hpc_kwargs = Dict(),
-    ekp_kwargs...,
-)
-    (; ensemble_size, n_iterations, observations, noise, prior, output_dir) =
-        config
-    return calibrate(
-        b,
-        ensemble_size,
-        n_iterations,
-        observations,
-        noise,
-        prior,
-        output_dir;
-        model_interface,
-        verbose,
-        hpc_kwargs,
-        ekp_kwargs...,
-    )
-end
-
-function calibrate(
-    b::Type{<:HPCBackend},
-    ensemble_size::Int,
-    n_iterations::Int,
-    observations,
-    noise,
-    prior,
-    output_dir;
-    experiment_dir = project_dir(),
-    model_interface = abspath(
-        joinpath(experiment_dir, "..", "..", "model_interface.jl"),
-    ),
-    verbose = false,
-    hpc_kwargs,
-    ekp_kwargs...,
-)
-    ekp = ekp_constructor(
-        ensemble_size,
-        prior,
-        observations,
-        noise;
-        ekp_kwargs...,
-    )
-    return calibrate(
-        b,
-        ekp,
-        ensemble_size,
-        n_iterations,
-        prior,
-        output_dir;
-        experiment_dir,
-        model_interface,
-        verbose,
-        hpc_kwargs,
-        ekp_kwargs...,
-    )
-end
-
-function calibrate(
-    b::Type{<:HPCBackend},
+    backend::Type{<:HPCBackend},
     ekp::EKP.EnsembleKalmanProcess,
     ensemble_size,
     n_iterations,
@@ -417,12 +334,12 @@ function calibrate(
         joinpath(experiment_dir, "..", "..", "model_interface.jl"),
     ),
     verbose = false,
-    hpc_kwargs,
-    ekp_kwargs...,
+    hpc_kwargs = Dict(),
+    kwargs...
 )
     @info "Initializing calibration" n_iterations ensemble_size output_dir
     ekp = initialize(ekp, prior, output_dir)
-    module_load_str = module_load_string(b)
+    module_load_str = module_load_string(backend)
 
     first_iter = last_completed_iteration(output_dir) + 1
     for iter in first_iter:(n_iterations - 1)
@@ -430,7 +347,7 @@ function calibrate(
         jobids = map(1:ensemble_size) do member
             @info "Running ensemble member $member"
             model_run(
-                b,
+                backend,
                 iter,
                 member,
                 output_dir,
@@ -462,8 +379,6 @@ function calibrate(
     return ekp
 end
 
-# Dispatch on backend type to unify `calibrate` for all HPCBackends
-# This keeps the scheduled interface independent from the backends
 """
     model_run(backend, iter, member, output_dir, experiment_dir; model_interface, verbose, hpc_kwargs)
 
@@ -480,16 +395,8 @@ Arguments:
 - module_load_str: Commands which load the necessary modules
 - hpc_kwargs: Dictionary containing the resources for the job. Easily generated using [`kwargs`](@ref).
 """
-model_run(
-    ::Type{<:SlurmBackend},
-    iter,
-    member,
-    output_dir,
-    project_dir,
-    model_interface,
-    module_load_str;
-    hpc_kwargs,
-) = slurm_model_run(
+function model_run(
+    backend::Type{<:SlurmBackend},
     iter,
     member,
     output_dir,
@@ -498,7 +405,18 @@ model_run(
     module_load_str;
     hpc_kwargs,
 )
-model_run(
+    return slurm_model_run(
+        iter,
+        member,
+        output_dir,
+        project_dir,
+        model_interface,
+        module_load_str;
+        hpc_kwargs,
+    )
+end
+
+function model_run(
     ::Type{DerechoBackend},
     iter,
     member,
@@ -507,12 +425,14 @@ model_run(
     model_interface,
     module_load_str;
     hpc_kwargs,
-) = pbs_model_run(
-    iter,
-    member,
-    output_dir,
-    project_dir,
-    model_interface,
-    module_load_str;
-    hpc_kwargs,
 )
+    return pbs_model_run(
+        iter,
+        member,
+        output_dir,
+        project_dir,
+        model_interface,
+        module_load_str;
+        hpc_kwargs,
+    )
+end
