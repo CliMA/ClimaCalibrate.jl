@@ -302,14 +302,13 @@ function Distributed.launch(
     env = Dict{String, String}(params[:env])
     propagate_env_vars!(env)
 
-    worker_args = parse_pbs_worker_params(params)
+    ntasks = pm.ntasks
+    worker_args = parse_pbs_worker_params(params, ntasks)
     job_directory = setup_job_directory(exehome, params)
     jobname = worker_jobname()
     submission_time = (trunc(Int, Base.time() * 10))
 
-    ntasks = pm.ntasks
     default_output = ".$jobname-$submission_time.out"
-    job_array_option = ntasks > 1 ? `-J 1-$ntasks` : ``
     output_path = get(params, :o, default_output)
     #= qsub options:
         -V: inherit environment variables
@@ -317,7 +316,7 @@ function Distributed.launch(
         -j oe: Send the output and error streams to the same file
         -J 1-ntasks: Job array
         -o: output file =#
-    qsub_cmd = `qsub -V -N $jobname -j oe $job_array_option $worker_args -o $output_path -- $exename $exeflags $(worker_cookie_arg())`
+    qsub_cmd = `qsub -V -N $jobname -j oe $worker_args -o $output_path -- $exename $exeflags $(worker_cookie_arg())`
     @info "Starting PBS job $jobname: $qsub_cmd"
     pid = open(addenv(qsub_cmd, env))
 
@@ -332,7 +331,7 @@ Parse params into string arguments for the worker launch command.
 Uses all keys that are not in `Distributed.default_addprocs_params()`.
 Keys that start with `l_` will be treated as `-l` arguments to `qsub`. For example, l_walltime = "00:10:00" is transformed into `-l walltime=00:10:00`.
 """
-function parse_pbs_worker_params(params::Dict)
+function parse_pbs_worker_params(params::Dict, ntasks)
     stdkeys = keys(Distributed.default_addprocs_params())
     excepted_keys = (:job_file_loc,)
     worker_params =
@@ -346,7 +345,7 @@ function parse_pbs_worker_params(params::Dict)
             # Special handling for ` -l select=...` parameter
             # Each job can only have one task
             if str_k == "select"
-                v = "$v"
+                v = "$ntasks:$v"
             end
             append!(worker_args, ["-l", "$str_k=$v"])
             continue
