@@ -84,21 +84,16 @@ function convergence_plot(
             transform_unconstrained_to_constrained(prior, u_vec_all_params)
         phi_vec = [phi[param_idx, :] for phi in phi_vec_all]
 
-        error_vec = Float64[]
         spread_vec = Float64[]
         for ensemble in u_vec # iterate over the iterations
-            ensemble_error = 0
             ensemble_spread = 0
             ensemble_mean = mean(ensemble)
             for i in ensemble # ! not generalized for multiple params (here param 1)
-                ensemble_error += abs(i - theta_star)^2
                 ensemble_spread += abs(i - ensemble_mean)^2
 
             end
-            ensemble_error /= length(ensemble)
             ensemble_spread /= length(ensemble)
 
-            push!(error_vec, ensemble_error)
             push!(spread_vec, ensemble_spread)
         end
 
@@ -114,7 +109,7 @@ function convergence_plot(
             xticks = 0:50,
             title = "Error for $param_name",
         )
-        Makie.lines!(ax, 0.0:(length(error_vec) - 1), error_vec)
+        Makie.lines!(ax, 0.0:(length(eki.error) - 1), eki.error)
 
         ax = Makie.Axis(
             f[1, 2],

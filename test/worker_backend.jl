@@ -32,22 +32,6 @@ end
         "model_interface.jl",
     ),
 )
-@testset "Restarts" begin
-    initialize(ensemble_size, observation, variance, prior, output_dir)
-
-    last_iter = ClimaCalibrate.last_completed_iteration(output_dir)
-    @test last_iter == -1
-    ClimaCalibrate.run_worker_iteration(
-        last_iter + 1,
-        ensemble_size,
-        output_dir,
-    )
-    G_ensemble = observation_map(last_iter + 1)
-    save_G_ensemble(output_dir, last_iter + 1, G_ensemble)
-    update_ensemble(output_dir, last_iter + 1, prior)
-
-    @test ClimaCalibrate.last_completed_iteration(output_dir) == 0
-end
 
 eki = calibrate(
     WorkerBackend,
@@ -56,7 +40,10 @@ eki = calibrate(
     observation,
     variance,
     prior,
-    output_dir,
+    output_dir;
+    localization_method = EKP.Localizers.NoLocalization(),
+    accelerator = EKP.DefaultAccelerator(),
+    scheduler = EKP.DefaultScheduler(),
 )
 
 @test ClimaCalibrate.last_completed_iteration(output_dir) == n_iterations - 1
@@ -74,3 +61,18 @@ convergence_plot(
 )
 
 g_vs_iter_plot(eki)
+
+@testset "Restarts" begin
+    last_iter = ClimaCalibrate.last_completed_iteration(output_dir)
+    @test last_iter == n_iterations - 1
+    ClimaCalibrate.run_worker_iteration(
+        last_iter + 1,
+        ensemble_size,
+        output_dir,
+    )
+    G_ensemble = observation_map(last_iter + 1)
+    save_G_ensemble(output_dir, last_iter + 1, G_ensemble)
+    update_ensemble(output_dir, last_iter + 1, prior)
+
+    @test ClimaCalibrate.last_completed_iteration(output_dir) == n_iterations
+end

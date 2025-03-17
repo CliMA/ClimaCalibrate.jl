@@ -186,18 +186,18 @@ function calibrate(
         noise;
         ekp_kwargs...,
     )
-    return calibrate(b, ekp, ensemble_size, n_iterations, prior, output_dir)
+    return calibrate(b, ekp, n_iterations, prior, output_dir)
 end
 
 function calibrate(
     ::Type{JuliaBackend},
     ekp::EKP.EnsembleKalmanProcess,
-    ensemble_size,
     n_iterations,
     prior,
     output_dir,
 )
     ekp = initialize(ekp, prior, output_dir)
+    ensemble_size = EKP.get_N_ens(ekp)
 
     on_error(e::InterruptException) = rethrow(e)
     on_error(e) =
@@ -295,21 +295,12 @@ function calibrate(
         noise;
         ekp_kwargs...,
     )
-    return calibrate(
-        b,
-        eki,
-        ensemble_size,
-        n_iterations,
-        prior,
-        output_dir;
-        worker_pool,
-    )
+    return calibrate(b, eki, n_iterations, prior, output_dir; worker_pool)
 end
 
 function calibrate(
     b::Type{WorkerBackend},
     ekp::EKP.EnsembleKalmanProcess,
-    ensemble_size,
     n_iterations,
     prior,
     output_dir;
@@ -317,8 +308,9 @@ function calibrate(
     worker_pool = default_worker_pool(),
 )
     ekp = initialize(ekp, prior, output_dir)
-    first_iter = last_completed_iteration(output_dir) + 1
+    ensemble_size = EKP.get_N_ens(ekp)
 
+    first_iter = last_completed_iteration(output_dir) + 1
     for iter in first_iter:(n_iterations - 1)
         @info "Running Iteration $iter"
         (; time) = @timed run_worker_iteration(
@@ -393,7 +385,6 @@ function calibrate(
     return calibrate(
         b,
         ekp,
-        ensemble_size,
         n_iterations,
         prior,
         output_dir;
@@ -408,7 +399,6 @@ end
 function calibrate(
     b::Type{<:HPCBackend},
     ekp::EKP.EnsembleKalmanProcess,
-    ensemble_size,
     n_iterations,
     prior,
     output_dir;
@@ -420,6 +410,7 @@ function calibrate(
     hpc_kwargs,
     ekp_kwargs...,
 )
+    ensemble_size = EKP.get_N_ens(ekp)
     @info "Initializing calibration" n_iterations ensemble_size output_dir
     ekp = initialize(ekp, prior, output_dir)
     module_load_str = module_load_string(b)
