@@ -52,6 +52,7 @@ ClimaCalibrate.submit_pbs_job
 ClimaCalibrate.initialize
 ClimaCalibrate.save_G_ensemble
 ClimaCalibrate.update_ensemble
+ClimaCalibrate.update_ensemble!
 ClimaCalibrate.ExperimentConfig
 ClimaCalibrate.get_prior
 ClimaCalibrate.get_param_dict

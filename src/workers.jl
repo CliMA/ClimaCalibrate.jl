@@ -1,42 +1,52 @@
 using Distributed
 using Logging
 
-export SlurmManager, PBSManager, default_worker_pool, set_worker_loggers
+export SlurmManager, PBSManager, set_worker_loggers
 
-# Set the time limit for the Julia worker to be contacted by the main process, default = "60.0s"
-# https://docs.julialang.org/en/v1/manual/environment-variables/#JULIA_WORKER_TIMEOUT
-worker_timeout() = "300.0"
-ENV["JULIA_WORKER_TIMEOUT"] = worker_timeout()
+worker_timeout() = parse(Float64, get(ENV, "JULIA_WORKER_TIMEOUT", "300.0"))
 
-default_worker_pool() = WorkerPool(workers())
+get_worker_pool() = workers() == [1] ? WorkerPool() : default_worker_pool()
 
 function run_worker_iteration(
     iter,
     ensemble_size,
     output_dir;
-    worker_pool = default_worker_pool(),
     failure_rate = DEFAULT_FAILURE_RATE,
 )
-    # Create a channel to collect results
-    results = Channel{Any}(ensemble_size)
     nfailures = 0
-    @sync begin
-        for m in 1:(ensemble_size)
-            @async begin
-                worker = take!(worker_pool)
-                @info "Running particle $m on worker $worker"
-                try
-                    remotecall_wait(forward_model, worker, iter, m)
-                catch e
-                    @warn "Error running member $m" exception = e
-                    nfailures += 1
-                finally
-                    # Always return worker to pool
-                    put!(worker_pool, worker)
-                end
-            end
+    worker_pool = get_worker_pool()
+    all_known_workers = get_worker_pool()
+
+    work_to_do = map(1:ensemble_size) do m
+        (w) -> begin
+            @info "Running particle $m on worker $w"
+            remotecall_wait(forward_model, w, iter, m)
         end
     end
+    isempty(all_known_workers.workers) && @info "No workers currently available"
+    @sync while !isempty(work_to_do)
+        # Add new workers to worker_pool
+        all_workers = get_worker_pool()
+        new_workers = setdiff(all_workers.workers, all_known_workers.workers)
+        foreach(x -> push!(worker_pool, x), new_workers)
+        all_known_workers = all_workers
+        if !isempty(worker_pool.workers)
+            worker = take!(worker_pool)
+            run_fwd_model = pop!(work_to_do)
+            @async try
+                run_fwd_model(worker)
+            catch e
+                @warn "Error running on worker $worker" exception = e
+                nfailures += 1
+            finally
+                push!(worker_pool, worker)
+            end
+        else
+            @debug "no workers available"
+            sleep(10) # Wait for workers to become available
+        end
+    end
+
     iter_failure_rate = nfailures / ensemble_size
     if iter_failure_rate > failure_rate
         error(
@@ -52,31 +62,38 @@ end
 worker_cookie_arg() = `--worker=$(worker_cookie())`
 
 """
-    SlurmManager(ntasks=get(ENV, "SLURM_NTASKS", 1))
+    SlurmManager(; ntasks=get(ENV, "SLURM_NTASKS", 1), expr=:())
 
-The ClusterManager for Slurm clusters, taking in the number of tasks to request with `srun`.
+A ClusterManager implementation for Slurm job scheduling systems. Workers inherit the current Julia environment by default.
 
-To execute the `srun` command, run `addprocs(SlurmManager(ntasks))`
+# Arguments
+- `ntasks::Integer`: Number of tasks to allocate via `srun` (defaults to SLURM_NTASKS environment variable or 1)
+- `expr::Expr`: Expression to evaluate on each worker at initialization
 
-Keyword arguments can be passed to `srun`: `addprocs(SlurmManager(ntasks), gpus_per_task=1)`
+# Usage
+```julia
+# Add workers using default settings
+addprocs(SlurmManager(ntasks=4))
 
-By default the workers will inherit the running Julia environment.
-
-To run a calibration, call `calibrate(WorkerBackend, ...)`
-
-To run functions on a worker, call `remotecall(func, worker_id, args...)`
+# Pass additional arguments to `srun`
+addprocs(SlurmManager(ntasks=4), gpus_per_task=1)
+```
+# Related functions
+- `calibrate(WorkerBackend, ...)`: Perform calibration using workers
+- `remotecall(func, worker_id, args...)`: Execute functions on specific workers
 """
 struct SlurmManager <: ClusterManager
     ntasks::Integer
+    expr::Expr
 
     function SlurmManager(
-        ntasks::Integer = parse(Int, get(ENV, "SLURM_NTASKS", "1")),
+        ntasks = parse(Int, get(ENV, "SLURM_NTASKS", "1"));
+        expr = :(),
     )
-        new(ntasks)
+        new(ntasks, expr)
     end
 end
 
-# This function needs to exist
 function Distributed.manage(
     manager::SlurmManager,
     id::Integer,
@@ -84,10 +101,22 @@ function Distributed.manage(
     op::Symbol,
 )
     if op == :register
-        Distributed.remotecall_eval(Main, id, :(using ClimaCalibrate, Logging))
-        remotecall(id) do
-            ClimaCalibrate.set_worker_logger()
-        end
+        set_worker_logger(id)
+    end
+end
+
+function evaluate_initial_expression(id, expr)
+    try
+        Distributed.remotecall_eval(Main, id, expr)
+    catch e
+        @error "Initial worker expression errored:" exception = e
+    end
+end
+
+function set_worker_logger(id)
+    Distributed.remotecall_eval(Main, id, :(using ClimaCalibrate, Logging))
+    remotecall(id) do
+        ClimaCalibrate.set_worker_logger()
     end
 end
 
@@ -252,23 +281,47 @@ end
 # TODO: Add examples of usage for SlurmManager and PBSManager in the docstrings
 # Things like `addprocs(SlurmManager(2), t = "00:10:00",ngpus=4)`, then `remotecall` or `calibrate`
 """
-    PBSManager(ntasks)
+    PBSManager(ntasks; expr=:())
 
-The ClusterManager for PBS/Torque clusters, taking in the number of tasks to request with `qsub`.
+A ClusterManager implementation for PBS/Torque job scheduling systems.
 
-To execute the `qsub` command, run `addprocs(PBSManager(ntasks))`. 
-Unlike the [`SlurmManager`](@ref), this will not nest scheduled jobs, but will acquire new resources.
+# Arguments
+- `ntasks::Integer`: Number of tasks to request via `qsub`
+- `expr::Expr`: Expression to evaluate on each worker at initialization
 
-Keyword arguments can be passed to `qsub`: `addprocs(PBSManager(ntasks), nodes=2)`
+# Usage
+```julia
+# Add workers using default settings
+addprocs(PBSManager(4))
 
-By default, the workers will inherit the running Julia environment.
+# Pass additional arguments to `qsub`
+addprocs(PBSManager(4), nodes=2)
 
-To run a calibration, call `calibrate(WorkerBackend, ...)`
+# Use resource list options with l_ prefix
+addprocs(PBSManager(4), l_walltime="00:10:00", l_select="2:ncpus=4:mem=8gb")
 
-To run functions on a worker, call `remotecall(func, worker_id, args...)`
+# Specify initialization expression
+addprocs(PBSManager(4, expr=:(using MyPackage)))
+```
+
+Unlike the [`SlurmManager`](@ref), this will not nest scheduled jobs but will acquire new resources.
+Workers inherit the current Julia environment by default.
+
+# Resource Specification
+- Parameters with `l_` prefix are passed to qsub's `-l` option (e.g., `l_walltime="00:10:00"` becomes `-l walltime=00:10:00`)
+- Standard PBS/Torque options can be passed directly as keyword arguments
+
+# Related Functions
+- `calibrate(WorkerBackend, ...)`: Perform worker calibration
+- `remotecall(func, worker_id, args...)`: Execute functions on specific workers
 """
 struct PBSManager <: ClusterManager
     ntasks::Integer
+    expr::Expr
+
+    function PBSManager(ntasks; expr = :())
+        new(ntasks, expr)
+    end
 end
 
 function Distributed.manage(
@@ -280,10 +333,8 @@ function Distributed.manage(
     if op == :register
         working_dir = pwd()
         remotecall(cd, id, working_dir)
-        Distributed.remotecall_eval(Main, id, :(using ClimaCalibrate, Logging))
-        remotecall(id) do
-            ClimaCalibrate.set_worker_logger()
-        end
+        set_worker_logger(id)
+        evaluate_initial_expression(id, manager.expr)
     end
 end
 
@@ -297,7 +348,6 @@ function Distributed.launch(
     exehome = params[:dir]
     exename = params[:exename]
     exeflags = params[:exeflags]
-    # TODO: figure out why the project is not being passed, this is not needed for SlurmManager
     exeflags = exeflags == `` ? `--project=$(project_dir())` : exeflags
     env = Dict{String, String}(params[:env])
     propagate_env_vars!(env)
@@ -406,6 +456,7 @@ This function should be called from the worker process.
 """
 function set_worker_logger()
     @eval Main using Logging
+    redirect_stderr(stdout)
     io = open("worker_$(myid()).log", "w")
     logger = SimpleLogger(io)
     Base.global_logger(logger)
@@ -426,4 +477,149 @@ function set_worker_loggers(workers = workers())
             ClimaCalibrate.set_worker_logger()
         end
     end
+end
+
+# Copied from Distributed.jl in order to evaluate the manager's expression on worker initialization
+function Distributed.create_worker(
+    manager::Union{SlurmManager, PBSManager},
+    wconfig,
+)
+    # only node 1 can add new nodes, since nobody else has the full list of address:port
+    @assert Distributed.LPROC.id == 1
+    timeout = worker_timeout()
+
+    # initiate a connect. Does not wait for connection completion in case of TCP.
+    w = Distributed.Worker()
+    local r_s, w_s
+    try
+        (r_s, w_s) = Distributed.connect(manager, w.id, wconfig)
+    catch ex
+        try
+            Distributed.deregister_worker(w.id)
+            kill(manager, w.id, wconfig)
+        finally
+            rethrow(ex)
+        end
+    end
+
+    w = Distributed.Worker(w.id, r_s, w_s, manager; config = wconfig)
+    # install a finalizer to perform cleanup if necessary
+    finalizer(w) do w
+        if myid() == 1
+            Distributed.manage(w.manager, w.id, w.config, :finalize)
+        end
+    end
+
+    # set when the new worker has finished connections with all other workers
+    ntfy_oid = Distributed.RRID()
+    rr_ntfy_join = Distributed.lookup_ref(ntfy_oid)
+    rr_ntfy_join.waitingfor = myid()
+
+    # Start a new task to handle inbound messages from connected worker in master.
+    # Also calls `wait_connected` on TCP streams.
+    Distributed.process_messages(w.r_stream, w.w_stream, false)
+
+    # send address information of all workers to the new worker.
+    # Cluster managers set the address of each worker in `WorkerConfig.connect_at`.
+    # A new worker uses this to setup an all-to-all network if topology :all_to_all is specified.
+    # Workers with higher pids connect to workers with lower pids. Except process 1 (master) which
+    # initiates connections to all workers.
+
+    # Connection Setup Protocol:
+    # - Master sends 16-byte cookie followed by 16-byte version string and a JoinPGRP message to all workers
+    # - On each worker
+    #   - Worker responds with a 16-byte version followed by a JoinCompleteMsg
+    #   - Connects to all workers less than its pid. Sends the cookie, version and an IdentifySocket message
+    #   - Workers with incoming connection requests write back their Version and an IdentifySocketAckMsg message
+    # - On master, receiving a JoinCompleteMsg triggers rr_ntfy_join (signifies that worker setup is complete)
+
+    join_list = []
+    if Distributed.PGRP.topology === :all_to_all
+        # need to wait for lower worker pids to have completed connecting, since the numerical value
+        # of pids is relevant to the connection process, i.e., higher pids connect to lower pids and they
+        # require the value of config.connect_at which is set only upon connection completion
+        for jw in Distributed.PGRP.workers
+            if (jw.id != 1) && (jw.id < w.id)
+                # wait for wl to join
+                # We should access this atomically using (@atomic jw.state) 
+                # but this is only recently supported
+                if jw.state === Distributed.W_CREATED
+                    lock(jw.c_state) do
+                        wait(jw.c_state)
+                    end
+                end
+                push!(join_list, jw)
+            end
+        end
+
+    elseif Distributed.PGRP.topology === :custom
+        # wait for requested workers to be up before connecting to them.
+        filterfunc(x) =
+            (x.id != 1) &&
+            isdefined(x, :config) &&
+            (
+                notnothing(x.config.ident) in
+                something(wconfig.connect_idents, [])
+            )
+
+        wlist = filter(filterfunc, Distributed.PGRP.workers)
+        waittime = 0
+        while wconfig.connect_idents !== nothing &&
+            length(wlist) < length(wconfig.connect_idents)
+            if waittime >= timeout
+                error("peer workers did not connect within $timeout seconds")
+            end
+            sleep(1.0)
+            waittime += 1
+            wlist = filter(filterfunc, Distributed.PGRP.workers)
+        end
+
+        for wl in wlist
+            lock(wl.c_state) do
+                if (@atomic wl.state) === Distributed.W_CREATED
+                    # wait for wl to join
+                    wait(wl.c_state)
+                end
+            end
+            push!(join_list, wl)
+        end
+    end
+
+    all_locs = Base.mapany(
+        x ->
+            isa(x, Distributed.Worker) ?
+            (something(x.config.connect_at, ()), x.id) : ((), x.id, true),
+        join_list,
+    )
+    Distributed.send_connection_hdr(w, true)
+    enable_threaded_blas = something(wconfig.enable_threaded_blas, false)
+
+    join_message = Distributed.JoinPGRPMsg(
+        w.id,
+        all_locs,
+        Distributed.PGRP.topology,
+        enable_threaded_blas,
+        Distributed.isclusterlazy(),
+    )
+    Distributed.send_msg_now(
+        w,
+        Distributed.MsgHeader(Distributed.RRID(0, 0), ntfy_oid),
+        join_message,
+    )
+
+    # Ensure the initial expression is evaluated before any other code
+    @info "Evaluating initial expression on worker $(w.id)"
+    evaluate_initial_expression(w.id, manager.expr)
+
+    @async Distributed.manage(w.manager, w.id, w.config, :register)
+
+    # wait for rr_ntfy_join with timeout
+    if timedwait(() -> isready(rr_ntfy_join), timeout) === :timed_out
+        error("worker did not connect within $timeout seconds")
+    end
+    lock(Distributed.client_refs) do
+        delete!(Distributed.PGRP.refs, ntfy_oid)
+    end
+
+    return w.id
 end
