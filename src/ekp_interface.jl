@@ -371,6 +371,18 @@ function update_ensemble!(ekp, G_ens, output_dir, iteration, prior)
 end
 
 """
+    observation_map_and_update!(ekp, output_dir, iteration, prior)
+
+Compute the observation map and update the given EKP object.
+"""
+function observation_map_and_update!(ekp, output_dir, iteration, prior)
+    g_ensemble = observation_map(iteration)
+    save_G_ensemble(output_dir, iteration, g_ensemble)
+    terminate = update_ensemble!(ekp, g_ensemble, output_dir, iteration, prior)
+    return terminate
+end
+
+"""
     last_completed_iteration(output_dir)
 
 Determines the last completed iteration given an `output_dir` containing a calibration run.

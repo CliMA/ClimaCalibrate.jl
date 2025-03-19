@@ -220,10 +220,8 @@ function calibrate(
         if errors == ensemble_size
             error("Full ensemble has failed, aborting calibration.")
         end
-        G_ensemble = observation_map(iter)
-        save_G_ensemble(output_dir, iter, G_ensemble)
         ekp = load_ekp_struct(output_dir, iter)
-        terminate = update_ensemble!(ekp, G_ensemble, output_dir, iter, prior)
+        terminate = observation_map_and_update!(ekp, output_dir, iter, prior)
         !isnothing(terminate) && break
     end
     return ekp
@@ -321,11 +319,8 @@ function calibrate(
             failure_rate,
         )
         @info "Iteration $iter time: $time"
-        # Process results
-        G_ensemble = observation_map(iter)
-        save_G_ensemble(output_dir, iter, G_ensemble)
         ekp = load_ekp_struct(output_dir, iter)
-        terminate = update_ensemble!(ekp, G_ensemble, output_dir, iter, prior)
+        terminate = observation_map_and_update!(ekp, output_dir, iter, prior)
         !isnothing(terminate) && break
     end
     return ekp
@@ -444,10 +439,8 @@ function calibrate(
             reruns = 0,
         )
         @info "Completed iteration $iter, updating ensemble"
-        G_ensemble = observation_map(iter)
-        save_G_ensemble(output_dir, iter, G_ensemble)
         ekp = load_ekp_struct(output_dir, iter)
-        terminate = update_ensemble!(ekp, G_ensemble, output_dir, iter, prior)
+        terminate = observation_map_and_update!(ekp, output_dir, iter, prior)
         !isnothing(terminate) && break
     end
     return ekp
