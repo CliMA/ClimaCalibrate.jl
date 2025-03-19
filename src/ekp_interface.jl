@@ -391,7 +391,8 @@ If no iteration has been completed yet, return -1.
 """
 function last_completed_iteration(output_dir)
     last_completed_iter = -1
-    while isfile(path_to_G_ensemble(output_dir, last_completed_iter + 1))
+    while isfile(path_to_G_ensemble(output_dir, last_completed_iter + 1)) &&
+        isfile(ekp_path(output_dir, last_completed_iter + 2))
         last_completed_iter += 1
     end
     return last_completed_iter
