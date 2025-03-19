@@ -1,6 +1,6 @@
 agents:
   queue: new-central
-  modules: climacommon/2024_10_09
+  modules: climacommon/2025_03_18
    
 env:
   OPENBLAS_NUM_THREADS: 1
