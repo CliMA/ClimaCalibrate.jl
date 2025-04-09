@@ -1,7 +1,8 @@
 import EnsembleKalmanProcesses as EKP
 import YAML
 
-export forward_model, observation_map, post_observation_map_hook
+export forward_model,
+    observation_map, post_observation_map_hook, postprocess_g_ensemble
 
 """
     forward_model(iteration, member)
@@ -44,4 +45,14 @@ function post_observation_map_hook(
     iteration,
 )
     return nothing
+end
+
+"""
+    postprocess_g_ensemble(ekp, g_ensemble, prior, output_dir, iteration)
+
+Postprocess `g_ensemble` after evaluating the observation map and before
+updating the ensemble.
+"""
+function postprocess_g_ensemble(ekp, g_ensemble, prior, output_dir, iteration)
+    return g_ensemble
 end

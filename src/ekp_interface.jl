@@ -379,6 +379,8 @@ function observation_map_and_update!(ekp, output_dir, iteration, prior)
     g_ensemble = observation_map(iteration)
     save_G_ensemble(output_dir, iteration, g_ensemble)
     post_observation_map_hook(ekp, g_ensemble, prior, output_dir, iteration)
+    g_ensemble =
+        postprocess_g_ensemble(ekp, g_ensemble, prior, output_dir, iteration)
     terminate = update_ensemble!(ekp, g_ensemble, output_dir, iteration, prior)
     return terminate
 end
