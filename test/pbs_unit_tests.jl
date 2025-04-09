@@ -79,7 +79,7 @@ test_cmd = """
 #PBS -j oe
 #PBS -A UCIT0011
 #PBS -q preempt
-#PBS -l walltime=00:00:12
+#PBS -l walltime=00:01:00
 #PBS -l select=1:ncpus=1:ngpus=1
 # The GPU isn't needed, but we are currently overspent on the CPU queue
 
@@ -109,6 +109,7 @@ sleep(1)
 jobids = ntuple(x -> submit_cmd_helper(test_cmd), 5)
 
 CAL.kill_job.(jobids)
+sleep(10)
 for jobid in jobids
     @test CAL.job_completed(jobid)
     @test CAL.job_failed(jobid)
