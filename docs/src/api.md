@@ -5,6 +5,7 @@
 ```@docs
 ClimaCalibrate.forward_model
 ClimaCalibrate.observation_map
+ClimaCalibrate.post_observation_map_hook
 ```
 
 ## Worker Interface

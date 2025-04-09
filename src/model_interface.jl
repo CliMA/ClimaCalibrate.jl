@@ -1,7 +1,7 @@
 import EnsembleKalmanProcesses as EKP
 import YAML
 
-export forward_model, observation_map
+export forward_model, observation_map, post_observation_map_hook
 
 """
     forward_model(iteration, member)
@@ -23,4 +23,25 @@ This function must be implemented for each calibration experiment.
 """
 function observation_map(iteration)
     error("observation_map not implemented")
+end
+
+"""
+    postprocess_hook(ekp, g_ensemble, output_dir, iteration, prior)
+
+After each evaluation of the observation map and before updating the ensemble,
+`post_observation_map_hook` is evaluated.
+
+This function is optional to implement.
+
+For example, one may want to print information from the `eki` object or plot
+`g_ensemble`.
+"""
+function post_observation_map_hook(
+    ekp,
+    g_ensemble,
+    prior,
+    output_dir,
+    iteration,
+)
+    return nothing
 end
