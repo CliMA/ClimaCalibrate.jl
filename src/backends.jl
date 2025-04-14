@@ -237,7 +237,10 @@ const DEFAULT_FAILURE_RATE = 0.5
 Run a full calibration on the given backend.
 
 If the EKP struct is not given, it will be constructed upon initialization. 
-The experiment configuration (ensemble size, prior, observations, etc) can be 
+While EKP keyword arguments are passed through to the EKP constructor, if using
+many keywords it is recommended to construct the EKP object and pass it into `calibrate`.
+
+The experiment configuration (ensemble size, prior, observations, etc) can be
 wrapped in an ExperimentConfig or passed in as arguments to the function.
 
 Available Backends: WorkerBackend, CaltechHPCBackend, ClimaGPUBackend, DerechoBackend, JuliaBackend
@@ -286,14 +289,22 @@ function calibrate(
     worker_pool = default_worker_pool(),
     ekp_kwargs...,
 )
-    eki = ekp_constructor(
+    ekp = ekp_constructor(
         ensemble_size,
         prior,
         observations,
         noise;
         ekp_kwargs...,
     )
-    return calibrate(b, eki, n_iterations, prior, output_dir; worker_pool)
+    return calibrate(
+        b,
+        ekp,
+        n_iterations,
+        prior,
+        output_dir;
+        failure_rate,
+        worker_pool,
+    )
 end
 
 function calibrate(
