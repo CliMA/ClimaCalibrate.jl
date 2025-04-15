@@ -377,6 +377,8 @@ Compute the observation map and update the given EKP object.
 """
 function observation_map_and_update!(ekp, output_dir, iteration, prior)
     g_ensemble = observation_map(iteration)
+    g_ensemble =
+        postprocess_g_ensemble(ekp, g_ensemble, prior, output_dir, iteration)
     save_G_ensemble(output_dir, iteration, g_ensemble)
     terminate = update_ensemble!(ekp, g_ensemble, output_dir, iteration, prior)
     analyze_iteration(ekp, g_ensemble, prior, output_dir, iteration)

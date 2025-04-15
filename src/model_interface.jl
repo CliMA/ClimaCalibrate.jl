@@ -37,7 +37,7 @@ For example, one may want to print information from the `eki` object or plot
 `g_ensemble`.
 """
 function analyze_iteration(ekp, g_ensemble, prior, output_dir, iteration)
-    @info "Mean constrained parameter: $(EKP.get_ϕ_mean_final(prior, ekp))"
+    @info "Mean constrained parameter(s): $(EKP.get_ϕ_mean_final(prior, ekp))"
     @info "Covariance-weighted error: $(last(EKP.get_error(ekp)))"
     return nothing
 end

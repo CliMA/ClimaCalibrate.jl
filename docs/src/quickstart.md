@@ -49,6 +49,17 @@ end
 
 ### Optional postprocessing
 
+It may be the case that `observation_map` is insufficient as you need to more information,
+such as information from the `ekp` object to compute `G_ensemble`. Further postprocessing of the
+`G_ensemble` object can be done by implementing the `postprocess_g_ensemble` as shown
+below.
+
+```julia
+function postprocess_g_ensemble(ekp, g_ensemble, prior, output_dir, iteration)
+    return g_ensemble
+end
+```
+
 After each evaluation of the observation map and before updating the ensemble, it may be
 helpful to print the errors from the `ekp` object or plot `G_ensemble`. This can be done
 by implementing the `analyze_iteration` as shown below.
