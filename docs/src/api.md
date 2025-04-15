@@ -5,6 +5,7 @@
 ```@docs
 ClimaCalibrate.forward_model
 ClimaCalibrate.observation_map
+ClimaCalibrate.analyze_iteration
 ```
 
 ## Worker Interface

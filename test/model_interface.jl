@@ -14,4 +14,5 @@ using Test
     @test_throws ErrorException("observation_map not implemented") ClimaCalibrate.observation_map(
         1,
     )
+    @test isnothing(ClimaCalibrate.analyze_iteration(1, 1, 1, 1, 1))
 end
