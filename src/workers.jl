@@ -17,8 +17,6 @@ function run_worker_iteration(
     worker_pool = default_worker_pool(),
     failure_rate = DEFAULT_FAILURE_RATE,
 )
-    # Create a channel to collect results
-    results = Channel{Any}(ensemble_size)
     nfailures = 0
     @sync begin
         for m in 1:(ensemble_size)
@@ -39,8 +37,10 @@ function run_worker_iteration(
     end
     iter_failure_rate = nfailures / ensemble_size
     if iter_failure_rate > failure_rate
-        error(
-            "Ensemble for iter $iter had a $(iter_failure_rate * 100)% failure rate",
+        throw(
+            ErrorException(
+                "Execution halted: Iteration $iter had a $(round(iter_failure_rate * 100; digits=2))% failure rate, exceeding the maximum allowed threshold of $(failure_rate * 100)%.",
+            ),
         )
     end
 end

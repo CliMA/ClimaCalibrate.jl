@@ -111,7 +111,7 @@ end
 # for the ensemble update step. The observation map just takes in the iteration number,
 # and always outputs an array. 
 # For observation map output `G_ensemble`, `G_ensemble[:, m]` must the output of ensemble member `m`.
-# This is needed for compatability with EnsembleKalmanProcesses.jl.
+# This is needed for compatibility with EnsembleKalmanProcesses.jl.
 const days = 86_400
 function CAL.observation_map(iteration)
     single_member_dims = (1,)
