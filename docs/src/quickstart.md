@@ -46,6 +46,41 @@ function observation_map(iteration)
     return G_ensemble
 end
 ```
+
+### Optional postprocessing
+
+It may be the case that `observation_map` is insufficient as you need to more information,
+such as information from the `ekp` object to compute `G_ensemble`. Further postprocessing of the
+`G_ensemble` object can be done by implementing the `postprocess_g_ensemble` as shown
+below.
+
+```julia
+function postprocess_g_ensemble(ekp, g_ensemble, prior, output_dir, iteration)
+    return g_ensemble
+end
+```
+
+After each evaluation of the observation map and before updating the ensemble, it may be
+helpful to print the errors from the `ekp` object or plot `G_ensemble`. This can be done
+by implementing the `analyze_iteration` as shown below.
+
+```julia
+function ClimaCalibrate.analyze_iteration(
+    ekp,
+    g_ensemble,
+    prior,
+    output_dir,
+    iteration,
+)
+    @info "Analyzing iteration"
+    @info "Iteration $iteration"
+    @info "Current mean parameter: $(EnsembleKalmanProcesses.get_ϕ_mean_final(prior, ekp))"
+    @info "g_ensemble: $g_ensemble"
+    @info "output_dir: $output_dir"
+    return nothing
+end
+```
+
 ### Parameters
 
 Every parameter that is being calibrated requires a prior distribution to sample from.

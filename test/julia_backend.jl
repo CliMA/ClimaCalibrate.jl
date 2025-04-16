@@ -50,6 +50,15 @@ function CAL.observation_map(iteration)
     return G_ensemble
 end
 
+function CAL.analyze_iteration(ekp, g_ensemble, prior, output_dir, iteration)
+    @info "Analyzing iteration"
+    @info "Iteration $iteration"
+    @info "Current mean constrained parameter: $(EKP.get_ϕ_mean_final(prior, ekp))"
+    @info "g_ensemble: $g_ensemble"
+    @info "output_dir: $output_dir"
+    return nothing
+end
+
 # Test!
 ekp = CAL.calibrate(CAL.JuliaBackend, experiment_config)
 
