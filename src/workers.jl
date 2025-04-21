@@ -18,21 +18,29 @@ function run_worker_iteration(
     failure_rate = DEFAULT_FAILURE_RATE,
 )
     nfailures = 0
-    @sync begin
-        for m in 1:(ensemble_size)
-            @async begin
-                worker = take!(worker_pool)
-                @info "Running particle $m on worker $worker"
-                try
-                    remotecall_wait(forward_model, worker, iter, m)
-                catch e
-                    @warn "Error running member $m" exception = e
-                    nfailures += 1
-                finally
-                    # Always return worker to pool
-                    put!(worker_pool, worker)
-                end
+
+    work_to_do = map(1:ensemble_size) do m
+        (w) -> begin
+            @info "Running particle $m on worker $w"
+            remotecall_wait(forward_model, w, iter, m)
+        end
+    end
+    isempty(worker_pool.workers) && @info "No workers currently available"
+    @sync while !isempty(work_to_do)
+        if !isempty(worker_pool.workers)
+            worker = take!(worker_pool)
+            run_fwd_model = pop!(work_to_do)
+            @async try
+                run_fwd_model(worker)
+            catch e
+                @warn "Error running on worker $worker" exception = e
+                nfailures += 1
+            finally
+                push!(worker_pool, worker)
             end
+        else
+            @debug "no workers available"
+            sleep(10) # Wait for workers to become available
         end
     end
     iter_failure_rate = nfailures / ensemble_size
