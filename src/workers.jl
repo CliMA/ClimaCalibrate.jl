@@ -21,11 +21,14 @@ function run_worker_iteration(
 
     work_to_do = map(1:ensemble_size) do m
         (w) -> begin
-        checkpoint_file = joinpath(path_to_ensemble_member(output_dir, iter, m), "checkpoint.txt")
-            
+            checkpoint_file = joinpath(
+                path_to_ensemble_member(output_dir, iter, m),
+                "checkpoint.txt",
+            )
+
             if isfile(checkpoint_file)
                 status = readline(checkpoint_file)
-                
+
                 if status == "completed"
                     @info "Skipping completed particle $m (found checkpoint)"
                 else
@@ -40,7 +43,7 @@ function run_worker_iteration(
                     end
                 end
             else
-                @info "Starting new particle $m on worker $w"
+                @info "Running particle $m on worker $w"
                 open(checkpoint_file, "w") do io
                     write(io, "started")
                 end
@@ -59,7 +62,6 @@ function run_worker_iteration(
             @async try
                 run_fwd_model(worker)
             catch e
-                # UndefVarError: `worker` not defined in `ClimaCalibrate`
                 @warn "Error running on worker $worker" exception = e
                 nfailures += 1
             finally

@@ -424,8 +424,7 @@ function calibrate(
     first_iter = last_completed_iteration(output_dir) + 1
     for iter in first_iter:(n_iterations - 1)
         @info "Iteration $iter"
-        jobids = map(1:ensemble_size) do member
-            @info "Running ensemble member $member"
+        job_ids = map(1:ensemble_size) do member
             model_run(
                 b,
                 iter,
@@ -437,9 +436,9 @@ function calibrate(
                 hpc_kwargs,
             )
         end
-
-        wait_for_jobs(
-            jobids,
+        filter!(!isnothing, job_ids)
+        !isempty(job_ids) && wait_for_jobs(
+            job_ids,
             output_dir,
             iter,
             experiment_dir,
@@ -485,7 +484,10 @@ function model_run(
     module_load_str;
     hpc_kwargs = Dict(),
 )
-    checkpoint_file = joinpath(path_to_ensemble_member(output_dir, iter, member), "checkpoint.txt")
+    checkpoint_file = joinpath(
+        path_to_ensemble_member(output_dir, iter, member),
+        "checkpoint.txt",
+    )
 
     if isfile(checkpoint_file)
         status = readline(checkpoint_file)
@@ -497,7 +499,7 @@ function model_run(
             @info "Restarting particle $member (incomplete run detected)"
         end
     else
-        @info "Starting new particle $member"
+        @info "Running particle $member"
     end
 
     # Mark run as started
@@ -505,7 +507,7 @@ function model_run(
         write(io, "started")
     end
 
-    if backend <: SlurmBackend
+    job_id = if backend <: SlurmBackend
         slurm_model_run(
             iter,
             member,
@@ -528,4 +530,5 @@ function model_run(
     else
         error("Unsupported backend type: $backend")
     end
+    return job_id
 end
