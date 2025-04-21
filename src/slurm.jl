@@ -227,7 +227,11 @@ function generate_sbatch_script(
     model_interface = "$model_interface"; include(model_interface)
 
     experiment_dir = "$experiment_dir"
-    CAL.forward_model(iteration, member)'
+    CAL.forward_model(iteration, member)
+    checkpoint_file = joinpath(CAL.path_to_ensemble_member($output_dir, $iter, $member), "checkpoint.txt")
+    open(checkpoint_file, "w") do io
+        write(io, "completed")
+    end'
     exit 0
     """
     return sbatch_contents

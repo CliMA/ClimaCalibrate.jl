@@ -475,39 +475,57 @@ Arguments:
 - module_load_str: Commands which load the necessary modules
 - hpc_kwargs: Dictionary containing the resources for the job. Easily generated using [`kwargs`](@ref).
 """
-model_run(
-    ::Type{<:SlurmBackend},
+function model_run(
+    backend::Type,
     iter,
     member,
     output_dir,
     project_dir,
     model_interface,
     module_load_str;
-    hpc_kwargs,
-) = slurm_model_run(
-    iter,
-    member,
-    output_dir,
-    project_dir,
-    model_interface,
-    module_load_str;
-    hpc_kwargs,
+    hpc_kwargs = Dict(),
 )
-model_run(
-    ::Type{DerechoBackend},
-    iter,
-    member,
-    output_dir,
-    project_dir,
-    model_interface,
-    module_load_str;
-    hpc_kwargs,
-) = pbs_model_run(
-    iter,
-    member,
-    output_dir,
-    project_dir,
-    model_interface,
-    module_load_str;
-    hpc_kwargs,
-)
+    checkpoint_file = joinpath(path_to_ensemble_member(output_dir, iter, member), "checkpoint.txt")
+
+    if isfile(checkpoint_file)
+        status = readline(checkpoint_file)
+
+        if status == "completed"
+            @info "Skipping completed particle $member (found checkpoint)"
+            return
+        else
+            @info "Restarting particle $member (incomplete run detected)"
+        end
+    else
+        @info "Starting new particle $member"
+    end
+
+    # Mark run as started
+    open(checkpoint_file, "w") do io
+        write(io, "started")
+    end
+
+    if backend <: SlurmBackend
+        slurm_model_run(
+            iter,
+            member,
+            output_dir,
+            project_dir,
+            model_interface,
+            module_load_str;
+            hpc_kwargs,
+        )
+    elseif backend <: DerechoBackend
+        pbs_model_run(
+            iter,
+            member,
+            output_dir,
+            project_dir,
+            model_interface,
+            module_load_str;
+            hpc_kwargs,
+        )
+    else
+        error("Unsupported backend type: $backend")
+    end
+end
