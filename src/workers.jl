@@ -21,8 +21,34 @@ function run_worker_iteration(
 
     work_to_do = map(1:ensemble_size) do m
         (w) -> begin
-            @info "Running particle $m on worker $w"
-            remotecall_wait(forward_model, w, iter, m)
+        checkpoint_file = joinpath(path_to_ensemble_member(output_dir, iter, m), "checkpoint.txt")
+            
+            if isfile(checkpoint_file)
+                status = readline(checkpoint_file)
+                
+                if status == "completed"
+                    @info "Skipping completed particle $m (found checkpoint)"
+                else
+                    @info "Restarting particle $m on worker $w (incomplete run detected)"
+                    # Write to the file indicating we're starting the run
+                    open(checkpoint_file, "w") do io
+                        write(io, "started")
+                    end
+                    remotecall_wait(forward_model, w, iter, m)
+                    open(checkpoint_file, "w") do io
+                        write(io, "completed")
+                    end
+                end
+            else
+                @info "Starting new particle $m on worker $w"
+                open(checkpoint_file, "w") do io
+                    write(io, "started")
+                end
+                remotecall_wait(forward_model, w, iter, m)
+                open(checkpoint_file, "w") do io
+                    write(io, "completed")
+                end
+            end
         end
     end
     isempty(worker_pool.workers) && @info "No workers currently available"
@@ -33,6 +59,7 @@ function run_worker_iteration(
             @async try
                 run_fwd_model(worker)
             catch e
+                # UndefVarError: `worker` not defined in `ClimaCalibrate`
                 @warn "Error running on worker $worker" exception = e
                 nfailures += 1
             finally
