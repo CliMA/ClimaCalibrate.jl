@@ -55,7 +55,11 @@ iteration = 1; member = 1
 model_interface = "model_interface.jl"; include(model_interface)
 
 experiment_dir = "exp/dir"
-CAL.forward_model(iteration, member)'
+CAL.forward_model(iteration, member)
+checkpoint_file = joinpath(CAL.path_to_ensemble_member("test", 1, 1), "checkpoint.txt")
+open(checkpoint_file, "w") do io
+    write(io, "completed")
+end'
 exit 0
 """
 
