@@ -420,24 +420,62 @@ function calibrate(
     @info "Initializing calibration" n_iterations ensemble_size output_dir
     ekp = initialize(ekp, prior, output_dir)
     module_load_str = module_load_string(b)
-
     first_iter = last_completed_iteration(output_dir) + 1
+
     for iter in first_iter:(n_iterations - 1)
-        @info "Iteration $iter"
-        job_ids = map(1:ensemble_size) do member
-            model_run(
-                b,
-                iter,
-                member,
-                output_dir,
-                experiment_dir,
-                model_interface,
-                module_load_str;
-                hpc_kwargs,
-            )
-        end
-        filter!(!isnothing, job_ids)
-        !isempty(job_ids) && wait_for_jobs(
+        run_hpc_iteration(
+            b,
+            ekp,
+            iter,
+            ensemble_size,
+            output_dir,
+            experiment_dir,
+            model_interface,
+            module_load_str,
+            prior;
+            hpc_kwargs = hpc_kwargs,
+            verbose = verbose,
+        )
+        @info "Completed iteration $iter, updating ensemble"
+        ekp = load_ekp_struct(output_dir, iter)
+        terminate = observation_map_and_update!(ekp, output_dir, iter, prior)
+        !isnothing(terminate) && break
+    end
+
+    return ekp
+end
+
+function run_hpc_iteration(
+    b::Type{<:HPCBackend},
+    ekp::EKP.EnsembleKalmanProcess,
+    iter,
+    ensemble_size,
+    output_dir,
+    experiment_dir,
+    model_interface,
+    module_load_str,
+    prior;
+    hpc_kwargs,
+    verbose = false,
+)
+    @info "Iteration $iter"
+    job_ids = map(1:ensemble_size) do member
+        model_run(
+            b,
+            iter,
+            member,
+            output_dir,
+            experiment_dir,
+            model_interface,
+            module_load_str;
+            hpc_kwargs,
+        )
+    end
+    job_ids = filter(!isnothing, job_ids)
+    if !isempty(job_ids)
+        job_id_type = typeof(first(job_ids))
+        job_ids = job_id_type[id for id in job_ids]
+        wait_for_jobs(
             job_ids,
             output_dir,
             iter,
@@ -448,16 +486,11 @@ function calibrate(
             verbose,
             reruns = 0,
         )
-        @info "Completed iteration $iter, updating ensemble"
-        ekp = load_ekp_struct(output_dir, iter)
-        terminate = observation_map_and_update!(ekp, output_dir, iter, prior)
-        !isnothing(terminate) && break
     end
-    return ekp
 end
 
 # Dispatch on backend type to unify `calibrate` for all HPCBackends
-# This keeps the scheduled interface independent from the backends
+# This keeps the scheduler interface independent from the backends
 """
     model_run(backend, iter, member, output_dir, experiment_dir; model_interface, verbose, hpc_kwargs)
 
