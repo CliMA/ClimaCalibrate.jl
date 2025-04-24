@@ -56,7 +56,7 @@ model_interface = "model_interface.jl"; include(model_interface)
 
 experiment_dir = "exp/dir"
 CAL.forward_model(iteration, member)
-write_model_completed("test", 0, 1)'
+CAL.write_model_completed("test", 1, 1)'
 exit 0
 """
 

@@ -21,17 +21,13 @@ function run_worker_iteration(
 
     work_to_do = map(1:ensemble_size) do m
         (w) -> begin
-            checkpoint_file = joinpath(
-                path_to_ensemble_member(output_dir, iter, m),
-                "checkpoint.txt",
-            )
-            if model_completed(output_dir, iteration, member)
-                @info "Skipping completed member $member (found checkpoint)"
+            if model_completed(output_dir, iter, m)
+                @info "Skipping completed member $m (found checkpoint)"
                 return
-            elseif model_started(output_dir, iteration, member)
-                @info "Restarting member $member on worker $w (incomplete run detected)"
+            elseif model_started(output_dir, iter, m)
+                @info "Restarting member $m on worker $w (incomplete run detected)"
             else
-                @info "Running member $member on worker $w"
+                @info "Running member $m on worker $w"
             end
             write_model_started(output_dir, iter, m)
             remotecall_wait(forward_model, w, iter, m)
