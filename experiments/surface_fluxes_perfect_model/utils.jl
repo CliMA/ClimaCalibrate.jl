@@ -18,8 +18,10 @@ function test_sf_calibration_output(eki, prior, observation)
 end
 
 function compare_g_ensemble(eki1, eki2)
-    for (g1, g2) in zip(eki1.g, eki2.g)
-        @test g1.stored_data == g2.stored_data
+    @testset "Compare g_ensemble between two EKP objects" begin
+        for (g1, g2) in zip(eki1.g, eki2.g)
+            @test g1.stored_data == g2.stored_data
+        end
     end
 end
 
