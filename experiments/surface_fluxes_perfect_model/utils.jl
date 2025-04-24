@@ -8,7 +8,7 @@ function test_sf_calibration_output(eki, prior, observation)
         params = get_ϕ(prior, eki)
         spread = map(var, params)
 
-        # Spread should be heavily decreased as particles have converged
+        # Spread should be heavily decreased the ensemble has converged
         @test last(spread) / first(spread) < 0.15
 
         forward_model_output = get_g_mean_final(eki)

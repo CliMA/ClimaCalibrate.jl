@@ -523,12 +523,12 @@ function model_run(
     )
 
     if model_completed(output_dir, iter, member)
-        @info "Skipping completed particle $member (found checkpoint)"
+        @info "Skipping completed member $member (found checkpoint)"
         return
     elseif model_started(output_dir, iter, member)
-        @info "Restarting particle $member (incomplete run detected)"
+        @info "Restarting member $member (incomplete run detected)"
     else
-        @info "Running particle $member"
+        @info "Running member $member"
     end
 
     write_model_started(output_dir, iter, member)

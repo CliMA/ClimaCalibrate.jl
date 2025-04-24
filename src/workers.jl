@@ -26,12 +26,12 @@ function run_worker_iteration(
                 "checkpoint.txt",
             )
             if model_completed(output_dir, iteration, member)
-                @info "Skipping completed particle $member (found checkpoint)"
+                @info "Skipping completed member $member (found checkpoint)"
                 return
             elseif model_started(output_dir, iteration, member)
-                @info "Restarting particle $member on worker $w (incomplete run detected)"
+                @info "Restarting member $member on worker $w (incomplete run detected)"
             else
-                @info "Running particle $member on worker $w"
+                @info "Running member $member on worker $w"
             end
             write_model_started(output_dir, iter, m)
             remotecall_wait(forward_model, w, iter, m)
