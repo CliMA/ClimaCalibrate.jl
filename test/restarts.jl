@@ -34,7 +34,6 @@ write(io, "import ClimaCalibrate\n")
 write(io, "ClimaCalibrate.forward_model(iter, member) = member > 2 && exit()")
 close(io)
 
-
 eki = EKP.EnsembleKalmanProcess(
     EKP.construct_initial_ensemble(prior, ensemble_size),
     observation,
@@ -59,12 +58,11 @@ ClimaCalibrate.run_hpc_iteration(
 )
 @testset "Test model checkpoints with interruptions" begin
     for m in 1:ensemble_size
-        checkpoint_file = joinpath(
-            ClimaCalibrate.path_to_ensemble_member(output_dir, 0, m),
-            "checkpoint.txt",
-        )
-        expected = m <= 2 ? "completed" : "started"
-        @test read(checkpoint_file, String) == expected
+        if m <= 2
+            @test ClimaCalibrate.model_completed(output_dir, 0, m)
+        else 
+            @test ClimaCalibrate.model_started(output_dir, 0, m)
+        end
     end
 end
 
@@ -88,11 +86,6 @@ ClimaCalibrate.run_hpc_iteration(
 
 @testset "Test model checkpoints for completion" begin
     for m in 1:ensemble_size
-        checkpoint_file = joinpath(
-            ClimaCalibrate.path_to_ensemble_member(output_dir, 0, m),
-            "checkpoint.txt",
-        )
-        @test read(checkpoint_file, String) == "completed"
+        @test ClimaCalibrate.model_completed(output_dir, 0, m)
     end
 end
-

@@ -522,23 +522,16 @@ function model_run(
         "checkpoint.txt",
     )
 
-    if isfile(checkpoint_file)
-        status = readline(checkpoint_file)
-
-        if status == "completed"
-            @info "Skipping completed particle $member (found checkpoint)"
-            return
-        else
-            @info "Restarting particle $member (incomplete run detected)"
-        end
+    if model_completed(output_dir, iter, member)
+        @info "Skipping completed particle $member (found checkpoint)"
+        return
+    elseif model_started(output_dir, iter, member)
+        @info "Restarting particle $member (incomplete run detected)"
     else
         @info "Running particle $member"
     end
 
-    # Mark run as started
-    open(checkpoint_file, "w") do io
-        write(io, "started")
-    end
+    write_model_started(output_dir, iter, member)
 
     job_id = if backend <: SlurmBackend
         slurm_model_run(

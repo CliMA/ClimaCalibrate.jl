@@ -228,10 +228,7 @@ function generate_sbatch_script(
 
     experiment_dir = "$experiment_dir"
     CAL.forward_model(iteration, member)
-    checkpoint_file = joinpath(CAL.path_to_ensemble_member("$output_dir", $iter, $member), "checkpoint.txt")
-    open(checkpoint_file, "w") do io
-        write(io, "completed")
-    end'
+    CAL.write_model_completed("$output_dir", $iter, $member)'
     exit 0
     """
     return sbatch_contents

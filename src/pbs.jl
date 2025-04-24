@@ -68,10 +68,7 @@ export CLIMACOMMS_CONTEXT="MPI"
     import ClimaCalibrate as CAL
     include("$(abspath(model_interface))")
     CAL.forward_model($iter, $member)
-    checkpoint_file = joinpath(CAL.path_to_ensemble_member("$output_dir", $iter, $member), "checkpoint.txt")
-    open(checkpoint_file, "w") do io
-        write(io, "completed")
-    end
+    CAL.write_model_completed("$output_dir", $iter, $member)
     """
     return pbs_script, julia_script
 end

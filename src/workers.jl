@@ -25,33 +25,17 @@ function run_worker_iteration(
                 path_to_ensemble_member(output_dir, iter, m),
                 "checkpoint.txt",
             )
-
-            if isfile(checkpoint_file)
-                status = readline(checkpoint_file)
-
-                if status == "completed"
-                    @info "Skipping completed particle $m (found checkpoint)"
-                else
-                    @info "Restarting particle $m on worker $w (incomplete run detected)"
-                    # Write to the file indicating we're starting the run
-                    open(checkpoint_file, "w") do io
-                        write(io, "started")
-                    end
-                    remotecall_wait(forward_model, w, iter, m)
-                    open(checkpoint_file, "w") do io
-                        write(io, "completed")
-                    end
-                end
+            if model_completed(output_dir, iteration, member)
+                @info "Skipping completed particle $member (found checkpoint)"
+                return
+            elseif model_started(output_dir, iteration, member)
+                @info "Restarting particle $member on worker $w (incomplete run detected)"
             else
-                @info "Running particle $m on worker $w"
-                open(checkpoint_file, "w") do io
-                    write(io, "started")
-                end
-                remotecall_wait(forward_model, w, iter, m)
-                open(checkpoint_file, "w") do io
-                    write(io, "completed")
-                end
+                @info "Running particle $member on worker $w"
             end
+            write_model_started(output_dir, iter, m)
+            remotecall_wait(forward_model, w, iter, m)
+            write_model_completed(output_dir, iter, m)
         end
     end
     isempty(worker_pool.workers) && @info "No workers currently available"
