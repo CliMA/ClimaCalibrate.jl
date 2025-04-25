@@ -517,16 +517,11 @@ function model_run(
     module_load_str;
     hpc_kwargs = Dict(),
 )
-    checkpoint_file = joinpath(
-        path_to_ensemble_member(output_dir, iter, member),
-        "checkpoint.txt",
-    )
-
     if model_completed(output_dir, iter, member)
         @info "Skipping completed member $member (found checkpoint)"
         return
     elseif model_started(output_dir, iter, member)
-        @info "Restarting member $member (incomplete run detected)"
+        @info "Resuming member $member (incomplete run detected)"
     else
         @info "Running member $member"
     end

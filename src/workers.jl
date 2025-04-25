@@ -25,7 +25,7 @@ function run_worker_iteration(
                 @info "Skipping completed member $m (found checkpoint)"
                 return
             elseif model_started(output_dir, iter, m)
-                @info "Restarting member $m on worker $w (incomplete run detected)"
+                @info "Resuming member $m on worker $w (incomplete run detected)"
             else
                 @info "Running member $m on worker $w"
             end

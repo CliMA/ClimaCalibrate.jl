@@ -5,8 +5,8 @@
 
 <!-- description -->
 <p align="center">
-  <strong>ClimaCalibrate is a toolkit for developing scalable and reproducible 
-calibration pipelines using with minimal boilerplate.</strong>
+  <strong>ClimaCalibrate is a toolkit for developing scalable, reproducible
+calibration pipelines using minimal boilerplate.</strong>
 </p>
 
 [![dev][docs-dev-img]][docs-dev-url]
@@ -18,7 +18,7 @@ calibration pipelines using with minimal boilerplate.</strong>
 [gha-ci-img]: https://github.com/CliMA/ClimaCalibrate.jl/actions/workflows/ci.yml/badge.svg
 [gha-ci-url]: https://github.com/CliMA/ClimaCalibrate.jl/actions/workflows/ci.yml
 
-The recommended Julia version is: Stable release v1.10.4
+The recommended Julia version is: Stable release v1.11.4
 
 Currently supported backends: 
 - [Resnick High Performance Computing Center](https://www.hpc.caltech.edu/)
