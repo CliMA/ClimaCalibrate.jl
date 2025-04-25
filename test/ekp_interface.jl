@@ -22,16 +22,6 @@ observations = zeros(Float64, 1)
 n_iterations = 1
 ensemble_size = 10
 
-config = CAL.ExperimentConfig(
-    n_iterations,
-    ensemble_size,
-    observations,
-    noise,
-    prior,
-    output_dir,
-)
-
-
 user_initial_ensemble =
     EKP.construct_initial_ensemble(rng_ekp, prior, ensemble_size)
 user_constructed_eki = EKP.EnsembleKalmanProcess(
@@ -43,9 +33,20 @@ user_constructed_eki = EKP.EnsembleKalmanProcess(
     rng = rng_ekp,
 )
 
-eki = CAL.initialize(config; rng_seed)
+eki = CAL.initialize(
+    ensemble_size,
+    observations,
+    noise,
+    prior,
+    output_dir;
+    rng_seed,
+)
 eki_with_kwargs = CAL.initialize(
-    config;
+    ensemble_size,
+    observations,
+    noise,
+    prior,
+    output_dir;
     scheduler = EKP.MutableScheduler(2),
     accelerator = EKP.NesterovAccelerator(),
 )
@@ -66,12 +67,8 @@ end
     @test eki.u[1].stored_data == user_constructed_eki.u[1].stored_data
 end
 
-override_file = joinpath(
-    config.output_dir,
-    "iteration_000",
-    "member_001",
-    "parameters.toml",
-)
+override_file =
+    joinpath(output_dir, "iteration_000", "member_001", "parameters.toml")
 td = CP.create_toml_dict(FT; override_file)
 params = CP.get_parameter_values(td, param_names)
 

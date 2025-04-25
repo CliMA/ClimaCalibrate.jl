@@ -5,7 +5,7 @@
 
 <!-- description -->
 <p align="center">
-  <strong>ClimaCalibrate is a toolkit for developing scalable, reproducible
+  <strong>ClimaCalibrate is a toolkit for developing scalable
 calibration pipelines using minimal boilerplate.</strong>
 </p>
 

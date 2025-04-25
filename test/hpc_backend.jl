@@ -8,15 +8,6 @@ include(
         "utils.jl",
     ),
 )
-experiment_config = ExperimentConfig(
-    n_iterations,
-    ensemble_size,
-    observation,
-    variance,
-    prior,
-    output_dir,
-)
-
 backend = get_backend()
 @assert backend <: HPCBackend
 hpc_kwargs = kwargs(time = 5, ntasks = 1, cpus_per_task = 1)
@@ -66,7 +57,12 @@ ClimaCalibrate.run_hpc_iteration(
 end
 
 eki = calibrate(
-    experiment_config;
+    ensemble_size,
+    n_iterations,
+    observation,
+    variance,
+    prior,
+    output_dir;
     model_interface,
     hpc_kwargs,
     verbose = true,
@@ -83,19 +79,24 @@ eki = calibrate(
     end
 end
 
-test_sf_calibration_output(eki, prior, experiment_config.observations)
+test_sf_calibration_output(eki, prior, observation)
 
 # Remove previous output - this is not necessary but safe for tests
 rm(output_dir, recursive = true)
 # Pure Julia calibration, this should run anywhere
 julia_eki = calibrate(
     JuliaBackend,
-    experiment_config;
+    ensemble_size,
+    n_iterations,
+    observation,
+    variance,
+    prior,
+    output_dir;
     localization_method = EKP.Localizers.NoLocalization(),
     accelerator = EKP.DefaultAccelerator(),
     scheduler = EKP.DefaultScheduler(),
 )
-test_sf_calibration_output(julia_eki, prior, experiment_config.observations)
+test_sf_calibration_output(julia_eki, prior, observation)
 
 compare_g_ensemble(eki, julia_eki)
 

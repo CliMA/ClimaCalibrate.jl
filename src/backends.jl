@@ -97,21 +97,6 @@ function module_load_string(::Type{DerechoBackend})
 end
 
 function calibrate(
-    config::ExperimentConfig;
-    model_interface = nothing,
-    hpc_kwargs = Dict(),
-    ekp_kwargs...,
-)
-    backend = get_backend()
-    if backend <: HPCBackend
-        calibrate(backend, config; model_interface, hpc_kwargs, ekp_kwargs...)
-    else
-        # If not HPCBackend, strip out model_interface and hpc_kwargs
-        calibrate(backend, config; ekp_kwargs...)
-    end
-end
-
-function calibrate(
     ensemble_size::Int,
     n_iterations::Int,
     observations,
@@ -149,25 +134,6 @@ function calibrate(
             ekp_kwargs...,
         )
     end
-end
-
-function calibrate(
-    b::Type{JuliaBackend},
-    config::ExperimentConfig;
-    ekp_kwargs...,
-)
-    (; ensemble_size, n_iterations, observations, noise, prior, output_dir) =
-        config
-    return calibrate(
-        b,
-        ensemble_size,
-        n_iterations,
-        observations,
-        noise,
-        prior,
-        output_dir;
-        ekp_kwargs...,
-    )
 end
 
 function calibrate(
@@ -231,18 +197,14 @@ end
 const DEFAULT_FAILURE_RATE = 0.5
 
 """
-    calibrate(backend, ensemble_size, n_iterations, observations, noise, prior, output_dir; ekp_kwargs...)
     calibrate(backend, ekp::EnsembleKalmanProcess, ensemble_size, n_iterations, prior, output_dir)
-    calibrate(backend, config::ExperimentConfig; ekp_kwargs...)
+    calibrate(backend, ensemble_size, n_iterations, observations, noise, prior, output_dir; ekp_kwargs...)
 
 Run a full calibration on the given backend.
 
 If the EKP struct is not given, it will be constructed upon initialization. 
 While EKP keyword arguments are passed through to the EKP constructor, if using
 many keywords it is recommended to construct the EKP object and pass it into `calibrate`.
-
-The experiment configuration (ensemble size, prior, observations, etc) can be
-wrapped in an ExperimentConfig or passed in as arguments to the function.
 
 Available Backends: WorkerBackend, CaltechHPCBackend, ClimaGPUBackend, DerechoBackend, JuliaBackend
 
@@ -255,29 +217,6 @@ WorkerBackend uses Distributed.jl to run the forward model on workers.
 - `verbose::Bool`: Enable verbose logging.
 - Any keyword arguments for the EnsembleKalmanProcess constructor, such as `scheduler`
 """
-function calibrate(
-    b::Type{WorkerBackend},
-    config::ExperimentConfig;
-    failure_rate = DEFAULT_FAILURE_RATE,
-    worker_pool = default_worker_pool(),
-    ekp_kwargs...,
-)
-    (; ensemble_size, n_iterations, observations, noise, prior, output_dir) =
-        config
-    return calibrate(
-        b,
-        ensemble_size,
-        n_iterations,
-        observations,
-        noise,
-        prior,
-        output_dir;
-        failure_rate,
-        worker_pool,
-        ekp_kwargs...,
-    )
-end
-
 function calibrate(
     b::Type{WorkerBackend},
     ensemble_size::Int,
@@ -342,34 +281,6 @@ function calibrate(
         !isnothing(terminate) && break
     end
     return ekp
-end
-
-function calibrate(
-    b::Type{<:HPCBackend},
-    config::ExperimentConfig;
-    experiment_dir = project_dir(),
-    model_interface = abspath(
-        joinpath(experiment_dir, "..", "..", "model_interface.jl"),
-    ),
-    verbose = false,
-    hpc_kwargs = Dict(),
-    ekp_kwargs...,
-)
-    (; ensemble_size, n_iterations, observations, noise, prior, output_dir) =
-        config
-    return calibrate(
-        b,
-        ensemble_size,
-        n_iterations,
-        observations,
-        noise,
-        prior,
-        output_dir;
-        model_interface,
-        verbose,
-        hpc_kwargs,
-        ekp_kwargs...,
-    )
 end
 
 function calibrate(

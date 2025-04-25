@@ -138,7 +138,7 @@ This is done by checking if the ensemble forward map results file (`G_ensemble.j
 and the EKI file (`eki_file.jld2`) have been saved.
 
 If a calibration is interrupted during forward model execution, 
-causing a partial iteration, incomplete forward models will be re-run when the 
+causing a partial iteration, incomplete forward models will be rerun when the 
 calibration is restarted. Completed forward models will not be rerun.
 This is done by checking each model's checkpoint file and the flag it contains.
 
