@@ -137,26 +137,6 @@ function calibrate(
 end
 
 function calibrate(
-    b::Type{JuliaBackend},
-    ensemble_size,
-    n_iterations,
-    observations,
-    noise,
-    prior,
-    output_dir;
-    ekp_kwargs...,
-)
-    ekp = ekp_constructor(
-        ensemble_size,
-        prior,
-        observations,
-        noise;
-        ekp_kwargs...,
-    )
-    return calibrate(b, ekp, n_iterations, prior, output_dir)
-end
-
-function calibrate(
     ::Type{JuliaBackend},
     ekp::EKP.EnsembleKalmanProcess,
     n_iterations,
@@ -218,17 +198,21 @@ WorkerBackend uses Distributed.jl to run the forward model on workers.
 - Any keyword arguments for the EnsembleKalmanProcess constructor, such as `scheduler`
 """
 function calibrate(
-    b::Type{WorkerBackend},
-    ensemble_size::Int,
-    n_iterations::Int,
+    b::Type{<:AbstractBackend},
+    ensemble_size,
+    n_iterations,
     observations,
     noise,
     prior,
     output_dir;
-    failure_rate = DEFAULT_FAILURE_RATE,
-    worker_pool = default_worker_pool(),
-    ekp_kwargs...,
+    kwargs...,
 )
+    backend_kwargs = filter_calibrate_kwargs(b, kwargs)
+    backend_kwarg_keys = keys(backend_kwargs)
+
+    # Filter EKP-specific kwargs from backend kwargs
+    ekp_kwargs = filter(x -> !(first(x) in backend_kwarg_keys), pairs(kwargs))
+
     ekp = ekp_constructor(
         ensemble_size,
         prior,
@@ -236,15 +220,32 @@ function calibrate(
         noise;
         ekp_kwargs...,
     )
-    return calibrate(
-        b,
-        ekp,
-        n_iterations,
-        prior,
-        output_dir;
-        failure_rate,
-        worker_pool,
-    )
+
+    # Dispatch on backend
+    return calibrate(b, ekp, n_iterations, prior, output_dir; backend_kwargs...)
+end
+
+default_kwargs(::Type{JuliaBackend}) = (;)
+
+default_kwargs(::Type{WorkerBackend}) =
+    (; failure_rate = DEFAULT_FAILURE_RATE, worker_pool = default_worker_pool())
+
+default_kwargs(::Type{<:HPCBackend}) = (;
+    hpc_kwargs = Dict(),
+    verbose = false,
+    experiment_dir = project_dir(),
+    model_interface = abspath(
+        joinpath(project_dir(), "..", "..", "model_interface.jl"),
+    ),
+)
+
+# Filter `calibrate` kwargs for the given backend.
+# Removes unused kwargs and merges result with defaults.
+function filter_calibrate_kwargs(b::Type{<:AbstractBackend}, kwargs)
+    default_kws = default_kwargs(b)
+    kwarg_keys = keys(default_kws)
+    filtered_kwargs = filter(x -> first(x) in kwarg_keys, pairs(kwargs))
+    return merge(default_kws, filtered_kwargs)
 end
 
 function calibrate(
@@ -285,43 +286,6 @@ end
 
 function calibrate(
     b::Type{<:HPCBackend},
-    ensemble_size::Int,
-    n_iterations::Int,
-    observations,
-    noise,
-    prior,
-    output_dir;
-    experiment_dir = project_dir(),
-    model_interface = abspath(
-        joinpath(experiment_dir, "..", "..", "model_interface.jl"),
-    ),
-    verbose = false,
-    hpc_kwargs,
-    ekp_kwargs...,
-)
-    ekp = ekp_constructor(
-        ensemble_size,
-        prior,
-        observations,
-        noise;
-        ekp_kwargs...,
-    )
-    return calibrate(
-        b,
-        ekp,
-        n_iterations,
-        prior,
-        output_dir;
-        experiment_dir,
-        model_interface,
-        verbose,
-        hpc_kwargs,
-        ekp_kwargs...,
-    )
-end
-
-function calibrate(
-    b::Type{<:HPCBackend},
     ekp::EKP.EnsembleKalmanProcess,
     n_iterations,
     prior,
@@ -332,7 +296,6 @@ function calibrate(
     ),
     verbose = false,
     hpc_kwargs,
-    ekp_kwargs...,
 )
     ensemble_size = EKP.get_N_ens(ekp)
     @info "Initializing calibration" n_iterations ensemble_size output_dir
