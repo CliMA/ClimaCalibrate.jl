@@ -15,7 +15,7 @@ steps:
       - echo "--- Instantiate project"
       - julia --project -e 'using Pkg; Pkg.instantiate(;verbose=true)'
       - echo "--- Instantiate SurfaceFluxes calibration project"
-      - julia --project=experiments/surface_fluxes_perfect_model -e 'using Pkg; Pkg.instantiate(;verbose=true)'
+      - julia --project=experiments/surface_fluxes_perfect_model -e 'using Pkg; Pkg.develop(; path = "."); Pkg.instantiate(;verbose=true)'
 
   - wait
 
