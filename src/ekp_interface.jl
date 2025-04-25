@@ -99,6 +99,18 @@ path_to_ensemble_member(output_dir, iteration, member) =
 const DEFAULT_PARAMETER_FILE = "parameters.toml"
 const DEFAULT_EKP_FILE = "eki_file.jld2"
 const DEFAULT_G_ENSEMBLE = "G_ensemble.jld2"
+const DEFAULT_CHECKPOINT_FILE = "checkpoint.txt"
+
+"""
+    checkpoint_path(output_dir, iteration, member)
+
+Return the path to an ensemble member's checkpoint file.
+"""
+checkpoint_path(output_dir, iteration, member) = joinpath(
+    path_to_ensemble_member(output_dir, iteration, member),
+    DEFAULT_CHECKPOINT_FILE,
+)
+
 """
     parameter_path(output_dir, iteration, member)
 
@@ -216,6 +228,30 @@ function env_member_number(env = ENV)
         "Member number not found in environment. Ensure that env variable \"CALIBRATION_MEMBER_NUMBER\" is set.",
     )
     return parse(Int, env[key])
+end
+
+write_model_completed(output_dir, iteration, member) =
+    open(checkpoint_path(output_dir, iteration, member), "w") do io
+        write(io, "completed")
+    end
+
+write_model_started(output_dir, iteration, member) =
+    open(checkpoint_path(output_dir, iteration, member), "w") do io
+        write(io, "started")
+    end
+
+function model_completed(output_dir, iteration, member)
+    file = checkpoint_path(output_dir, iteration, member)
+    !isfile(file) && return false
+    status = readline(file)
+    return status == "completed" ? true : false
+end
+
+function model_started(output_dir, iteration, member)
+    file = checkpoint_path(output_dir, iteration, member)
+    !isfile(file) && return false
+    status = readline(file)
+    return status == "started" ? true : false
 end
 
 """

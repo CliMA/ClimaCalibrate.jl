@@ -68,6 +68,7 @@ export CLIMACOMMS_CONTEXT="MPI"
     import ClimaCalibrate as CAL
     include("$(abspath(model_interface))")
     CAL.forward_model($iter, $member)
+    CAL.write_model_completed("$output_dir", $iter, $member)
     """
     return pbs_script, julia_script
 end

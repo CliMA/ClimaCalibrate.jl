@@ -24,6 +24,28 @@ if nworkers() == 1
 end
 
 @everywhere using ClimaCalibrate
+@everywhere ClimaCalibrate.forward_model(i, m) = m == 1 && exit()
+
+eki = EKP.EnsembleKalmanProcess(
+    EKP.construct_initial_ensemble(prior, ensemble_size),
+    observation,
+    variance,
+    EKP.Inversion(),
+    verbose = true,
+)
+
+ClimaCalibrate.initialize(eki, prior, output_dir)
+
+ClimaCalibrate.run_worker_iteration(0, ensemble_size, output_dir)
+
+@testset "Test model checkpoints with interruptions" begin
+    for m in 1:ensemble_size
+        @test m == 1 ? ClimaCalibrate.model_started(output_dir, 0, m) :
+              ClimaCalibrate.model_completed(output_dir, 0, m)
+        rm(ClimaCalibrate.checkpoint_path(output_dir, 0, m))
+    end
+end
+
 @everywhere include(
     joinpath(
         pkgdir(ClimaCalibrate),

@@ -227,7 +227,8 @@ function generate_sbatch_script(
     model_interface = "$model_interface"; include(model_interface)
 
     experiment_dir = "$experiment_dir"
-    CAL.forward_model(iteration, member)'
+    CAL.forward_model(iteration, member)
+    CAL.write_model_completed("$output_dir", $iter, $member)'
     exit 0
     """
     return sbatch_contents

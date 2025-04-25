@@ -8,7 +8,7 @@ function test_sf_calibration_output(eki, prior, observation)
         params = get_ϕ(prior, eki)
         spread = map(var, params)
 
-        # Spread should be heavily decreased as particles have converged
+        # Spread should be heavily decreased the ensemble has converged
         @test last(spread) / first(spread) < 0.15
 
         forward_model_output = get_g_mean_final(eki)
@@ -18,8 +18,10 @@ function test_sf_calibration_output(eki, prior, observation)
 end
 
 function compare_g_ensemble(eki1, eki2)
-    for (g1, g2) in zip(eki1.g, eki2.g)
-        @test g1.stored_data == g2.stored_data
+    @testset "Compare g_ensemble between two EKP objects" begin
+        for (g1, g2) in zip(eki1.g, eki2.g)
+            @test g1.stored_data == g2.stored_data
+        end
     end
 end
 

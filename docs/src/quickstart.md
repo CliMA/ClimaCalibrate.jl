@@ -127,10 +127,28 @@ calibrate(ensemble_size, n_iterations, observations, noise, prior, output_dir)
 
 For more information on parallelizing your calibration, see the [Backends](https://clima.github.io/ClimaCalibrate.jl/dev/backends/) page.
 
-# Example Calibration
+# Checkpointing
 
-A good way to get started is to run the example experiment, `surface_fluxes_perfect_model`, 
-which uses the [SurfaceFluxes.jl](https://github.com/CliMA/SurfaceFluxes.jl) package 
+ClimaCalibrate checkpoints each forward model and iteration so that an interrupted
+calibration can seamlessly pick up where it left off without wasting resources.
+
+If a calibration (run via `calibrate`) exits after completing an iteration, 
+when it is restarted it will automatically run the next iteration. 
+This is done by checking if the ensemble forward map results file (`G_ensemble.jld2`) 
+and the EKI file (`eki_file.jld2`) have been saved.
+
+If a calibration is interrupted during forward model execution, 
+causing a partial iteration, incomplete forward models will be re-run when the 
+calibration is restarted. Completed forward models will not be rerun.
+This is done by checking each model's checkpoint file and the flag it contains.
+
+# Example Calibrations
+
+The [example tutorial](https://clima.github.io/ClimaCalibrate.jl/dev/literate_example/)
+provides a clear calibration example that can be run locally.
+
+Another example experiment can be found in the package repo under `experiments/surface_fluxes_perfect_model`.
+This experiment uses the [SurfaceFluxes.jl](https://github.com/CliMA/SurfaceFluxes.jl) package 
 to generate a physical model that calculates the Monin Obukhov turbulent surface 
 fluxes based on idealized atmospheric and surface conditions. Since this is a "perfect 
 model" example, the same model is used to generate synthetic observations using its 
