@@ -1,6 +1,7 @@
 using Distributed
 
 import EnsembleKalmanProcesses as EKP
+import Dates
 
 export get_backend, calibrate, model_run
 
@@ -329,7 +330,13 @@ function calibrate(
             worker_pool,
             failure_rate,
         )
-        @info "Iteration $iter time: $time"
+        formatted_time =
+            Dates.canonicalize(Dates.Millisecond(round(time * 1000)))
+        if isempty(Dates.periods(formatted_time))
+            @info "Iteration $iter time: 0 second"
+        else
+            @info "Iteration $iter time: $formatted_time"
+        end
         ekp = load_ekp_struct(output_dir, iter)
         terminate = observation_map_and_update!(ekp, output_dir, iter, prior)
         !isnothing(terminate) && break
