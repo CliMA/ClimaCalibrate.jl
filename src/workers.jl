@@ -20,30 +20,73 @@ function is_cluster_environment()
     return is_pbs_environment() || is_slurm_environment()
 end
 
-default_cpu_kwargs(::SlurmManager) = (; cpus_per_task = 1)
-default_cpu_kwargs(::PBSManager) = (; l_select = "ngpus=1:ncpus=4", )
+const DEFAULT_WALLTIME = 60
 
-# To do: add default kwargs, make timelimit just a number
-function add_workers(nworkers::Int; cluster_type=:auto, kwargs...)
-    if cluster_type == :local || (cluster_type == :auto && !is_cluster_environment())
+backend_worker_kwargs(::Type{DerechoBackend}) = (; q = "main", A = "UCIT0011")
+
+backend_worker_kwargs(::Type{GCPBackend}) = (; partition = "a3")
+
+backend_worker_kwargs(::Type{<:AbstractBackend}) = (;)
+
+default_cpu_kwargs(::SlurmManager) = (;
+    cpus_per_task = 1,
+    time = format_slurm_time(DEFAULT_WALLTIME),
+    backend_worker_kwargs(get_backend())...,
+)
+default_cpu_kwargs(::PBSManager) = (;
+    l_select = "ncpus=1",
+    l_walltime = format_pbs_time(DEFAULT_WALLTIME),
+    backend_worker_kwargs(get_backend())...,
+)
+
+default_gpu_kwargs(::SlurmManager) = (;
+    gpus_per_task = 1,
+    cpus_per_task = 4,
+    time = format_slurm_time(DEFAULT_WALLTIME),
+    backend_worker_kwargs(get_backend())...,
+)
+default_gpu_kwargs(::PBSManager) = (;
+    l_select = "ngpus=1:ncpus=4",
+    l_walltime = format_pbs_time(DEFAULT_WALLTIME),
+    backend_worker_kwargs(get_backend())...,
+)
+
+function add_workers(
+    nworkers::Int;
+    device = :gpu,
+    cluster_type = :auto,
+    kwargs...,
+)
+    if cluster_type == :local ||
+       (cluster_type == :auto && !is_cluster_environment())
         # Use standard addprocs for local computation
         @info "Using local processing mode for $nworkers workers"
         return addprocs(nworkers)
     else
         # Select the manager based on environment or explicit selection
-        if cluster_type == :pbs || (cluster_type == :auto && 
-                                    is_pbs_environment())
-            @info "PBS/Torque environment detected, adding $nworkers workers"
-            manager = PBSManager(nworkers)
-        elseif cluster_type == :slurm || (cluster_type == :auto && 
-                                         is_slurm_environment())
-            @info "Slurm environment detected, adding $nworkers workers"
-            manager = SlurmManager(nworkers)
-        else
-            error("Unknown cluster type: $cluster_type. Valid options are :auto, :pbs, :slurm, or :local")
-        end
-        
-        return addprocs(manager; kwargs...)
+        manager =
+            if cluster_type == :pbs ||
+               (cluster_type == :auto && is_pbs_environment())
+                @info "PBS/Torque environment detected, adding $nworkers workers"
+                PBSManager(nworkers)
+            elseif cluster_type == :slurm ||
+                   (cluster_type == :auto && is_slurm_environment())
+                @info "Slurm environment detected, adding $nworkers workers"
+                SlurmManager(nworkers)
+            else
+                error(
+                    "Unknown cluster type: $cluster_type. Valid options are :auto, :pbs, :slurm, or :local",
+                )
+            end
+
+        default_kwargs =
+            device == :gpu ? default_gpu_kwargs(manager) :
+            default_cpu_kwargs(manager)
+
+        # Merge the default kwargs with the user-provided kwargs, user kwargs take precedence
+        merged_kwargs = merge(default_kwargs, kwargs)
+
+        return addprocs(manager; merged_kwargs...)
     end
 end
 
@@ -171,7 +214,8 @@ function Distributed.launch(
     output_path = get(params, :o, get(params, :output, default_output))
 
     ntasks = sm.ntasks
-    srun_cmd = `srun -J $jobname -n $ntasks -D $exehome $worker_args -o $output_path -- $exename $exeflags $(worker_cookie_arg())`
+    srun_cmd =
+        `srun -J $jobname -n $ntasks -D $exehome $worker_args -o $output_path -- $exename $exeflags $(worker_cookie_arg())`
     @info "Starting SLURM job $jobname: $srun_cmd"
     pid = open(addenv(srun_cmd, env))
 
@@ -373,7 +417,8 @@ function Distributed.launch(
         -j oe: Send the output and error streams to the same file
         -J 1-ntasks: Job array
         -o: output file =#
-    qsub_cmd = `qsub -V -N $jobname -j oe $job_array_option $worker_args -o $output_path -- $exename $exeflags $(worker_cookie_arg())`
+    qsub_cmd =
+        `qsub -V -N $jobname -j oe $job_array_option $worker_args -o $output_path -- $exename $exeflags $(worker_cookie_arg())`
     @info "Starting PBS job $jobname: $qsub_cmd"
     pid = open(addenv(qsub_cmd, env))
 
