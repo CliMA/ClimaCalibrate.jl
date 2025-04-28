@@ -8,6 +8,45 @@ export SlurmManager, PBSManager, default_worker_pool, set_worker_loggers
 worker_timeout() = "300.0"
 ENV["JULIA_WORKER_TIMEOUT"] = worker_timeout()
 
+function is_pbs_environment()
+    return haskey(ENV, "PBS_JOBID") || !isempty(Sys.which("qsub"))
+end
+
+function is_slurm_environment()
+    return haskey(ENV, "SLURM_JOB_ID") || !isempty(Sys.which("srun"))
+end
+
+function is_cluster_environment()
+    return is_pbs_environment() || is_slurm_environment()
+end
+
+default_cpu_kwargs(::SlurmManager) = (; cpus_per_task = 1)
+default_cpu_kwargs(::PBSManager) = (; l_select = "ngpus=1:ncpus=4", )
+
+# To do: add default kwargs, make timelimit just a number
+function add_workers(nworkers::Int; cluster_type=:auto, kwargs...)
+    if cluster_type == :local || (cluster_type == :auto && !is_cluster_environment())
+        # Use standard addprocs for local computation
+        @info "Using local processing mode for $nworkers workers"
+        return addprocs(nworkers)
+    else
+        # Select the manager based on environment or explicit selection
+        if cluster_type == :pbs || (cluster_type == :auto && 
+                                    is_pbs_environment())
+            @info "PBS/Torque environment detected, adding $nworkers workers"
+            manager = PBSManager(nworkers)
+        elseif cluster_type == :slurm || (cluster_type == :auto && 
+                                         is_slurm_environment())
+            @info "Slurm environment detected, adding $nworkers workers"
+            manager = SlurmManager(nworkers)
+        else
+            error("Unknown cluster type: $cluster_type. Valid options are :auto, :pbs, :slurm, or :local")
+        end
+        
+        return addprocs(manager; kwargs...)
+    end
+end
+
 default_worker_pool() = WorkerPool(workers())
 
 function run_worker_iteration(
