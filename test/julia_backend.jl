@@ -17,15 +17,6 @@ observations = [20.0]
 noise = [0.01;;]
 output_dir = mktempdir()
 
-experiment_config = CAL.ExperimentConfig(
-    n_iterations,
-    ensemble_size,
-    observations,
-    noise,
-    prior,
-    output_dir,
-)
-
 # Model interface
 # This "model" just samples parameters and returns them, we are checking that the 
 # results are reproducible.
@@ -38,7 +29,6 @@ function CAL.forward_model(iteration, member)
 end
 
 function CAL.observation_map(iteration)
-    (; ensemble_size) = experiment_config
     dims = 1
     G_ensemble = Array{Float64}(undef, dims..., ensemble_size)
     for m in 1:ensemble_size
@@ -59,8 +49,15 @@ function CAL.analyze_iteration(ekp, g_ensemble, prior, output_dir, iteration)
     return nothing
 end
 
-# Test!
-ekp = CAL.calibrate(CAL.JuliaBackend, experiment_config)
+ekp = CAL.calibrate(
+    CAL.JuliaBackend,
+    ensemble_size,
+    n_iterations,
+    observations,
+    noise,
+    prior,
+    output_dir,
+)
 
 @testset "Test end-to-end calibration" begin
     parameter_values =

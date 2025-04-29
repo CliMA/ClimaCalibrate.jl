@@ -6,79 +6,9 @@ import EnsembleKalmanProcesses as EKP
 import EnsembleKalmanProcesses.ParameterDistributions as PD
 import EnsembleKalmanProcesses.TOMLInterface as TI
 
-export ExperimentConfig, get_prior, initialize, update_ensemble, save_G_ensemble
+export get_prior, initialize, update_ensemble, save_G_ensemble
 export path_to_ensemble_member,
     path_to_model_log, path_to_iteration, parameter_path
-
-"""
-    ExperimentConfig(
-        n_iterations::Integer,
-        ensemble_size::Integer,
-        observations,
-        noise,
-        prior::ParameterDistribution,
-        output_dir,
-    )
-    ExperimentConfig(filepath::AbstractString; kwargs...)
-
-Construct an ExperimentConfig from a given YAML file or directory containing 'experiment_config.yml'.
-
-ExperimentConfig holds the configuration for a calibration experiment.
-This can be constructed from a YAML configuration file or directly using individual parameters.
-"""
-Base.@kwdef struct ExperimentConfig
-    n_iterations::Integer
-    ensemble_size::Integer
-    observations::Any
-    noise::Any
-    prior::PD.ParameterDistribution
-    output_dir::Any
-end
-
-function ExperimentConfig(filepath::AbstractString; kwargs...)
-    is_yaml_file(f) = isfile(f) && endswith(f, ".yml")
-    filepath_extension = joinpath(filepath, "experiment_config.yml")
-    if is_yaml_file(filepath)
-        config_dict = YAML.load_file(filepath)
-        experiment_dir = dirname(filepath)
-    elseif isdir(filepath) && is_yaml_file(filepath_extension)
-        config_dict = YAML.load_file(filepath_extension)
-        experiment_dir = filepath
-    else
-        error("Invalid experiment configuration filepath: `$filepath`")
-    end
-
-    default_output = joinpath(experiment_dir, "output")
-    output_dir = get(config_dict, "output_dir", default_output)
-
-    n_iterations = config_dict["n_iterations"]
-    ensemble_size = config_dict["ensemble_size"]
-
-    observation_path =
-        isabspath(config_dict["observations"]) ? config_dict["observations"] :
-        joinpath(experiment_dir, config_dict["observations"])
-    observations = JLD2.load_object(observation_path)
-
-    noise_path =
-        isabspath(config_dict["noise"]) ? config_dict["noise"] :
-        joinpath(experiment_dir, config_dict["noise"])
-    noise = JLD2.load_object(noise_path)
-
-    prior_path =
-        isabspath(config_dict["prior"]) ? config_dict["prior"] :
-        joinpath(experiment_dir, config_dict["prior"])
-    prior = get_prior(prior_path)
-
-    return ExperimentConfig(;
-        n_iterations,
-        ensemble_size,
-        observations,
-        noise,
-        prior,
-        output_dir,
-        kwargs...,
-    )
-end
 
 """
     load_ekp_struct(output_dir, iteration)
@@ -183,15 +113,11 @@ function get_param_dict(
 end
 
 """
-    save_G_ensemble(config::ExperimentConfig, iteration, G_ensemble)
     save_G_ensemble(output_dir::AbstractString, iteration, G_ensemble)
 
 Saves the ensemble's observation map output to the correct directory based on the provided configuration.
-Takes an output directory, either extracted from an ExperimentConfig or passed directly.
+Takes an output directory, iteration number, and the ensemble output to save.
 """
-save_G_ensemble(config::ExperimentConfig, iteration, G_ensemble) =
-    save_G_ensemble(config.output_dir, iteration, G_ensemble)
-
 function save_G_ensemble(output_dir::AbstractString, iteration, G_ensemble)
     iter_path = path_to_iteration(output_dir, iteration)
     JLD2.save_object(path_to_G_ensemble(output_dir, iteration), G_ensemble)
@@ -307,27 +233,13 @@ function ekp_constructor(
 end
 
 """
-    initialize(ensemble_size, observations, noise, prior, output_dir)
     initialize(eki::EKP.EnsembleKalmanProcess, prior, output_dir)
-    initialize(config)
+    initialize(ensemble_size, observations, noise, prior, output_dir)
 
 Initialize a calibration, saving the initial parameter ensemble to a folder within `output_dir`.
 
 If no EKP struct is given, construct an EKP struct and return it.
 """
-function initialize(config::ExperimentConfig; rng_seed = 1234, ekp_kwargs...)
-    (; ensemble_size, observations, noise, prior, output_dir) = config
-    return initialize(
-        ensemble_size,
-        observations,
-        noise,
-        prior,
-        output_dir;
-        ekp_kwargs...,
-        rng_seed,
-    )
-end
-
 function initialize(
     ensemble_size,
     observations,
@@ -374,18 +286,9 @@ end
 
 """
     update_ensemble(output_dir::AbstractString, iteration, prior)
-    update_ensemble(config::ExperimentConfig, iteration)
-    update_ensemble(config_file::AbstractString, iteration)
 
 Updates the EnsembleKalmanProcess object and saves the parameters for the next iteration.
 """
-update_ensemble(config_file::AbstractString, iteration) =
-    update_ensemble(ExperimentConfig(config_file), iteration)
-
-update_ensemble(configuration::ExperimentConfig, iteration) =
-    update_ensemble(configuration.output_dir, iteration, configuration.prior)
-
-# TODO: test that this is working as intended
 function update_ensemble(output_dir::AbstractString, iteration, prior)
     iter_path = path_to_iteration(output_dir, iteration)
     G_ens = JLD2.load_object(path_to_G_ensemble(output_dir, iteration))

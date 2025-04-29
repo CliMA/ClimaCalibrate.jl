@@ -56,7 +56,6 @@ ClimaCalibrate.save_G_ensemble
 ClimaCalibrate.update_ensemble
 ClimaCalibrate.update_ensemble!
 ClimaCalibrate.observation_map_and_update!
-ClimaCalibrate.ExperimentConfig
 ClimaCalibrate.get_prior
 ClimaCalibrate.get_param_dict
 ClimaCalibrate.path_to_iteration

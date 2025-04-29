@@ -1,8 +1,7 @@
 using Statistics
 import YAML
 import JLD2
-import ClimaCalibrate:
-    observation_map, ExperimentConfig, path_to_ensemble_member
+import ClimaCalibrate: observation_map, path_to_ensemble_member
 
 experiment_dir = joinpath(
     pkgdir(ClimaCalibrate),
