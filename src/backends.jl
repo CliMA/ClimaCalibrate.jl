@@ -438,3 +438,9 @@ function model_run(
     end
     return job_id
 end
+
+backend_worker_kwargs(::Type{DerechoBackend}) = (; q = "main", A = "UCIT0011")
+
+backend_worker_kwargs(::Type{GCPBackend}) = (; partition = "a3")
+
+backend_worker_kwargs(::Type{<:AbstractBackend}) = (;)

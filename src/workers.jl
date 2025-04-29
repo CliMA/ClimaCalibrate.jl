@@ -1,94 +1,13 @@
 using Distributed
 using Logging
 
-export SlurmManager, PBSManager, default_worker_pool, set_worker_loggers
+export add_workers,
+    SlurmManager, PBSManager, default_worker_pool, set_worker_loggers
 
 # Set the time limit for the Julia worker to be contacted by the main process, default = "60.0s"
 # https://docs.julialang.org/en/v1/manual/environment-variables/#JULIA_WORKER_TIMEOUT
 worker_timeout() = "300.0"
 ENV["JULIA_WORKER_TIMEOUT"] = worker_timeout()
-
-function is_pbs_environment()
-    return haskey(ENV, "PBS_JOBID") || !isempty(Sys.which("qsub"))
-end
-
-function is_slurm_environment()
-    return haskey(ENV, "SLURM_JOB_ID") || !isempty(Sys.which("srun"))
-end
-
-function is_cluster_environment()
-    return is_pbs_environment() || is_slurm_environment()
-end
-
-const DEFAULT_WALLTIME = 60
-
-backend_worker_kwargs(::Type{DerechoBackend}) = (; q = "main", A = "UCIT0011")
-
-backend_worker_kwargs(::Type{GCPBackend}) = (; partition = "a3")
-
-backend_worker_kwargs(::Type{<:AbstractBackend}) = (;)
-
-default_cpu_kwargs(::SlurmManager) = (;
-    cpus_per_task = 1,
-    time = format_slurm_time(DEFAULT_WALLTIME),
-    backend_worker_kwargs(get_backend())...,
-)
-default_cpu_kwargs(::PBSManager) = (;
-    l_select = "ncpus=1",
-    l_walltime = format_pbs_time(DEFAULT_WALLTIME),
-    backend_worker_kwargs(get_backend())...,
-)
-
-default_gpu_kwargs(::SlurmManager) = (;
-    gpus_per_task = 1,
-    cpus_per_task = 4,
-    time = format_slurm_time(DEFAULT_WALLTIME),
-    backend_worker_kwargs(get_backend())...,
-)
-default_gpu_kwargs(::PBSManager) = (;
-    l_select = "ngpus=1:ncpus=4",
-    l_walltime = format_pbs_time(DEFAULT_WALLTIME),
-    backend_worker_kwargs(get_backend())...,
-)
-
-function add_workers(
-    nworkers::Int;
-    device = :gpu,
-    cluster_type = :auto,
-    kwargs...,
-)
-    if cluster_type == :local ||
-       (cluster_type == :auto && !is_cluster_environment())
-        # Use standard addprocs for local computation
-        @info "Using local processing mode for $nworkers workers"
-        return addprocs(nworkers)
-    else
-        # Select the manager based on environment or explicit selection
-        manager =
-            if cluster_type == :pbs ||
-               (cluster_type == :auto && is_pbs_environment())
-                @info "PBS/Torque environment detected, adding $nworkers workers"
-                PBSManager(nworkers)
-            elseif cluster_type == :slurm ||
-                   (cluster_type == :auto && is_slurm_environment())
-                @info "Slurm environment detected, adding $nworkers workers"
-                SlurmManager(nworkers)
-            else
-                error(
-                    "Unknown cluster type: $cluster_type. Valid options are :auto, :pbs, :slurm, or :local",
-                )
-            end
-
-        default_kwargs =
-            device == :gpu ? default_gpu_kwargs(manager) :
-            default_cpu_kwargs(manager)
-
-        # Merge the default kwargs with the user-provided kwargs, user kwargs take precedence
-        merged_kwargs = merge(default_kwargs, kwargs)
-
-        return addprocs(manager; merged_kwargs...)
-    end
-end
 
 default_worker_pool() = WorkerPool(workers())
 
@@ -214,8 +133,7 @@ function Distributed.launch(
     output_path = get(params, :o, get(params, :output, default_output))
 
     ntasks = sm.ntasks
-    srun_cmd =
-        `srun -J $jobname -n $ntasks -D $exehome $worker_args -o $output_path -- $exename $exeflags $(worker_cookie_arg())`
+    srun_cmd = `srun -J $jobname -n $ntasks -D $exehome $worker_args -o $output_path -- $exename $exeflags $(worker_cookie_arg())`
     @info "Starting SLURM job $jobname: $srun_cmd"
     pid = open(addenv(srun_cmd, env))
 
@@ -417,8 +335,7 @@ function Distributed.launch(
         -j oe: Send the output and error streams to the same file
         -J 1-ntasks: Job array
         -o: output file =#
-    qsub_cmd =
-        `qsub -V -N $jobname -j oe $job_array_option $worker_args -o $output_path -- $exename $exeflags $(worker_cookie_arg())`
+    qsub_cmd = `qsub -V -N $jobname -j oe $job_array_option $worker_args -o $output_path -- $exename $exeflags $(worker_cookie_arg())`
     @info "Starting PBS job $jobname: $qsub_cmd"
     pid = open(addenv(qsub_cmd, env))
 
@@ -526,5 +443,105 @@ function set_worker_loggers(workers = workers())
             using ClimaCalibrate
             ClimaCalibrate.set_worker_logger()
         end
+    end
+end
+
+
+function is_pbs_available()
+    return all([
+        !isnothing(Sys.which("qstat")),
+        !isnothing(Sys.which("pbsnodes")),
+        !isnothing(Sys.which("qsub")),
+    ])
+end
+
+
+function is_slurm_available()
+    return all([
+        !isnothing(Sys.which("sinfo")),
+        !isnothing(Sys.which("srun")),
+        !isnothing(Sys.which("sbatch")),
+    ])
+end
+
+function is_cluster_environment()
+    return is_pbs_available() || is_slurm_available()
+end
+
+const DEFAULT_WALLTIME = 60
+
+default_cpu_kwargs(::SlurmManager) = (;
+    cpus_per_task = 1,
+    time = format_slurm_time(DEFAULT_WALLTIME),
+    backend_worker_kwargs(get_backend())...,
+)
+default_cpu_kwargs(::PBSManager) = (;
+    l_select = "ncpus=1",
+    l_walltime = format_pbs_time(DEFAULT_WALLTIME),
+    backend_worker_kwargs(get_backend())...,
+)
+
+default_gpu_kwargs(::SlurmManager) = (;
+    gpus_per_task = 1,
+    cpus_per_task = 4,
+    time = format_slurm_time(DEFAULT_WALLTIME),
+    backend_worker_kwargs(get_backend())...,
+)
+default_gpu_kwargs(::PBSManager) = (;
+    l_select = "ngpus=1:ncpus=4",
+    l_walltime = format_pbs_time(DEFAULT_WALLTIME),
+    backend_worker_kwargs(get_backend())...,
+)
+
+function get_manager(cluster = :auto, nworkers = 1)
+    if cluster == :slurm || (cluster == :auto && is_slurm_available())
+        SlurmManager(nworkers)
+    elseif cluster == :pbs || (cluster == :auto && is_pbs_available())
+        PBSManager(nworkers)
+    else
+        error(
+            "Unknown cluster type: $cluster. Valid options are :auto, :pbs, :slurm, or :local",
+        )
+    end
+end
+
+"""
+    add_workers(
+        nworkers;
+        device = :gpu,
+        cluster = :auto,
+        kwargs...
+    )
+
+Add `nworkers` worker processes to the current Julia session, automatically detecting and configuring for the available computing environment.
+
+# Arguments
+- `nworkers::Int`: The number of worker processes to add.
+- `device::Symbol = :gpu`: The target compute device type, either `:gpu` (1 GPU, 4 CPU cores) or `:cpu` (1 CPU core).
+- `cluster::Symbol = :auto`: The cluster management system to use. Options:
+  * `:auto`: Auto-detect available cluster environment (SLURM, PBS, or local)
+  * `:slurm`: Force use of SLURM scheduler
+  * `:pbs`: Force use of PBS scheduler
+  * `:local`: Force use of local processing (standard `addprocs`)
+- `kwargs`: Other kwargs can be passed directly through to `addprocs`.
+"""
+function add_workers(nworkers::Int; device = :gpu, cluster = :auto, kwargs...)
+    if cluster == :local || (cluster == :auto && !is_cluster_environment())
+        # Use standard addprocs for local computation
+        @info "Using local processing mode, adding $nworkers worker$(nworkers == 1 ? "" : "s")"
+        return addprocs(nworkers)
+    else
+        # Select the manager based on environment or explicit selection
+        manager = get_manager(cluster, nworkers)
+        @info "Using $(nameof(typeof(manager))) to add $nworkers workers"
+
+        default_kwargs =
+            device == :gpu ? default_gpu_kwargs(manager) :
+            default_cpu_kwargs(manager)
+
+        # Merge the default kwargs with the user-provided kwargs, user kwargs take precedence
+        merged_kwargs = merge(default_kwargs, kwargs)
+
+        return addprocs(manager; merged_kwargs...)
     end
 end

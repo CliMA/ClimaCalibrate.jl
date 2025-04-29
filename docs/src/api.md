@@ -11,6 +11,7 @@ ClimaCalibrate.postprocess_g_ensemble
 
 ## Worker Interface
 ```@docs
+ClimaCalibrate.add_workers
 ClimaCalibrate.WorkerBackend
 ClimaCalibrate.SlurmManager
 ClimaCalibrate.PBSManager

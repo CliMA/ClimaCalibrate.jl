@@ -1,8 +1,9 @@
 using Test, ClimaCalibrate, Distributed, Logging
 
 @testset "SlurmManager Unit Tests" begin
-    out_file = "my_slurm_job.out"
-    p = addprocs(SlurmManager(1); o = out_file)
+    @test ClimaCalibrate.get_manager() == SlurmManager(1)
+    out_file = tempname()
+    p = add_workers(1; device = :cpu, o = out_file)
     @test nprocs() == 2
     @test workers() == p
     @test fetch(@spawnat :any myid()) == p[1]
@@ -16,7 +17,6 @@ using Test, ClimaCalibrate, Distributed, Logging
     @test workers() == [1]
     # Check output file creation
     @test isfile(out_file)
-    rm(out_file)
 
     # Test incorrect generic arguments
     @test_throws TaskFailedException p = addprocs(SlurmManager(1), time = "w")
