@@ -34,6 +34,8 @@ Used for CliMA's private GPU server.
 """
 struct ClimaGPUBackend <: SlurmBackend end
 
+struct GCPBackend <: SlurmBackend end
+
 """
     DerechoBackend
 
@@ -61,6 +63,8 @@ function get_backend()
         (r"^clima.gps.caltech.edu$", ClimaGPUBackend),
         (r"^login[1-4].cm.cluster$", CaltechHPCBackend),
         (r"^hpc-(\d\d)-(\d\d).cm.cluster$", CaltechHPCBackend),
+        (r"^hpc\d+-slurm-login-\d+$", GCPBackend),
+        (r"^hpc\d+-a\d+nodeset-\d+$", GCPBackend),
         (r"derecho([1-8])$", DerechoBackend),
         (r"deg(\d\d\d\d)$", DerechoBackend), # This should be more specific
     ]
@@ -434,3 +438,9 @@ function model_run(
     end
     return job_id
 end
+
+backend_worker_kwargs(::Type{DerechoBackend}) = (; q = "main", A = "UCIT0011")
+
+backend_worker_kwargs(::Type{GCPBackend}) = (; partition = "a3")
+
+backend_worker_kwargs(::Type{<:AbstractBackend}) = (;)

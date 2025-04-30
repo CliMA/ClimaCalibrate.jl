@@ -1,13 +1,8 @@
 using Test, ClimaCalibrate, Distributed, Logging
 
 @testset "PBSManager Unit Tests" begin
-    p = addprocs(
-        PBSManager(1),
-        q = "main",
-        A = "UCIT0011",
-        l_select = "ngpus=1",
-        l_walltime = "00:05:00",
-    )
+    @test ClimaCalibrate.get_manager() == PBSManager(1)
+    p = add_workers(1; l_walltime = "00:05:00")
     @test nprocs() == length(p) + 1
     @test workers() == p
     @test remotecall_fetch(myid, 2) == 2

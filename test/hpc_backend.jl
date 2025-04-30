@@ -17,7 +17,7 @@ if backend == DerechoBackend
 end
 
 original_model_interface = model_interface
-interruption_model_interface, io = mktemp()
+interruption_model_interface, io = mktemp(@__DIR__)
 model_interface_str = """
 import ClimaCalibrate
 ClimaCalibrate.forward_model(iter, member) = member == 1 && exit()
