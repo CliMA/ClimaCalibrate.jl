@@ -21,7 +21,7 @@ CalibrateEmulateSample = "95e48a1f-0bec-4818-9538-3db4340308e3"
 CESExt = "CalibrateEmulateSample"
 
 [compat]
-CalibrateEmulateSample = "0.5, 0.6"
+CalibrateEmulateSample = "0.5, 0.6, 0.7"
 Dates = "1"
 Distributed = "1"
 Distributions = "0.25"
