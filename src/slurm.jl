@@ -203,13 +203,20 @@ function generate_sbatch_script(
     output_dir::AbstractString,
     experiment_dir::AbstractString,
     model_interface::AbstractString,
-    module_load_str::AbstractString;
+    module_load_str::AbstractString,
     hpc_kwargs,
 )
     member_log = path_to_model_log(output_dir, iter, member)
     slurm_directives = generate_sbatch_directives(hpc_kwargs)
+    ntasks = get(hpc_kwargs, :ntasks, 1)
     gpus_per_task = get(hpc_kwargs, :gpus_per_task, 0)
     climacomms_device = gpus_per_task > 0 ? "CUDA" : "CPU"
+
+    # TODO: Remove this exception for GCP
+    mpiexec_string =
+        get_backend() == GCPBackend ?
+        "/sw/openmpi-5.0.5/bin/mpiexec -n $ntasks" :
+        "srun --output=$member_log --open-mode=append"
 
     sbatch_contents = """
     #!/bin/bash
@@ -221,7 +228,7 @@ function generate_sbatch_script(
     export CLIMACOMMS_DEVICE="$climacomms_device"
     export CLIMACOMMS_CONTEXT="MPI"
 
-    srun --output=$member_log --open-mode=append julia --project=$experiment_dir -e '
+    $mpiexec_string julia --project=$experiment_dir -e '
     import ClimaCalibrate as CAL
     iteration = $iter; member = $member
     model_interface = "$model_interface"; include(model_interface)
@@ -268,7 +275,7 @@ function slurm_model_run(
         output_dir,
         experiment_dir,
         model_interface,
-        module_load_str;
+        module_load_str,
         hpc_kwargs,
     )
 
