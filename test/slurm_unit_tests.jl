@@ -31,7 +31,7 @@ sbatch_file = CAL.generate_sbatch_script(
     OUTPUT_DIR,
     EXPERIMENT_DIR,
     MODEL_INTERFACE,
-    MODULE_LOAD_STR;
+    MODULE_LOAD_STR,
     hpc_kwargs,
 )
 
@@ -42,21 +42,22 @@ expected_sbatch_contents = """
 #SBATCH --gpus-per-task=1
 #SBATCH --cpus-per-task=16
 #SBATCH --time=01:30:00
+
 export MODULEPATH="/groups/esm/modules:\$MODULEPATH"
 module purge
 module load climacommon/2024_10_09
-
 export CLIMACOMMS_DEVICE="CUDA"
 export CLIMACOMMS_CONTEXT="MPI"
 
-srun --output=test/iteration_001/member_001/model_log.txt --open-mode=append julia --project=exp/dir -e '
-import ClimaCalibrate as CAL
-iteration = 1; member = 1
-model_interface = "model_interface.jl"; include(model_interface)
+srun --output=test/iteration_001/member_001/model_log.txt --open-mode=append julia  --project=exp/dir -e '
 
-experiment_dir = "exp/dir"
-CAL.forward_model(iteration, member)
-CAL.write_model_completed("test", 1, 1)'
+    import ClimaCalibrate as CAL
+    iteration = 1; member = 1
+    model_interface = "model_interface.jl"; include(model_interface)
+    experiment_dir = "exp/dir"
+    CAL.forward_model(iteration, member)
+    CAL.write_model_completed("test", iteration, member)
+'
 exit 0
 """
 

@@ -188,47 +188,52 @@ function generate_sbatch_directives(hpc_kwargs)
     end
     return join(slurm_directives, "\n")
 end
-
 """
-    generate_sbatch_script(iter, member, output_dir, experiment_dir, model_interface; module_load_str, hpc_kwargs)
-
+    generate_sbatch_script(iter, member, output_dir, experiment_dir, model_interface; module_load_str, hpc_kwargs, exeflags="")
 Generate a string containing an sbatch script to run the forward model.
-
 `hpc_kwargs` is turned into a series of sbatch directives using [`generate_sbatch_directives`](@ref).
 `module_load_str` is used to load the necessary modules and can be obtained via [`module_load_string`](@ref).
+`exeflags` is a string of flags to pass to the Julia executable (defaults to empty string).
 """
 function generate_sbatch_script(
     iter::Int,
     member::Int,
-    output_dir::AbstractString,
-    experiment_dir::AbstractString,
-    model_interface::AbstractString,
-    module_load_str::AbstractString;
+    output_dir,
+    experiment_dir,
+    model_interface,
+    module_load_str,
     hpc_kwargs,
+    exeflags = "",
 )
     member_log = path_to_model_log(output_dir, iter, member)
     slurm_directives = generate_sbatch_directives(hpc_kwargs)
+    ntasks = get(hpc_kwargs, :ntasks, 1)
     gpus_per_task = get(hpc_kwargs, :gpus_per_task, 0)
     climacomms_device = gpus_per_task > 0 ? "CUDA" : "CPU"
-
+    # TODO: Remove this exception for GCP
+    mpiexec_string =
+        get_backend() == GCPBackend ?
+        "/sw/openmpi-5.0.5/bin/mpiexec -n $ntasks" :
+        "srun --output=$member_log --open-mode=append"
     sbatch_contents = """
     #!/bin/bash
     #SBATCH --job-name=run_$(iter)_$(member)
     #SBATCH --output=$member_log
     $slurm_directives
-    $module_load_str
 
+    $module_load_str
     export CLIMACOMMS_DEVICE="$climacomms_device"
     export CLIMACOMMS_CONTEXT="MPI"
 
-    srun --output=$member_log --open-mode=append julia --project=$experiment_dir -e '
-    import ClimaCalibrate as CAL
-    iteration = $iter; member = $member
-    model_interface = "$model_interface"; include(model_interface)
+    $mpiexec_string julia $exeflags --project=$experiment_dir -e '
 
-    experiment_dir = "$experiment_dir"
-    CAL.forward_model(iteration, member)
-    CAL.write_model_completed("$output_dir", $iter, $member)'
+        import ClimaCalibrate as CAL
+        iteration = $iter; member = $member
+        model_interface = "$model_interface"; include(model_interface)
+        experiment_dir = "$experiment_dir"
+        CAL.forward_model(iteration, member)
+        CAL.write_model_completed("$output_dir", iteration, member)
+    '
     exit 0
     """
     return sbatch_contents
@@ -252,6 +257,7 @@ function slurm_model_run(
         :ntasks => 1,
         :cpus_per_task => 1,
     ),
+    exeflags = "",
 )
     # Type and existence checks
     @assert isdir(output_dir) "Output directory does not exist: $output_dir"
@@ -268,8 +274,9 @@ function slurm_model_run(
         output_dir,
         experiment_dir,
         model_interface,
-        module_load_str;
+        module_load_str,
         hpc_kwargs,
+        exeflags,
     )
 
     jobid = mktemp(output_dir) do sbatch_filepath, io
