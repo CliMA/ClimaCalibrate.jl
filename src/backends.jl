@@ -6,7 +6,8 @@ import Dates
 export get_backend, calibrate, model_run
 
 export JuliaBackend, WorkerBackend
-export HPCBackend, ClimaGPUBackend, DerechoBackend, CaltechHPCBackend
+export HPCBackend,
+    ClimaGPUBackend, DerechoBackend, CaltechHPCBackend, GCPBackend
 
 abstract type AbstractBackend end
 
@@ -97,6 +98,16 @@ function module_load_string(::Type{DerechoBackend})
     module purge
     module load climacommon
     module list
+    """
+end
+
+function module_load_string(::Type{GCPBackend})
+    return """export JULIA_CUDA_MEMORY_POOL=none
+    export OPAL_PREFIX="/sw/openmpi-5.0.5"
+    export PATH="/sw/openmpi-5.0.5/bin:\$PATH"
+    export LD_LIBRARY_PATH="/sw/openmpi-5.0.5/lib:\$LD_LIBRARY_PATH"
+    julia -e 'using Pkg; Pkg.add("CUDA"); using CUDA; CUDA.set_runtime_version!(local_toolkit=true)'
+    julia -e 'using Pkg; Pkg.add("MPIPreferences"); using MPIPreferences; use_system_binary(library_names="/sw/openmpi-5.0.5/lib/libmpi", mpiexec="/sw/openmpi-5.0.5/bin/mpiexec", force=true)'
     """
 end
 

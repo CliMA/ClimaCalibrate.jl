@@ -31,7 +31,7 @@ sbatch_file = CAL.generate_sbatch_script(
     OUTPUT_DIR,
     EXPERIMENT_DIR,
     MODEL_INTERFACE,
-    MODULE_LOAD_STR;
+    MODULE_LOAD_STR,
     hpc_kwargs,
 )
 
