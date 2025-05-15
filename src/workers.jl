@@ -578,7 +578,7 @@ function process_time_parameter(::SlurmManager, time::Int, kwargs)
         return kwargs
     end
     # Otherwise, use the time parameter and convert it to Slurm format
-    return merge(kwargs, Dict(:time => format_slurm_time(time),))
+    return merge(kwargs, Dict(:time => format_slurm_time(time)))
 end
 
 function process_time_parameter(::PBSManager, time::Int, kwargs)
@@ -587,7 +587,7 @@ function process_time_parameter(::PBSManager, time::Int, kwargs)
         return kwargs
     end
     # Otherwise, use the time parameter and convert it to PBS format
-    return merge(kwargs, Dict(:l_walltime = format_pbs_time(time),))
+    return merge(kwargs, Dict(:l_walltime => format_pbs_time(time)))
 end
 
 # Fallback for other manager types

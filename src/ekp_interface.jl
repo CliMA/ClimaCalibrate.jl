@@ -258,11 +258,19 @@ function initialize(
         ekp_kwargs...,
     )
     save_eki_and_parameters(eki, output_dir, 0, prior)
+    JLD2.save_object(
+        joinpath(path_to_iteration(output_dir, 0), "prior.jld2"),
+        prior,
+    )
     return eki
 end
 
 function initialize(eki::EKP.EnsembleKalmanProcess, prior, output_dir)
     save_eki_and_parameters(eki, output_dir, 0, prior)
+    JLD2.save_object(
+        joinpath(path_to_iteration(output_dir, 0), "prior.jld2"),
+        prior,
+    )
     return eki
 end
 
