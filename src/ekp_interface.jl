@@ -320,7 +320,11 @@ function observation_map_and_update!(ekp, output_dir, iteration, prior)
         postprocess_g_ensemble(ekp, g_ensemble, prior, output_dir, iteration)
     save_G_ensemble(output_dir, iteration, g_ensemble)
     terminate = update_ensemble!(ekp, g_ensemble, output_dir, iteration, prior)
-    analyze_iteration(ekp, g_ensemble, prior, output_dir, iteration)
+    try
+        analyze_iteration(ekp, g_ensemble, prior, output_dir, iteration)
+    catch e
+        @error "Error during `analyze_iteration`:" exception = catch_backtrace()
+    end
     return terminate
 end
 
