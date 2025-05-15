@@ -6,7 +6,8 @@ import Dates
 export get_backend, calibrate, model_run
 
 export JuliaBackend, WorkerBackend
-export HPCBackend, ClimaGPUBackend, DerechoBackend, CaltechHPCBackend
+export HPCBackend,
+    ClimaGPUBackend, DerechoBackend, CaltechHPCBackend, GCPBackend
 
 abstract type AbstractBackend end
 
@@ -97,6 +98,14 @@ function module_load_string(::Type{DerechoBackend})
     module purge
     module load climacommon
     module list
+    """
+end
+
+function module_load_string(::Type{GCPBackend})
+    return """export OPAL_PREFIX="/sw/openmpi-5.0.5"
+    export PATH="/sw/openmpi-5.0.5/bin:\$PATH"
+    export LD_LIBRARY_PATH="/sw/openmpi-5.0.5/lib:\$LD_LIBRARY_PATH"
+    export UCX_MEMTYPE_CACHE=y  # UCX Memory optimization which toggles whether UCX library intercepts cu*alloc* calls
     """
 end
 
@@ -300,6 +309,7 @@ function calibrate(
     ),
     verbose = false,
     hpc_kwargs,
+    exeflags = "",
 )
     ensemble_size = EKP.get_N_ens(ekp)
     @info "Initializing calibration" n_iterations ensemble_size output_dir
@@ -320,6 +330,7 @@ function calibrate(
             prior;
             hpc_kwargs = hpc_kwargs,
             verbose = verbose,
+            exeflags,
         )
         @info "Completed iteration $iter, updating ensemble"
         ekp = load_ekp_struct(output_dir, iter)
@@ -342,6 +353,7 @@ function run_hpc_iteration(
     prior;
     hpc_kwargs,
     verbose = false,
+    exeflags = "",
 )
     @info "Iteration $iter"
     job_ids = map(1:ensemble_size) do member
@@ -354,6 +366,7 @@ function run_hpc_iteration(
             model_interface,
             module_load_str;
             hpc_kwargs,
+            exeflags,
         )
     end
     job_ids = filter(!isnothing, job_ids)
@@ -381,7 +394,7 @@ end
 
 Construct and execute a command to run a single forward model on a given job scheduler.
 
-Dispatches on `backend` to run [`slurm_model_run`](@ref) or [`pbs_model_run`](@ref).
+Uses the given `backend` to run [`slurm_model_run`](@ref) or [`pbs_model_run`](@ref).
 
 Arguments:
 - iter: Iteration number
@@ -401,6 +414,7 @@ function model_run(
     model_interface,
     module_load_str;
     hpc_kwargs = Dict(),
+    exeflags = "",
 )
     if model_completed(output_dir, iter, member)
         @info "Skipping completed member $member (found checkpoint)"
@@ -422,6 +436,7 @@ function model_run(
             model_interface,
             module_load_str;
             hpc_kwargs,
+            exeflags,
         )
     elseif backend <: DerechoBackend
         pbs_model_run(
@@ -432,6 +447,7 @@ function model_run(
             model_interface,
             module_load_str;
             hpc_kwargs,
+            exeflags,
         )
     else
         error("Unsupported backend type: $backend")
