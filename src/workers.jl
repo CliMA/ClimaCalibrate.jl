@@ -512,6 +512,7 @@ end
         nworkers;
         device = :gpu,
         cluster = :auto,
+        time = DEFAULT_WALLTIME,
         kwargs...
     )
 
@@ -525,9 +526,16 @@ Add `nworkers` worker processes to the current Julia session, automatically dete
   * `:slurm`: Force use of SLURM scheduler
   * `:pbs`: Force use of PBS scheduler
   * `:local`: Force use of local processing (standard `addprocs`)
+- `time::Int = DEFAULT_WALLTIME`: Walltime in minutes, will be formatted appropriately for the cluster system
 - `kwargs`: Other kwargs can be passed directly through to `addprocs`.
 """
-function add_workers(nworkers::Int; device = :gpu, cluster = :auto, kwargs...)
+function add_workers(
+    nworkers::Int;
+    device = :gpu,
+    cluster = :auto,
+    time = DEFAULT_WALLTIME,
+    kwargs...,
+)
     if cluster == :local || (cluster == :auto && !is_cluster_environment())
         # Use standard addprocs for local computation
         @info "Using local processing mode, adding $nworkers worker$(nworkers == 1 ? "" : "s")"
@@ -537,13 +545,53 @@ function add_workers(nworkers::Int; device = :gpu, cluster = :auto, kwargs...)
         manager = get_manager(cluster, nworkers)
         @info "Using $(nameof(typeof(manager))) to add $nworkers workers"
 
+        # Get default kwargs based on device type
         default_kwargs =
             device == :gpu ? default_gpu_kwargs(manager) :
             default_cpu_kwargs(manager)
 
-        # Merge the default kwargs with the user-provided kwargs, user kwargs take precedence
-        merged_kwargs = merge(default_kwargs, kwargs)
+        # Handle the time parameter specifically based on manager type
+        normalized_kwargs = process_time_parameter(manager, time, kwargs)
+
+        # Merge the default kwargs with the normalized user-provided kwargs
+        # User kwargs take precedence
+        merged_kwargs = merge(default_kwargs, normalized_kwargs)
 
         return addprocs(manager; merged_kwargs...)
     end
+end
+
+"""
+    process_time_parameter(manager, time, kwargs)
+
+Process the time parameter and convert it to the appropriate format for the specific cluster manager.
+This function translates a simple `time = minutes` parameter into the appropriate format for each system.
+
+Priority rules:
+1. If system-specific time parameter exists in kwargs (e.g., `l_walltime` for PBS), use that directly
+2. If `time` parameter is provided, convert it to the appropriate system-specific format
+3. If neither is specified, defaults will be used from default_*_kwargs functions
+"""
+function process_time_parameter(::SlurmManager, time::Int, kwargs)
+    # If time already exists in kwargs in Slurm format, use that (highest priority)
+    if haskey(kwargs, :time)
+        return kwargs
+    end
+    # Otherwise, use the time parameter and convert it to Slurm format
+    return merge(kwargs, Dict(:time => format_slurm_time(time)))
+end
+
+function process_time_parameter(::PBSManager, time::Int, kwargs)
+    # If l_walltime already exists in kwargs in PBS format, use that (highest priority)
+    if haskey(kwargs, :l_walltime)
+        return kwargs
+    end
+    # Otherwise, use the time parameter and convert it to PBS format
+    return merge(kwargs, Dict(:l_walltime => format_pbs_time(time)))
+end
+
+# Fallback for other manager types
+function process_time_parameter(_, time::Int, kwargs)
+    # For other manager types, just pass through the kwargs unchanged
+    return kwargs
 end

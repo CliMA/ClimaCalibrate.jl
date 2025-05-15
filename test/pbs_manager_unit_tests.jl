@@ -2,7 +2,7 @@ using Test, ClimaCalibrate, Distributed, Logging
 
 @testset "PBSManager Unit Tests" begin
     @test ClimaCalibrate.get_manager() == PBSManager(1)
-    p = add_workers(1; l_walltime = "00:05:00")
+    p = add_workers(1; time = 5)
     @test nprocs() == length(p) + 1
     @test workers() == p
     @test remotecall_fetch(myid, 2) == 2
