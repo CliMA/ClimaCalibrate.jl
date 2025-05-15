@@ -32,6 +32,7 @@ makedocs(
         "Getting Started" => "quickstart.md",
         "Distributed Calibration Tutorial" => "literate_example.md",
         "Backends" => "backends.md",
+        "Observations" => "observations.md",
         "Emulate and Sample" => "emulate_sample.md",
         "API" => "api.md",
     ],

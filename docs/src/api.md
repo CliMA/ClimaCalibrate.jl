@@ -63,4 +63,6 @@ ClimaCalibrate.path_to_iteration
 ClimaCalibrate.path_to_ensemble_member
 ClimaCalibrate.path_to_model_log
 ClimaCalibrate.parameter_path
+ClimaCalibrate.minibatcher_over_samples
+ClimaCalibrate.observation_series_from_samples
 ```

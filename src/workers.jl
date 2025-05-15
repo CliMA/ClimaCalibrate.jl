@@ -133,7 +133,8 @@ function Distributed.launch(
     output_path = get(params, :o, get(params, :output, default_output))
 
     ntasks = sm.ntasks
-    srun_cmd = `srun -J $jobname -n $ntasks -D $exehome $worker_args -o $output_path -- $exename $exeflags $(worker_cookie_arg())`
+    srun_cmd =
+        `srun -J $jobname -n $ntasks -D $exehome $worker_args -o $output_path -- $exename $exeflags $(worker_cookie_arg())`
     @info "Starting SLURM job $jobname: $srun_cmd"
     pid = open(addenv(srun_cmd, env))
 
@@ -335,7 +336,8 @@ function Distributed.launch(
         -j oe: Send the output and error streams to the same file
         -J 1-ntasks: Job array
         -o: output file =#
-    qsub_cmd = `qsub -V -N $jobname -j oe $job_array_option $worker_args -o $output_path -- $exename $exeflags $(worker_cookie_arg())`
+    qsub_cmd =
+        `qsub -V -N $jobname -j oe $job_array_option $worker_args -o $output_path -- $exename $exeflags $(worker_cookie_arg())`
     @info "Starting PBS job $jobname: $qsub_cmd"
     pid = open(addenv(qsub_cmd, env))
 
