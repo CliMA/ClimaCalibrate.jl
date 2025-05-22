@@ -7,17 +7,63 @@ import ClimaCalibrate
 using ClimaAnalysis
 import EnsembleKalmanProcesses as EKP
 
-function ClimaCalibrate.construct_seasonal_noise_covariance(
-    var::OutputVar;
-    replace_nans = true,
+ClimaCalibrate.limit_pressure_dim_to_era5_range(v) =
+    limit_pressure_dim(v, 100.0, 100_000.0)
+
+function ClimaCalibrate.limit_pressure_dim(
+    output_var,
+    min_pressure,
+    max_pressure,
+)
+    @assert has_pressure(output_var)
+    pressure_dims = output_var.dims[pressure_name(output_var)]
+    valid_pressure_levels = filter(pressure_dims) do pressure
+        min_pressure <= pressure <= max_pressure
+    end
+    lowest_valid_level = minimum(valid_pressure_levels)
+    highest_valid_level = maximum(valid_pressure_levels)
+
+    return window(
+        output_var,
+        "pfull";
+        left = lowest_valid_level,
+        right = highest_valid_level,
+    )
+end
+
+get_monthly_averages(simdir, var_name) =
+    get(simdir; short_name = var_name, reduction = "average", period = "1M")
+
+function ClimaCalibrate.seasonally_aligned_yearly_average(var, yr)
+    year_window = window(
+        var,
+        "time";
+        left = DateTime(yr - 1, 12, 1),
+        right = DateTime(yr, 11, 30),
+    )
+    return average_time(year_window)
+end
+
+function ClimaCalibrate.seasonal_covariance(
+    output_var;
     model_error_scale = nothing,
     regularization = nothing,
 )
-    seasonal_averages = seasonal_average(var)
-    return construct_noise_covariance(seasonal_averages)
+    seasonal_averages = average_season_across_time(output_var)
+    variance_per_season = map(split_by_season(seasonal_averages)) do season
+        variance = flatten(variance_time(season)).data
+        if !isnothing(model_error_scale)
+            variance .+=
+                (model_error_scale .* flatten(average_time(season)).data) .^ 2
+        end
+        return variance
+    end
+    diag_cov = vcat(variance_per_season...)
+    !isnothing(regularization) && (diag_cov .+= regularization)
+    return Diagonal(diag_cov)
 end
 
-function ClimaCalibrate.construct_noise_covariance(
+function ClimaCalibrate.tsvd_covariance(
     var::OutputVar,
     model_error_scale = 0.05;
     replace_nans = true,
@@ -45,5 +91,39 @@ function ClimaCalibrate.construct_noise_covariance(
 
     return EKP.SVDplusD(gamma_low_rank, Diagonal(gamma_diag))
 end
+
+function ClimaCalibrate.year_of_seasonal_averages(output_var, yr)
+    seasonal_averages = average_season_across_time(output_var)
+    season_and_years =
+        map(ClimaAnalysis.Utils.find_season_and_year, dates(seasonal_averages))
+    indices = findall(s -> s[2] == yr, season_and_years)
+    isempty(indices) && error(
+        "No data found in $(long_name(output_var)) for the given year: $yr",
+    )
+    min_idx, max_idx = extrema(indices)
+    left = dates(seasonal_averages)[min_idx]
+    right = dates(seasonal_averages)[max_idx]
+    return window(seasonal_averages, "time"; left, right)
+end
+
+function ClimaCalibrate.year_of_seasonal_observations(output_var, yr)
+    seasonal_averages = year_of_seasonal_averages(output_var, yr)
+    # Split into four OutputVars to get the same format as the covariance matrix
+    obs_vec = flatten_seasonal_averages(seasonal_averages)
+    obs_cov = seasonal_covariance(
+        output_var;
+        model_error_scale = 0.05,
+        regularization = 1e-3,
+    )
+    name = get(
+        output_var.attributes,
+        "CF_name",
+        get(output_var.attributes, "long_name", ""),
+    )
+    return EKP.Observation(obs_vec, obs_cov, "$(yr)_$name")
+end
+
+flatten_seasonal_averages(seasonal_averages) =
+    vcat(map(x -> flatten(x).data, split_by_season(seasonal_averages))...)
 
 end
