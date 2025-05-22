@@ -7,9 +7,19 @@ import ClimaCalibrate
 using ClimaAnalysis
 import EnsembleKalmanProcesses as EKP
 
+"""
+    limit_pressure_dim_to_era5_range(output_var)
+
+Limit the pressure dimension of `output_var` to the ERA5 range (100.0 - 100_000.0).
+"""
 ClimaCalibrate.limit_pressure_dim_to_era5_range(v) =
     limit_pressure_dim(v, 100.0, 100_000.0)
 
+"""
+    limit_pressure_dim(output_var, min_pressure, max_pressure)
+
+Limit the pressure dimension of `output_var` between `min_pressure` and `max_pressure`.
+"""
 function ClimaCalibrate.limit_pressure_dim(
     output_var,
     min_pressure,
@@ -31,9 +41,20 @@ function ClimaCalibrate.limit_pressure_dim(
     )
 end
 
+"""
+    get_monthly_averages(simdir, var_name)
+
+Extract monthly averages of the given `var_name` from `simdir`.
+"""
 get_monthly_averages(simdir, var_name) =
     get(simdir; short_name = var_name, reduction = "average", period = "1M")
 
+"""
+    seasonally_aligned_yearly_average(var, yr)
+
+Return the yearly average of `var` for the specified year `yr`, using a seasonal 
+alignment from December of the previous year to November of the given year.
+"""
 function ClimaCalibrate.seasonally_aligned_yearly_average(var, yr)
     year_window = window(
         var,
@@ -44,6 +65,16 @@ function ClimaCalibrate.seasonally_aligned_yearly_average(var, yr)
     return average_time(year_window)
 end
 
+"""
+    seasonal_covariance(output_var; model_error_scale = nothing, regularization = nothing)
+
+Computes the diagonal covariance matrix of seasonal averages of `output_var`.
+
+# Arguments
+- `output_var`: Climate variable data (OutputVar or similar)
+- `model_error_scale`: Optional scaling factor for model error, applied as a fraction of the mean
+- `regularization`: Optional regularization term added to variance values
+"""
 function ClimaCalibrate.seasonal_covariance(
     output_var;
     model_error_scale = nothing,
@@ -63,6 +94,22 @@ function ClimaCalibrate.seasonal_covariance(
     return Diagonal(diag_cov)
 end
 
+"""
+    tsvd_covariance(var,
+        model_error_scale = 0.05;
+        replace_nans = true,
+        regularization = nothing
+    )
+
+Return an `EKP.SVDplusD` (truncated SVD plus Diagonal) covariance structure for a given `var`, 
+adding a model error term scaled by `model_error_scale` to the diagonal.
+
+# Arguments
+- `var`: An OutputVar with a `time` dimension
+- `model_error_scale`: The coefficient for the model error term in the diagonal.
+- `replace_nans`: Toggle replacing NaNs in the `var`
+- `regularization`: If not nothing, add a flat regularization term to the diagonal.
+"""
 function ClimaCalibrate.tsvd_covariance(
     var::OutputVar,
     model_error_scale = 0.05;
@@ -92,6 +139,11 @@ function ClimaCalibrate.tsvd_covariance(
     return EKP.SVDplusD(gamma_low_rank, Diagonal(gamma_diag))
 end
 
+"""
+    year_of_seasonal_averages(output_var, yr)
+
+Compute seasonal averages for a specific year `yr` from the `output_var`.
+"""
 function ClimaCalibrate.year_of_seasonal_averages(output_var, yr)
     seasonal_averages = average_season_across_time(output_var)
     season_and_years =
@@ -106,6 +158,11 @@ function ClimaCalibrate.year_of_seasonal_averages(output_var, yr)
     return window(seasonal_averages, "time"; left, right)
 end
 
+"""
+    year_of_seasonal_observations(output_var, yr)
+
+Create an `EKP.Observation` for a specific year `yr` from the `output_var`.
+"""
 function ClimaCalibrate.year_of_seasonal_observations(output_var, yr)
     seasonal_averages = year_of_seasonal_averages(output_var, yr)
     # Split into four OutputVars to get the same format as the covariance matrix
