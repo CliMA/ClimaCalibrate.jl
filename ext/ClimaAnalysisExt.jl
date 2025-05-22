@@ -81,6 +81,9 @@ function ClimaCalibrate.seasonal_covariance(
     regularization = nothing,
 )
     seasonal_averages = average_season_across_time(output_var)
+    # TODO: Check that the each season is not just one element, so that taking variance
+    # is well defined
+    Main.@infiltrate
     variance_per_season = map(split_by_season(seasonal_averages)) do season
         variance = flatten(variance_time(season)).data
         if !isnothing(model_error_scale)
@@ -155,7 +158,12 @@ function ClimaCalibrate.year_of_seasonal_averages(output_var, yr)
     min_idx, max_idx = extrema(indices)
     left = dates(seasonal_averages)[min_idx]
     right = dates(seasonal_averages)[max_idx]
-    return window(seasonal_averages, "time"; left, right)
+    windowed_var = window(seasonal_averages, "time"; left, right)
+
+    # Update attributes
+    windowed_var.attributes["year"] = yr
+    windowed_var.attributes["season"] = windowed_var.attributes["season"][min_idx:max_idx]
+    return windowed_var
 end
 
 """
@@ -164,10 +172,10 @@ end
 Create an `EKP.Observation` for a specific year `yr` from the `output_var`.
 """
 function ClimaCalibrate.year_of_seasonal_observations(output_var, yr)
-    seasonal_averages = year_of_seasonal_averages(output_var, yr)
+    seasonal_averages = ClimaCalibrate.year_of_seasonal_averages(output_var, yr)
     # Split into four OutputVars to get the same format as the covariance matrix
     obs_vec = flatten_seasonal_averages(seasonal_averages)
-    obs_cov = seasonal_covariance(
+    obs_cov = ClimaCalibrate.seasonal_covariance(
         output_var;
         model_error_scale = 0.05,
         regularization = 1e-3,

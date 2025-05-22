@@ -4,6 +4,7 @@ authors = ["Climate Modeling Alliance"]
 version = "0.1.0"
 
 [deps]
+ClimaAnalysis = "29b5916a-a76c-4e73-9657-3c8fd22e65e6"
 Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
 Distributed = "8ba89e20-285c-5b6f-9357-94700520ee1b"
 Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
@@ -18,7 +19,6 @@ YAML = "ddb6d928-2868-570f-bddf-ab3f9cf99eb6"
 
 [weakdeps]
 CalibrateEmulateSample = "95e48a1f-0bec-4818-9538-3db4340308e3"
-ClimaAnalysis = "29b5916a-a76c-4e73-9657-3c8fd22e65e6"
 
 [extensions]
 CESExt = "CalibrateEmulateSample"
