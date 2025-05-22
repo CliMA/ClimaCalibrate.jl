@@ -1,10 +1,4 @@
 # Function stubs for ext/ClimaAnalysisExt.jl
-import Statistics: mean
-import LinearAlgebra: Diagonal
-
-import ClimaCalibrate
-using ClimaAnalysis
-import EnsembleKalmanProcesses as EKP
 
 """
     limit_pressure_dim_to_era5_range(output_var)
