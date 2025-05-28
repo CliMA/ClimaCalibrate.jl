@@ -1,8 +1,13 @@
 using Test
+using SafeTestsets
 
-include("ekp_interface.jl")
-include("model_interface.jl")
+#! format: off
+@safetestset "EKP interface" begin include("ekp_interface.jl") end
+@safetestset "Model interface" begin include("model_interface.jl") end
 # Disabled since we use EKP 2.0 in testing, CES is still incompatible with EKP 2.0
-# include("emulate_sample.jl")
-include("julia_backend.jl")
-include("aqua.jl")
+# @safetestset "Emulate sample" begin include("emulate_sample.jl") end
+@safetestset "Julia backend" begin include("julia_backend.jl") end
+@safetestset "Aqua" begin include("aqua.jl") end
+#! format: on
+
+nothing
