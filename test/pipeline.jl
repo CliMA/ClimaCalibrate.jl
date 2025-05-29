@@ -103,3 +103,118 @@ import ClimaAnalysis.Template:
         mean,
     )
 end
+
+@testset "Seasonal sample" begin
+    lat = [-90.0, -30.0, 30.0, 90.0]
+    lon = [-60.0, -30.0, 0.0, 30.0, 60.0]
+    time = ClimaAnalysis.Utils.date_to_time.(
+        Dates.DateTime(2007, 12),
+        [Dates.DateTime(2007, 12) + Dates.Month(i) for i in 0:11],
+    )
+    var =
+        TemplateVar() |>
+        add_dim("time", time, units = "s") |>
+        add_dim("lon", lon, units = "degrees") |>
+        add_dim("lat", lat, units = "degrees") |>
+        add_attribs(
+            long_name = "hi",
+            start_date = "2007-12-1",
+            blah = "blah2",
+        ) |>
+        one_to_n_data(collected = true) |>
+        initialize
+
+    sample_config = Pipeline.SeasonalSample(
+        ignore_nan_in_average = true,
+        ignore_nan_in_sample = true,
+    )
+
+    data, metadata = Pipeline.sample(sample_config, var, metadata = true)
+
+    # Unflatten data to make it easier to test
+    unflatten_var = ClimaAnalysis.unflatten(metadata, data)
+
+    average_season_var = ClimaAnalysis.average_season_across_time(var)
+
+    @test unflatten_var.data == average_season_var.data
+    @test unflatten_var.attributes == average_season_var.attributes
+    @test unflatten_var.dim_attributes == average_season_var.dim_attributes
+    @test unflatten_var.dims == average_season_var.dims
+
+    # Test if taking seasonal sample is idempotent. If the OutputVar are already
+    # seasonal averages, then the data should be flattened
+    lat = [-90.0, -30.0, 30.0, 90.0]
+    lon = [-60.0, -30.0, 0.0, 30.0, 60.0]
+    time = ClimaAnalysis.Utils.date_to_time.(
+        Dates.DateTime(2007, 12),
+        [Dates.DateTime(2007, 12) + Dates.Month(3 * i) for i in 0:3],
+    )
+    var =
+        TemplateVar() |>
+        add_dim("time", time, units = "s") |>
+        add_dim("lon", lon, units = "degrees") |>
+        add_dim("lat", lat, units = "degrees") |>
+        add_attribs(
+            long_name = "hi",
+            start_date = "2007-12-1",
+            blah = "blah2",
+        ) |>
+        one_to_n_data(collected = true) |>
+        initialize
+
+    sample_config = Pipeline.SeasonalSample(
+        ignore_nan_in_average = true,
+        ignore_nan_in_sample = true,
+    )
+    data, metadata = Pipeline.sample(sample_config, var, metadata = true)
+    unflatten_var = ClimaAnalysis.unflatten(metadata, data)
+
+    @test unflatten_var.data == var.data
+    @test unflatten_var.attributes["long_name"] ==
+          "hi season averaged over time (0.0 to 2.376e7s)"
+    @test unflatten_var.attributes["start_date"] == "2007-12-1"
+    @test unflatten_var.attributes["blah"] == "blah2"
+    @test unflatten_var.dim_attributes == var.dim_attributes
+    @test unflatten_var.dims == var.dims
+
+    # TODO: Test with start and end dates
+    # TODO: Test other configurations (with and without nans)
+end
+
+@testset "Covariance" begin
+    lat = [-90.0, -30.0, 30.0, 90.0]
+    lon = [-60.0, -30.0, 0.0, 30.0, 60.0]
+    time = ClimaAnalysis.Utils.date_to_time.(
+        Dates.DateTime(2007, 12),
+        [Dates.DateTime(2007, 12) + Dates.Month(i) for i in 0:36],
+    )
+    var =
+        TemplateVar() |>
+        add_dim("time", time, units = "s") |>
+        add_dim("lon", lon, units = "degrees") |>
+        add_dim("lat", lat, units = "degrees") |>
+        add_attribs(
+            long_name = "hi",
+            start_date = "2007-12-1",
+            blah = "blah2",
+        ) |>
+        one_to_n_data(collected = true) |>
+        initialize
+
+    covar_config = Pipeline.NoiseCovariance()
+    sample_config = Pipeline.SeasonalSample(
+        ignore_nan_in_average = true,
+        ignore_nan_in_sample = true,
+    )
+    covar = Pipeline.covariance(covar_config, sample_config, var)
+end
+
+@testset "Observation" begin
+    # TODO: Make an OutputVar of 3 years
+    # TODO: Make observation for a single year
+    # TODO: Make covariance for all three years
+    # Test that it match the result from sample and covariance
+    # Test that the ordering is correct (should be because of flattening)
+
+    # Test reconstruct and deconstruct
+end

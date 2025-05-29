@@ -14,6 +14,8 @@ import Dates
 import Statistics: mean, var
 import NaNStatistics: nanmean, nanvar
 
+import LinearAlgebra: Diagonal
+
 include("climaanalysis_helper.jl")
 include("utils.jl")
 
@@ -46,7 +48,10 @@ function Pipeline.sample(
     metadata = false,
 )
     var = _process_sample(samp_config, var)
-    flat_var = flatten(var, ignore_nan = samp_config.ignore_nan_in_sample)
+    flat_var = ClimaAnalysis.flatten(
+        var,
+        ignore_nan = samp_config.ignore_nan_in_sample,
+    )
     if metadata
         return (flat_var.data, flat_var.metadata)
     else
@@ -55,11 +60,10 @@ function Pipeline.sample(
 end
 
 function _process_sample(samp_config::SeasonalSample, var::OutputVar)
-    group_by(time_dim) =
-        split_by_season_across_time(time_dim, var.attributes["start_date"])
-    reduce_by = samp_config.ignore_nan_in_average ? nanmean : mean
-    var = group_and_reduce_by(var, "time", group_by, reduce_by)
-    return var
+    return ClimaAnalysis.average_season_across_time(
+        var,
+        ignore_nan = samp_config.ignore_nan_in_average,
+    )
 end
 
 function Pipeline.covariance(
@@ -68,9 +72,15 @@ function Pipeline.covariance(
     var::OutputVar,
 )
     # If no dates are supplied, then construct the full covariance matrix given `var`
-    start_date = first(dates(var))
-    last_date = last(dates(var))
-    return covariance(covar_config, samp_config, var, start_date, end_date)
+    start_date = first(ClimaAnalysis.dates(var))
+    end_date = last(ClimaAnalysis.dates(var))
+    return Pipeline.covariance(
+        covar_config,
+        samp_config,
+        var,
+        start_date,
+        end_date,
+    )
 end
 
 function Pipeline.covariance(
@@ -81,6 +91,8 @@ function Pipeline.covariance(
     end_date,
 )
     # Convert dates to Dates.DateTime if they are strings
+    # Note that we do not check if these dates are in the time dimension of var
+    # because we are dealing with seasons
     start_date isa AbstractString && (start_date = Dates.DateTime(start_date))
     end_date isa AbstractString && (end_date = Dates.DateTime(end_date))
 
@@ -88,7 +100,7 @@ function Pipeline.covariance(
     seasonal_average_across_time_var = _process_sample(samp_config, var)
 
     # Variance of the seasons
-    group_by(time_dim) = split_by_season(
+    group_by_season(time_dim) = split_by_season(
         time_dim,
         var.attributes["start_date"],
         seasons = ("MAM", "JJA", "SON", "DJF"),
@@ -97,22 +109,17 @@ function Pipeline.covariance(
     seasonal_variance_var = group_and_reduce_by(
         seasonal_average_across_time_var,
         "time",
-        group_by,
+        group_by_season,
         reduce_by,
     )
 
     # Add model error scale
-    if !isnothing(covar_config.model_error_scale)
-        group_by(time_dim) = split_by_season(
-            time_dim,
-            var.attributes["start_date"],
-            seasons = ("MAM", "JJA", "SON", "DJF"),
-        )
+    if !iszero(covar_config.model_error_scale)
         reduce_by = covar_config.ignore_nan ? nanmean : mean
         seaonal_average_var = group_and_reduce_by(
             seasonal_average_across_time_var,
             "time",
-            group_by,
+            group_by_season,
             reduce_by,
         )
         seasonal_variance_var.data += seaonal_average_var.data
@@ -124,14 +131,19 @@ function Pipeline.covariance(
     seasons_to_int = Dict("MAM" => 1, "JJA" => 2, "SON" => 3, "DJF" => 4)
 
     # Then, use group_and_reduce_by to duplicate time slices
-    reduce_by = identity
-    group_by(dim) = [dim[seasons_to_int[season]] for season in seasons]
-    full_covariance_var =
-        group_and_reduce_by(seasonal_variance_var, "time", group_by, reduce_by)
+    reduce_by_identity(A; dims) = A
+    group_by_slice(dim) = [[dim[seasons_to_int[season]]] for season in seasons]
+    full_covariance_var = group_and_reduce_by(
+        seasonal_variance_var,
+        "time",
+        group_by_slice,
+        reduce_by_identity,
+    )
 
 
-    diag_cov = flatten(full_covariance_var).data
-    !isnothing(regularization) && (diag_cov .+= regularization)
+    diag_cov = ClimaAnalysis.flatten(full_covariance_var).data
+    !iszero(covar_config.regularization) &&
+        (diag_cov .+= covar_config.regularization)
     return Diagonal(diag_cov)
 end
 
@@ -155,7 +167,7 @@ function Pipeline.covariance(
     gamma_low_rank = EKP.tsvd_cov_from_samples(var_mat)
 
     gamma_diag = (model_error_scale * flatten(average_time(var)).data) .^ 2
-    if !isnothing(regularization)
+    if !iszero(regularization)
         gamma_diag += regularization * EKP.I
     end
 
@@ -176,6 +188,7 @@ function Pipeline.observation(
         var,
         first(dates(var)),
         last(dates(var)),
+        name = name,
     )
 end
 
@@ -204,5 +217,7 @@ end
 function Pipeline.reconstruct_var_from_obs()
     error("Not yet implemented!")
 end
+
+# Reconstruct from g_ensemble, covariance
 
 end

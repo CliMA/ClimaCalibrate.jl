@@ -73,7 +73,7 @@ function split_by_season(
     seasons = ("MAM", "JJA", "SON", "DJF"),
 )
     reference_date isa AbstractString &&
-        (reference_date = Dates.DateTime(end_date))
+        (reference_date = Dates.DateTime(reference_date))
     grouped_dates =
         ClimaAnalysis.Utils.time_to_date.(reference_date, time_dim) |>
         (dates -> ClimaAnalysis.Utils.split_by_season(dates, seasons = seasons))
