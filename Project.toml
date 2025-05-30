@@ -47,6 +47,7 @@ julia = "1.9"
 [extras]
 Aqua = "4c88cf16-eb10-579e-8560-4a9242c79595"
 CalibrateEmulateSample = "95e48a1f-0bec-4818-9538-3db4340308e3"
+ClimaAnalysis = "29b5916a-a76c-4e73-9657-3c8fd22e65e6"
 ClimaParams = "5c42b081-d73a-476f-9059-fd94b934656c"
 Conda = "8f4d0f93-b110-5947-807f-2305c1781a2d"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"

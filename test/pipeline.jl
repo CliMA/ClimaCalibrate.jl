@@ -201,8 +201,8 @@ end
     @test unflatten_var.attributes["start_date"] == "2007-12-1"
     @test unflatten_var.attributes["blah"] == "blah2"
     @test unflatten_var.attributes["season"] == ["DJF", "MAM"]
-    @test unflatten_var.dim_attributes == var.dim_attributes
-    @test unflatten_var.dims == var.dims
+    @test unflatten_var.dim_attributes == windowed_var.dim_attributes
+    @test unflatten_var.dims == windowed_var.dims
 
 
     # TODO: Test config with ignore_nan_in_sample = false and ignore_nan_in_average = false
