@@ -303,7 +303,7 @@ end
 
 Unflatten the sample in `obs` corresponding to `name` into a `OutputVar`.
 """
-function Pipeline.unflatten_sample_from_obs(obs, name)
+function Pipeline.unflatten_sample_from_obs(obs::EKP.Observation, name)
     obs_idx = _find_idx_from_name(obs, name)
     metadata = _find_metadata_from_name(obs, obs_idx)
     sample = EKP.get_samples(obs)[obs_idx]
@@ -319,7 +319,7 @@ end
 Unflatten the diagonal of the covariance matrix corresponding to `name` in `obs`
 into a `OutputVar`.
 """
-function Pipeline.unflatten_cov_from_obs(obs, name)
+function Pipeline.unflatten_cov_from_obs(obs::EKP.Observation, name)
     obs_idx = _find_idx_from_name(obs, name)
     metadata = _find_metadata_from_name(obs, obs_idx)
     cov = EKP.get_covs(obs)[obs_idx]
@@ -339,7 +339,7 @@ end
 Unflatten `vec` into a `OutputVar` using the metadata from the observation with
 the name `name` in `obs`.
 """
-function Pipeline.unflatten_vec_from_obs(obs, vec, name)
+function Pipeline.unflatten_vec_from_obs(obs::EKP.Observation, vec, name)
     obs_idx = _find_idx_from_name(obs, name)
     metadata = _find_metadata_from_name(obs, obs_idx)
     return ClimaAnalysis.unflatten(metadata, vec)
@@ -350,7 +350,7 @@ end
 
 Find the index of the observation corresponding to `name` in `obs`.
 """
-function _find_idx_from_name(obs, name)
+function _find_idx_from_name(obs::EKP.Observation, name)
     # TODO: What if an observation doesn't have a name and you combine the observations?
     # TODO: What if an observation doesn't have metadata and you combine
     # the observations?
@@ -369,8 +369,11 @@ function _find_idx_from_name(obs, name)
 end
 
 """
+    _find_metadata_from_name(obs::EnsembleKalmanProcesses.Observation, idx)
+
+Find the metadata of the observation corresponding to `name` in `obs`.
 """
-function _find_metadata_from_name(obs, idx)
+function _find_metadata_from_name(obs::EKP.Observation, idx)
     # The metadata is either a vector because it is formed by combining
     # observations using combine_observations or a ClimaAnalysis.Var.metadata
     # because it is a single observation

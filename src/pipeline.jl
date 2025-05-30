@@ -50,8 +50,6 @@ function unflatten_sample_from_obs end
 
 function unflatten_cov_from_obs end
 
-end
-
 # TODO: Once the functions for reconstruct is finalized, update this
 
 # Note that we do not include NaNStatistics and Statistics because those
@@ -95,4 +93,6 @@ function __init__()
             end
         end
     end
+end
+
 end
