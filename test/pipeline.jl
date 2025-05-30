@@ -141,8 +141,9 @@ end
     @test unflatten_var.dim_attributes == average_season_var.dim_attributes
     @test unflatten_var.dims == average_season_var.dims
 
-    # Test if taking seasonal sample is idempotent. If the OutputVar are already
-    # seasonal averages, then the data should be flattened
+    # Test that taking seasonal sample is idempotent. If the OutputVar are
+    # already seasonal averages, then the result should be the same as
+    # flattening the data
     lat = [-90.0, -30.0, 30.0, 90.0]
     lon = [-60.0, -30.0, 0.0, 30.0, 60.0]
     time = ClimaAnalysis.Utils.date_to_time.(
@@ -174,11 +175,39 @@ end
           "hi season averaged over time (0.0 to 2.376e7s)"
     @test unflatten_var.attributes["start_date"] == "2007-12-1"
     @test unflatten_var.attributes["blah"] == "blah2"
+    @test unflatten_var.attributes["season"] == ["DJF", "MAM", "JJA", "SON"]
     @test unflatten_var.dim_attributes == var.dim_attributes
     @test unflatten_var.dims == var.dims
 
-    # TODO: Test with start and end dates
-    # TODO: Test other configurations (with and without nans)
+    # Test with start and end dates
+    data, metadata = Pipeline.sample(
+        sample_config,
+        var,
+        "2007-12",
+        Dates.DateTime(2008, 3, 1),
+        metadata = true,
+    )
+    unflatten_var = ClimaAnalysis.unflatten(metadata, data)
+    windowed_var = ClimaAnalysis.window(
+        var,
+        "time",
+        left = Dates.DateTime(2007, 12),
+        right = Dates.DateTime(2008, 3),
+    )
+
+    @test unflatten_var.data == windowed_var.data
+    @test unflatten_var.attributes["long_name"] ==
+          "hi season averaged over time (0.0 to 7.8624e6s)"
+    @test unflatten_var.attributes["start_date"] == "2007-12-1"
+    @test unflatten_var.attributes["blah"] == "blah2"
+    @test unflatten_var.attributes["season"] == ["DJF", "MAM"]
+    @test unflatten_var.dim_attributes == var.dim_attributes
+    @test unflatten_var.dims == var.dims
+
+
+    # TODO: Test config with ignore_nan_in_sample = false and ignore_nan_in_average = false
+
+    # TODO: Test that order of the OutrputVar does not matter
 end
 
 @testset "Covariance" begin
@@ -207,6 +236,8 @@ end
         ignore_nan_in_sample = true,
     )
     covar = Pipeline.covariance(covar_config, sample_config, var)
+
+
 end
 
 @testset "Observation" begin

@@ -1,36 +1,9 @@
-function floor_season(x)
-    season, year = ClimaAnalysis.Utils.find_season_and_year(x)
-    month = if season == "MAM"
-        3
-    elseif season == "JJA"
-        6
-    elseif season == "SON"
-        9
-    else
-        12
-    end
-    season == "DJF" && (year -= 1)
-    return Dates.DateTime(year, month)
-end
-
-function ceil_season(x)
-    season, year = ClimaAnalysis.Utils.find_season_and_year(x)
-    month = if season == "MAM"
-        5
-    elseif season == "JJA"
-        8
-    elseif season == "SON"
-        11
-    else
-        2
-    end
-    return Dates.DateTime(year, month)
-end
-
+# TODO: Move this to climaanalysis_helper.jl and
+# rename it too?
 """
     find_seasons(start_date, end_date)
 
-
+Find all the seasons between `start_date` and `end_date`.
 """
 function find_seasons(start_date, end_date)
     (first_season, first_year) =

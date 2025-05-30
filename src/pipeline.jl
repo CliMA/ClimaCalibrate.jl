@@ -3,7 +3,12 @@ module Pipeline
 abstract type AbstractSample end
 
 Base.@kwdef struct SeasonalSample <: AbstractSample
+    # TODO: This might be better to call ignore_nan_in_reduction
+    # (in case if we ever have any other reductions than averaging)
+    """Ignore NaNs when computing the seasonal averages"""
     ignore_nan_in_average::Bool = true
+
+    """Ignore NaNs when making the sample"""
     ignore_nan_in_sample::Bool = true
 end
 
@@ -13,20 +18,23 @@ Base.@kwdef struct NoiseCovariance{
     FT1 <: AbstractFloat,
     FT2 <: AbstractFloat,
 } <: AbstractCovariance
+    """Time averaged data added to the diagonal of the covariance matrix """
     model_error_scale::FT1 = 0.0
+
+    """A scalar added to the diagonal of the covariance matrix"""
     regularization::FT2 = 0.0
 
-    """All NaNs are ignored when computing the covariance"""
+    """All NaNs are ignored when computing the covariance matrix"""
     ignore_nan::Bool = true
 end
 
-# TODO: Not sure about this name because EKP uses SVDplusD
-Base.@kwdef struct SVDPlusDCovariance{
-    FT1 <: AbstractFloat,
-    FT2 <: AbstractFloat,
-} <: AbstractCovariance
+Base.@kwdef struct SVDCovariance{FT1 <: AbstractFloat, FT2 <: AbstractFloat} <:
+                   AbstractCovariance
+    # TODO: Add stuff here
+    """Add stuff here!"""
     model_error_scale::FT1 = 0.0
-    replace_nans::Bool = true
+
+    """Add stuff here!"""
     regularization::FT2 = 0.0
 end
 
@@ -36,17 +44,18 @@ function covariance end
 
 function observation end
 
-function reconstruct_var_from_obs end
+function unflatten_vec_from_obs end
+
+function unflatten_sample_from_obs end
+
+function unflatten_cov_from_obs end
 
 end
-
-
 
 # TODO: Once the functions for reconstruct is finalized, update this
 
 # Note that we do not include NaNStatistics and Statistics because those
-# packages are automatically loaded by ClimaAnalysis and it does not matter how
-# deep in the stack the packages are
+# packages are automatically loaded by ClimaAnalysis
 extension_fns = [
     :ClimaAnalysis =>
         [:sample, :covariance, :observation, :reconstruct_var_from_obs],

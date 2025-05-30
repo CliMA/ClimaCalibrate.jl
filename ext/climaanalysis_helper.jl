@@ -18,7 +18,9 @@ Note `group_by` does not need to partition the values of the dimension. For exam
 `group_by` function can be `group_by(dim) = [[first(dim)]]`, which return the first slice of
 the `OutputVar`.
 """
-# I don't know about this function name because it is misleading
+# TODO: I don't know about this function name because it is misleading
+# TODO: For functions that use this, it might be a good idea to write standalone functions
+# and test them
 function group_and_reduce_by(var::OutputVar, dim_name, group_by, reduce_by)
     dim_name_in_var =
         ClimaAnalysis.Var.find_corresponding_dim_name_in_var(dim_name, var)
@@ -64,9 +66,9 @@ function group_and_reduce_by(var::OutputVar, dim_name, group_by, reduce_by)
     )
 end
 
-# TODO: Group by seasons
-# TODO: Group by seasons across time
-
+# TODO: Rename these functions because I don't like them having the same names as the
+# ClimaAnalysis functions
+# TODO: Write tests for these
 function split_by_season(
     time_dim,
     reference_date;
