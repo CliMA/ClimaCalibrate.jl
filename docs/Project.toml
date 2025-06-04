@@ -14,3 +14,4 @@ Literate = "98b081ad-f1c9-55d3-8b20-4c87d4299306"
 
 [compat]
 ClimaAtmos = "=0.28.3"
+EnsembleKalmanProcesses = "2"

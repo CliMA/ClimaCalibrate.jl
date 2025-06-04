@@ -8,7 +8,7 @@ import EnsembleKalmanProcesses.TOMLInterface as TI
 
 export get_prior, initialize, update_ensemble, save_G_ensemble
 export path_to_ensemble_member,
-    path_to_model_log, path_to_iteration, parameter_path
+    path_to_model_log, path_to_iteration, parameter_path, load_latest_ekp
 
 """
     load_ekp_struct(output_dir, iteration)
@@ -17,6 +17,22 @@ Return the EnsembleKalmanProcess struct for a completed iteration.
 """
 load_ekp_struct(output_dir, iteration) =
     JLD2.load_object(ekp_path(output_dir, iteration))
+
+"""
+    load_latest_ekp(output_dir)
+
+Return the most recent EnsembleKalmanProcess struct from the given output directory.
+
+Returns nothing if no EKP structs are found.
+"""
+function load_latest_ekp(output_dir)
+    iter = -1
+    while isfile(ekp_path(output_dir, iter + 1))
+        iter += 1
+    end
+    iter == -1 && return nothing
+    return load_ekp_struct(output_dir, iter)
+end
 
 """
     path_to_ensemble_member(output_dir, iteration, member)

@@ -65,4 +65,5 @@ ClimaCalibrate.path_to_model_log
 ClimaCalibrate.parameter_path
 ClimaCalibrate.minibatcher_over_samples
 ClimaCalibrate.observation_series_from_samples
+ClimaCalibrate.load_latest_ekp
 ```
