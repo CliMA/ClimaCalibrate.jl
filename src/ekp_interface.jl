@@ -8,7 +8,7 @@ import EnsembleKalmanProcesses.TOMLInterface as TI
 
 export get_prior, initialize, update_ensemble, save_G_ensemble
 export path_to_ensemble_member,
-    path_to_model_log, path_to_iteration, parameter_path
+    path_to_model_log, path_to_iteration, parameter_path, load_latest_ekp
 
 """
     load_ekp_struct(output_dir, iteration)
@@ -361,7 +361,8 @@ If no iteration has been completed yet, return -1.
 """
 function last_completed_iteration(output_dir)
     last_completed_iter = -1
-    while isfile(ekp_path(output_dir, last_completed_iter + 1))
+    while isfile(path_to_G_ensemble(output_dir, last_completed_iter + 1)) &&
+        isfile(ekp_path(output_dir, last_completed_iter + 2))
         last_completed_iter += 1
     end
     return last_completed_iter
