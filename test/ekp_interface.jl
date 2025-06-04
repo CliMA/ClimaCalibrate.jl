@@ -67,6 +67,26 @@ end
     @test eki.u[1].stored_data == user_constructed_eki.u[1].stored_data
 end
 
+@testset "Test loading latest EKP struct" begin
+    # Test loading from directory with no completed iterations
+    empty_dir = joinpath(output_dir, "empty")
+    mkpath(empty_dir)
+    @test isnothing(CAL.load_latest_ekp(empty_dir))
+
+    # Test loading from directory with completed iterations
+    # We already have an EKP struct saved from earlier tests
+    latest_ekp = CAL.load_latest_ekp(output_dir)
+    @test !isnothing(latest_ekp)
+    @test latest_ekp isa EKP.EnsembleKalmanProcess
+    # Compare with the known EKP struct
+    for prop in propertynames(latest_ekp)
+        prop in [:u, :accelerator, :localizer] && continue
+        @test getproperty(latest_ekp, prop) ==
+              getproperty(eki_with_kwargs, prop)
+    end
+    @test latest_ekp.u[1].stored_data == eki_with_kwargs.u[1].stored_data
+end
+
 override_file =
     joinpath(output_dir, "iteration_000", "member_001", "parameters.toml")
 td = CP.create_toml_dict(FT; override_file)

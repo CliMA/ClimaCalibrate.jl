@@ -19,6 +19,22 @@ load_ekp_struct(output_dir, iteration) =
     JLD2.load_object(ekp_path(output_dir, iteration))
 
 """
+    load_latest_ekp(output_dir)
+
+Return the most recent EnsembleKalmanProcess struct from the given output directory.
+
+Returns nothing if no EKP structs are found.
+"""
+function load_latest_ekp(output_dir)
+    iter = -1
+    while isfile(ekp_path(output_dir, iter + 1))
+        iter += 1
+    end
+    iter == -1 && return nothing
+    return load_ekp_struct(output_dir, iter)
+end
+
+"""
     path_to_ensemble_member(output_dir, iteration, member)
 
 Return the path to an ensemble member's directory for a given iteration and member number.
@@ -345,8 +361,7 @@ If no iteration has been completed yet, return -1.
 """
 function last_completed_iteration(output_dir)
     last_completed_iter = -1
-    while isfile(path_to_G_ensemble(output_dir, last_completed_iter + 1)) &&
-        isfile(ekp_path(output_dir, last_completed_iter + 2))
+    while isfile(ekp_path(output_dir, last_completed_iter + 1))
         last_completed_iter += 1
     end
     return last_completed_iter
