@@ -23,7 +23,7 @@ end
 @testset "Aqua tests (additional)" begin
     Aqua.test_undefined_exports(ClimaCalibrate)
     Aqua.test_stale_deps(ClimaCalibrate)
-    Aqua.test_deps_compat(ClimaCalibrate, check_extras = false)
+    Aqua.test_deps_compat(ClimaCalibrate)
     Aqua.test_project_extras(ClimaCalibrate)
     Aqua.test_piracies(ClimaCalibrate)
 end
