@@ -11,5 +11,6 @@ include("pbs.jl")
 include("workers.jl")
 include("backends.jl")
 include("emulate_sample.jl")
+include("observation_recipe.jl")
 
 end # module ClimaCalibrate
