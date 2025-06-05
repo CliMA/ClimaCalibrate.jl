@@ -1,6 +1,7 @@
 using Documenter
 using Documenter: doctest
 using ClimaCalibrate
+import ClimaAnalysis # needed to load ClimaAnalysis extension
 using Base.CoreLogging
 using DocumenterCitations
 import Literate
@@ -18,7 +19,10 @@ Literate.markdown(
 
 makedocs(
     plugins = [bib],
-    modules = [ClimaCalibrate],
+    modules = [
+        ClimaCalibrate,
+        Base.get_extension(ClimaCalibrate, :ClimaAnalysisExt),
+    ],
     sitename = "ClimaCalibrate.jl",
     authors = "Clima",
     checkdocs = :exports,
@@ -33,6 +37,7 @@ makedocs(
         "Distributed Calibration Tutorial" => "literate_example.md",
         "Backends" => "backends.md",
         "Observations" => "observations.md",
+        "Observation Recipes" => "observation_recipe.md",
         "Emulate and Sample" => "emulate_sample.md",
         "API" => "api.md",
     ],
