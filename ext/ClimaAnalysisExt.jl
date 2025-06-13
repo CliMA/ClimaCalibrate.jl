@@ -381,4 +381,44 @@ function group_and_reduce_by(var::OutputVar, dim_name, group_by, reduce_by)
     )
 end
 
+"""
+    reconstruct_g_mean_final(ekp::EKP.EnsembleKalmanProcess,
+                             observation::EKP.Observation)
+
+Reconstruct the mean forward model evaluation at the last iteration as a
+`OutputVar`.
+
+This function assumes `observation` contains the necessary metadata to reconstruct
+the original `OutputVar`s.
+"""
+function ObservationRecipe.reconstruct_g_mean_final(ekp, observation)
+    g_mean = get_g_mean_final(ekp)
+
+    # Assume observation.metadata is an iterable of ClimaAnalysis.Var.Metadata
+    metadatas = (metadata for metadata in observation.metadata)
+    total_metadata_length = sum(metadata for metadata in metadatas)
+
+    length(g_mean) != length(total_metadata_length) && error(
+        "Length of g_mean_final is not the same as the length of all the metadata",
+    )
+
+    indices = (
+        1,
+        cumsum(
+            ClimaAnalysis.Var._data_size(metadata) for metadata in metadatas
+        )...,
+    )
+    first_indices = indices[begin:(end - 1)]
+    last_indices = indices[(begin + 1):end]
+
+    vars = map(
+        metadata,
+        first_indices,
+        last_indices,
+    ) do metadata, first_index, last_index
+        ClimaAnalysis.unflatten(metadata, g_mean[first_index:last_index])
+    end
+    return vars
+end
+
 end
