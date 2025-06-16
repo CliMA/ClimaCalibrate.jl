@@ -23,6 +23,9 @@ struct SeasonalDiagonalCovariance{FT1 <: AbstractFloat, FT2 <: AbstractFloat} <:
 
     """All NaNs are ignored when computing the covariance matrix"""
     ignore_nan::Bool
+
+    """Use latitude weights"""
+    use_latitude_weights::Bool
 end
 
 """
@@ -54,6 +57,7 @@ function SeasonalDiagonalCovariance(;
     model_error_scale = 0.0,
     regularization = 0.0,
     ignore_nan = true,
+    use_latitude_weights = false,
 )
     model_error_scale < zero(model_error_scale) &&
         error("Model_error_scale ($model_error_scale) should not be negative")
@@ -64,6 +68,7 @@ function SeasonalDiagonalCovariance(;
         model_error_scale,
         regularization,
         ignore_nan,
+        use_latitude_weights,
     )
 end
 
