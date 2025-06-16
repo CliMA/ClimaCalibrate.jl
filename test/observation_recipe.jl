@@ -10,6 +10,9 @@ import LinearAlgebra: Diagonal, I
 import Statistics
 import NaNStatistics: nanvar, nanmean
 
+import EnsembleKalmanProcesses as EKP
+using EnsembleKalmanProcesses.ParameterDistributions
+
 # Since functions not defined in ext.jl are not exported, we need to access
 # them like this
 ext = Base.get_extension(ClimaCalibrate, :ClimaAnalysisExt)
@@ -817,5 +820,39 @@ end
 end
 
 @testset "Reconstruct mean g ens final" begin
-    # TODO: Got to write this test
+    time =
+        ClimaAnalysis.Utils.date_to_time.(
+            Dates.DateTime(2007, 12),
+            [Dates.DateTime(2007, 12) + Dates.Month(3 * i) for i in 0:11],
+        )
+    data = [1.0, 2.0, 3.0, 5.0, 8.0, 13.0, 21.0, 34.0, 55.0, 89.0, 144.0, NaN]
+    var =
+        TemplateVar() |>
+        add_dim("time", time, units = "s") |>
+        add_attribs(
+            short_name = "hi",
+            long_name = "hello",
+            start_date = "2007-12-1",
+            blah = "blah2",
+        ) |>
+        add_data(data = data) |>
+        initialize
+    covar_estimator = ObservationRecipe.SeasonalDiagonalCovariance()
+    obs = ObservationRecipe.observation(
+        covar_estimator,
+        var,
+        Dates.DateTime(2007, 12),
+        Dates.DateTime(2008, 9),
+    )
+
+    prior = constrained_gaussian("pi_groups_coeff", 1.0, 0.3, 0, Inf)
+
+    eki = EKP.EnsembleKalmanProcess(
+        obs,
+        EKP.TransformUnscented(prior, impose_prior = true),
+        verbose = true,
+    )
+
+    G_ens = reshape(collect(1.0:12.0), 4, 3)
+    EKP.update_ensemble!(eki, G_ens)
 end

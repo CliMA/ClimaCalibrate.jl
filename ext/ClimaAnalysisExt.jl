@@ -391,7 +391,10 @@ Reconstruct the mean forward model evaluation at the last iteration as a
 This function assumes `observation` contains the necessary metadata to reconstruct
 the original `OutputVar`s.
 """
-function ObservationRecipe.reconstruct_g_mean_final(ekp, observation)
+function ObservationRecipe.reconstruct_g_mean_final(
+    ekp::EKP.EnsembleKalmanProcess, # TODO: I need to look at how this should be called since observation is already part of ekp
+    observation::EKP.Observation,
+)
     g_mean = get_g_mean_final(ekp)
 
     # Assume observation.metadata is an iterable of ClimaAnalysis.Var.Metadata
