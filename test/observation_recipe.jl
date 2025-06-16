@@ -852,7 +852,7 @@ end
         EKP.TransformUnscented(prior, impose_prior = true),
         verbose = true,
     )
-
+    # TODO: Make an example that involve minibatch
     G_ens = reshape(collect(1.0:12.0), 4, 3)
     EKP.update_ensemble!(eki, G_ens)
 end

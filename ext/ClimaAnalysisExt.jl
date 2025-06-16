@@ -393,8 +393,9 @@ the original `OutputVar`s.
 """
 function ObservationRecipe.reconstruct_g_mean_final(
     ekp::EKP.EnsembleKalmanProcess, # TODO: I need to look at how this should be called since observation is already part of ekp
-    observation::EKP.Observation,
 )
+    # TODO: Something about this below need to be changed
+    observation = EKP.get_observation_series(ekp)
     g_mean = get_g_mean_final(ekp)
 
     # Assume observation.metadata is an iterable of ClimaAnalysis.Var.Metadata
