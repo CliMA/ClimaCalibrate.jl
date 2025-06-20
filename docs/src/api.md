@@ -67,3 +67,17 @@ ClimaCalibrate.minibatcher_over_samples
 ClimaCalibrate.observation_series_from_samples
 ClimaCalibrate.load_latest_ekp
 ```
+
+## Observation Recipe Interface
+
+```@docs
+ClimaCalibrate.ObservationRecipe.AbstractCovarianceEstimator
+ClimaCalibrate.ObservationRecipe.SeasonalDiagonalCovariance
+ClimaCalibrate.ObservationRecipe.SeasonalDiagonalCovariance()
+ClimaCalibrate.ObservationRecipe.SVDplusDCovariance
+ClimaCalibrate.ObservationRecipe.SVDplusDCovariance(sample_dates)
+ClimaCalibrate.ObservationRecipe.covariance
+ClimaCalibrate.ObservationRecipe.observation
+ClimaCalibrate.ObservationRecipe.seasonally_aligned_yearly_sample_date_ranges
+ClimaCalibrate.ObservationRecipe.change_data_type
+```
