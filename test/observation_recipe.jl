@@ -395,6 +395,61 @@ end
     )
 end
 
+@testset "Lat weights" begin
+    lat = [-90.0, -30.0, 30.0, 90.0]
+    var =
+        TemplateVar() |>
+        add_dim("lat", lat, units = "deg") |>
+        add_attribs(
+            short_name = "hi",
+            long_name = "hello",
+            start_date = "2007-12-1",
+        ) |>
+        one_to_n_data() |>
+        initialize
+
+    lat_weights = ext._lat_weights_var(var)
+    @test lat_weights.data == 1.0 ./ max.(cosd.(lat), 0.1)
+
+    lat_weights = ext._lat_weights_var(var, min_cosd_lat = 3.0)
+    @test lat_weights.data == 1.0 ./ max.(cosd.(lat), 3.0)
+
+    # 3D case
+    lat = [-90.0, -30.0, 30.0, 90.0]
+    lon = [-60.0, -30.0, 0.0, 30.0, 60.0]
+    time = [0.0, 1.0, 2.0]
+    var =
+        TemplateVar() |>
+        add_dim("lat", lat, units = "deg") |>
+        add_dim("lon", lon, units = "deg") |>
+        add_dim("time", time, units = "s") |>
+        add_attribs(
+            short_name = "hi",
+            long_name = "hello",
+            start_date = "2007-12-1",
+        ) |>
+        one_to_n_data() |>
+        initialize
+
+    lat_weights = ext._lat_weights_var(var)
+    @test lat_weights.data ==
+          repeat(1.0 ./ max.(cosd.(lat), 0.1), outer = (1, 5, 3))
+
+    lat_weights = ext._lat_weights_var(var, min_cosd_lat = 3.0)
+    @test lat_weights.data ==
+          repeat(1.0 ./ max.(cosd.(lat), 3.0), outer = (1, 5, 3))
+
+    # Error handling
+    # No latitude dimension
+    var = make_template_var("lon", "time") |> initialize
+    @test_throws ErrorException ext._lat_weights_var(var)
+
+    # Latitude dimension is not degrees
+    var = make_template_var("lat", "time") |> initialize
+    ClimaAnalysis.set_dim_units!(var, "lat", "rad")
+    @test_throws ErrorException ext._lat_weights_var(var)
+end
+
 @testset "SVDplusDCovariance" begin
     lat = [-90.0, -30.0, 30.0, 90.0]
     lon = [-60.0, -30.0, 0.0, 30.0, 60.0]
@@ -629,6 +684,41 @@ end
             [nanmean(season) for season in (DJF, MAM, JJA, SON)]
         ) .^ 2,
     )
+
+    # Enable lat weights, but use default settings for everything else
+    lats = [-90.0, -85.0, -20.0, 0.0, 20.0, 85.0, 90.0]
+    time1 =
+        ClimaAnalysis.Utils.date_to_time.(
+            Dates.DateTime(2007, 12),
+            [Dates.DateTime(2007, 12) + Dates.Year(i) for i in 0:1],
+        )
+    data = ones(Float64, 2, 7)
+    data[2, :] .*= 2
+    lat_var =
+        TemplateVar() |>
+        add_dim("time", time1, units = "s") |>
+        add_dim("latitude", lats, units = "deg") |>
+        add_attribs(
+            short_name = "hi",
+            long_name = "hello",
+            start_date = "2007-12-1",
+            blah = "blah2",
+        ) |>
+        add_data(data = data) |>
+        initialize
+    covar_estimator = ObservationRecipe.SeasonalDiagonalCovariance(
+        use_latitude_weights = true,
+    )
+    seasonal_covariance = ObservationRecipe.covariance(
+        covar_estimator,
+        lat_var,
+        Dates.DateTime(2007, 12),
+        Dates.DateTime(2007, 12),
+    )
+    sliced_var = ClimaAnalysis.slice(lat_var, time = 0.0)
+    @test seasonal_covariance ==
+          (1 / 2) *
+          Diagonal(ClimaAnalysis.flatten(ext._lat_weights_var(sliced_var)).data)
 
     # Ignore NaN set to false
     covar_estimator =
