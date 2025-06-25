@@ -188,4 +188,6 @@ function seasonally_aligned_yearly_sample_date_ranges end
 
 function change_data_type end
 
+function reconstruct_g_mean_final end
+
 end

@@ -384,4 +384,66 @@ function group_and_reduce_by(var::OutputVar, dim_name, group_by, reduce_by)
     )
 end
 
+"""
+    reconstruct_g_mean_final(ekp::EKP.EnsembleKalmanProcess,
+                             observation::EKP.Observation)
+
+Reconstruct the mean forward model evaluation at the last iteration as a
+`OutputVar`.
+
+This function assumes `observation` contains the necessary metadata to reconstruct
+the original `OutputVar`s.
+"""
+function ObservationRecipe.reconstruct_g_mean_final(
+    ekp::EKP.EnsembleKalmanProcess,
+)
+    obs_series = EKP.get_observation_series(ekp)
+    metadatas = _get_metadata_from_nth_iteration(obs_series, EKP.get_N_iterations(ekp))
+    eltype(metadatas) <: ClimaAnalysis.Var.Metadata
+    g_mean = EKP.get_g_mean_final(ekp)
+
+    # Check if length of g ensemble is the same as the length of the data in the matadatas
+    total_metadata_length =
+        sum(ClimaAnalysis.Var._data_size(metadata) for metadata in metadatas)
+    length(g_mean) != total_metadata_length && error(
+        "Length of g_mean_final is not the same as the length of all the metadata",
+    )
+
+    # Compute the indices of the data to attach to the metadata
+    # TODO: Clean this up since I don't really getting the indices like this
+    # The indices are supposed to look something like this:
+    # If the size of the data is [2, 4, 9, 13]
+    # then, it is [(1, 2), (3, 6), (7, 15), (16, 28)]
+    first_metadata, rest_metadatas... = metadatas
+    indices = [(
+        firstindex(g_mean),
+        firstindex(g_mean) + ClimaAnalysis.Var._data_size(first_metadata) - 1,
+    )]
+    for metadata in rest_metadatas
+        first_idx = last(last(indices)) + 1
+        push!(
+            indices,
+            (first_idx, first_idx + ClimaAnalysis.Var._data_size(metadata) - 1),
+        )
+    end
+
+    vars = map(metadatas, indices) do metadata, (first_index, last_index)
+        ClimaAnalysis.unflatten(metadata, g_mean[first_index:last_index])
+    end
+    return vars
+end
+
+"""
+    _get_metadata_from_nth_iteration(obs_series, N)
+
+For the `N`th iteration, get the metadata of the observation(s) being processed.
+"""
+function _get_metadata_from_nth_iteration(obs_series, N)
+    # TODO: Write a test for this function
+    minibatch_indices = EKP.get_minibatch(obs_series, N)
+    minibatch_obs = EKP.get_observations(obs_series)[minibatch_indices]
+    metadata_vec = map(obs -> EKP.get_metadata(obs), minibatch_obs)
+    return vcat(metadata_vec...)
+end
+
 end
