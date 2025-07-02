@@ -4,6 +4,7 @@ export SeasonalDiagonalCovariance,
     SVDplusDCovariance,
     covariance,
     observation,
+    short_names,
     seasonally_aligned_yearly_sample_date_ranges,
     change_data_type
 
@@ -213,6 +214,8 @@ end
 function covariance end
 
 function observation end
+
+function short_names end
 
 function seasonally_aligned_yearly_sample_date_ranges end
 
