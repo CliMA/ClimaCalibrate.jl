@@ -305,6 +305,28 @@ function ObservationRecipe.observation(
 end
 
 """
+    short_names(obs::EKP.Observation)
+
+Get the short names of the variables from the metadata in the `EKP.Observation`.
+
+If the short name is not available, then `nothing` is returned instead.
+"""
+function ObservationRecipe.short_names(obs::EKP.Observation)
+    # Get the short names from the metadata rather than the name of the
+    # observation, because the name can be changed by the user
+    metadatas = EKP.get_metadata(obs)
+    eltype(metadatas) <: ClimaAnalysis.Var.Metadata || error(
+        "Getting the short names from an observation is only supported with metadata from ClimaAnalysis",
+    )
+
+    short_names = collect(
+        get(metadata.attributes, "short_name", nothing) for
+        metadata in metadatas
+    )
+    return short_names
+end
+
+"""
     seasonally_aligned_yearly_sample_date_ranges(var::OutputVar)
 
 Generate sample dates that conform to a seasonally aligned year from
