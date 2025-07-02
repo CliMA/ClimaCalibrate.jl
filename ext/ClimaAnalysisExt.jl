@@ -106,6 +106,18 @@ function ObservationRecipe.covariance(
         diag_cov = ClimaAnalysis.flatten(seasonal_variance_var).data
         !iszero(covar_estimator.regularization) &&
             (diag_cov .+= covar_estimator.regularization)
+
+        # Add latitude weights
+        if covar_estimator.use_latitude_weights
+            flattened_lat_weights =
+                ClimaAnalysis.flatten(
+                    _lat_weights_var(
+                        seasonal_variance_var,
+                        min_cosd_lat = covar_estimator.min_cosd_lat,
+                    ),
+                ).data
+            diag_cov .*= flattened_lat_weights
+        end
         diag_cov
     end
     return Diagonal(vcat(diagonals...))
@@ -382,6 +394,41 @@ function group_and_reduce_by(var::OutputVar, dim_name, group_by, reduce_by)
         data = ret_data,
         dims = ret_dims,
     )
+end
+
+"""
+    lat_weights_var(var::OutputVar)
+
+Return a `OutputVar` where each data value corresponds to
+`(1 / max(cosd(lat), min_cosd_lat))` at its coordinate.
+"""
+function _lat_weights_var(var::OutputVar; min_cosd_lat = 0.1)
+    ClimaAnalysis.has_latitude(var) || error(
+        "Latitude dimension is not found in var with short name $(get(var.attributes, "short_name", nothing))",
+    )
+    # Because ClimaAnalysis units system does not know about degrees_north we
+    # will check for units with a list of units instead
+    deg_unit_names = ["degrees", "degree", "deg", "degs", "°", "degrees_north"]
+    angle_dim_unit = ClimaAnalysis.dim_units(var, "latitude")
+    lowercase(angle_dim_unit) in deg_unit_names ||
+        error("The unit for latitude is missing or is not degree")
+
+    lats = ClimaAnalysis.latitudes(var)
+    FT = eltype(lats)
+
+    # Take max to prevent small values in the covariance matrix so that taking
+    # the inverse is stable
+    lat_weights = one(FT) ./ max.(cosd.(lats), FT(min_cosd_lat))
+
+    # Reshape for broadcasting
+    lat_idx = var.dim2index[ClimaAnalysis.latitude_name(var)]
+    reshape_tuple =
+        (idx == lat_idx ? length(lats) : 1 for idx in 1:length(var.dims))
+    lat_weights = reshape(lat_weights, reshape_tuple...)
+
+    # Use broadcasting to compute the lat weight for each data point
+    lat_weights = lat_weights .* ones(FT, size(var.data))
+    return ClimaAnalysis.remake(var, data = lat_weights)
 end
 
 end

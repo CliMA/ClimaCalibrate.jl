@@ -39,8 +39,11 @@ abstract type AbstractCovarianceEstimator end
 Contain the necessary information to construct a diagonal covariance matrix
 whose entries represents seasonal covariances from `ClimaAnalysis.OutputVar`s.
 """
-struct SeasonalDiagonalCovariance{FT1 <: AbstractFloat, FT2 <: AbstractFloat} <:
-       AbstractCovarianceEstimator
+struct SeasonalDiagonalCovariance{
+    FT1 <: AbstractFloat,
+    FT2 <: AbstractFloat,
+    FT3 <: AbstractFloat,
+} <: AbstractCovarianceEstimator
     """A model error scale term added to the diagonal of the covariance
     matrix"""
     model_error_scale::FT1
@@ -50,12 +53,20 @@ struct SeasonalDiagonalCovariance{FT1 <: AbstractFloat, FT2 <: AbstractFloat} <:
 
     """All NaNs are ignored when computing the covariance matrix"""
     ignore_nan::Bool
+
+    """Use latitude weights"""
+    use_latitude_weights::Bool
+
+    """The minimum cosine weight when using latitude weighting"""
+    min_cosd_lat::FT3
 end
 
 """
     SeasonalDiagonalCovariance(model_error_scale = 0.0,
                                regularization = 0.0,
-                               ignore_nan = true)
+                               ignore_nan = true,
+                               use_latitude_weights = false,
+                               min_cosd_lat = 0.1)
 
 Create a `SeasonalDiagonalCovariance` which specifies how the covariance matrix
 should be formed. When used with `ObservationRecipe.observation` or
@@ -76,21 +87,40 @@ Keyword arguments
   matrix. Otherwise, `NaN` are included in the intermediate calculation of the
   covariance matrix. Note that all `NaN`s are removed in the last step of
   forming the covariance matrix even if `ignore_nan` is `false`.
+
+- `use_latitude_weights`: If `true`, then latitude weighting is applied to the
+  covariance matrix. Latitude weighting is multiplying the values along the
+  diagonal of the covariance matrix by `(1 / max(cosd(lat), min_cosd_lat))`. See
+  the keyword argument `min_cosd_lat` for more information.
+
+- `min_cosd_lat`: Control the minimum latitude weight when
+  `use_latitude_weights` is `true`. The value for `min_cosd_lat` must be greater
+  than zero as values close to zero along the diagonal of the covariance matrix
+  can lead to issues when taking the inverse of the covariance matrix.
 """
 function SeasonalDiagonalCovariance(;
     model_error_scale = 0.0,
     regularization = 0.0,
     ignore_nan = true,
+    use_latitude_weights = false,
+    min_cosd_lat = 0.1,
 )
     model_error_scale < zero(model_error_scale) &&
         error("Model_error_scale ($model_error_scale) should not be negative")
     regularization < zero(regularization) &&
         error("Regularization ($regularization) should not be negative")
+    if use_latitude_weights && min_cosd_lat <= zero(min_cosd_lat)
+        error(
+            "The value for min_cosd_lat ($min_cosd_lat) should be greater than zero",
+        )
+    end
 
     return SeasonalDiagonalCovariance(
         model_error_scale,
         regularization,
         ignore_nan,
+        use_latitude_weights,
+        min_cosd_lat,
     )
 end
 
