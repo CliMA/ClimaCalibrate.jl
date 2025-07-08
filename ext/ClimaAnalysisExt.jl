@@ -399,8 +399,8 @@ end
 """
     lat_weights_var(var::OutputVar)
 
-Return a `OutputVar` where each data value corresponds to
-`(1 / max(cosd(lat), min_cosd_lat))` at its coordinate.
+Return a `OutputVar` where each data value corresponds to `(1 / max(cosd(lat),
+min_cosd_lat))` if there is no `NaN` at its coordinate and `NaN` otherwise.
 """
 function _lat_weights_var(var::OutputVar; min_cosd_lat = 0.1)
     ClimaAnalysis.has_latitude(var) || error(
@@ -427,7 +427,8 @@ function _lat_weights_var(var::OutputVar; min_cosd_lat = 0.1)
     lat_weights = reshape(lat_weights, reshape_tuple...)
 
     # Use broadcasting to compute the lat weight for each data point
-    lat_weights = lat_weights .* ones(FT, size(var.data))
+    one_or_nan = x -> FT(isnan(x) ? x : one(x))
+    lat_weights = lat_weights .* one_or_nan.(var.data)
     return ClimaAnalysis.remake(var, data = lat_weights)
 end
 
