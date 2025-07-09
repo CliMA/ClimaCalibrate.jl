@@ -370,6 +370,27 @@ end
 end
 
 @testset "Covariance constructors" begin
+    # Negative value for scalar
+    @test_throws ErrorException ObservationRecipe.ScalarCovariance(;
+        scalar = -1.0,
+        use_latitude_weights = false,
+        min_cosd_lat = 0.1,
+    )
+
+    # Zero value for scalar
+    @test_throws ErrorException ObservationRecipe.ScalarCovariance(;
+        scalar = 0.0,
+        use_latitude_weights = false,
+        min_cosd_lat = 0.1,
+    )
+
+    # Negative cosine weights
+    @test_throws ErrorException ObservationRecipe.ScalarCovariance(;
+        scalar = 1.0,
+        use_latitude_weights = true,
+        min_cosd_lat = -0.1,
+    )
+
     # Negative values for model_error_scale and regularization
     @test_throws ErrorException ObservationRecipe.SeasonalDiagonalCovariance(
         model_error_scale = -2.0,
@@ -460,6 +481,118 @@ end
     var = make_template_var("lat", "time") |> initialize
     ClimaAnalysis.set_dim_units!(var, "lat", "rad")
     @test_throws ErrorException ext._lat_weights_var(var)
+end
+
+@testset "ScalarCovariance" begin
+    lat = [-90.0, -30.0, 30.0, 90.0]
+    lon = [-60.0, -30.0, 0.0, 30.0, 60.0]
+    time =
+        ClimaAnalysis.Utils.date_to_time.(
+            Dates.DateTime(2007, 12),
+            [Dates.DateTime(2007, 12) + Dates.Month(i) for i in 0:35],
+        )
+    var =
+        TemplateVar() |>
+        add_dim("time", time, units = "s") |>
+        add_dim("lon", lon, units = "degrees") |>
+        add_dim("lat", lat, units = "degrees") |>
+        add_attribs(
+            short_name = "hi",
+            long_name = "hello",
+            start_date = "2007-12-1",
+            blah = "blah2",
+        ) |>
+        one_to_n_data(collected = true) |>
+        initialize
+
+    sample_start_date = Dates.DateTime(2007, 12)
+    sample_end_date = Dates.DateTime(2008, 9)
+    window_var = ClimaAnalysis.window(
+        var,
+        "time",
+        left = sample_start_date,
+        right = sample_end_date,
+    )
+    data_length = length(window_var.data)
+
+    # Test default constructor
+    covar_estimator = ObservationRecipe.ScalarCovariance()
+    scalar_covar = ObservationRecipe.covariance(
+        covar_estimator,
+        var,
+        sample_start_date,
+        sample_end_date,
+    )
+    @test Diagonal(ones(data_length)) == scalar_covar
+
+    covar_estimator = ObservationRecipe.ScalarCovariance(scalar = 10.0)
+    scalar_covar = ObservationRecipe.covariance(
+        covar_estimator,
+        var,
+        sample_start_date,
+        sample_end_date,
+    )
+    @test Diagonal(10.0 * ones(data_length)) == scalar_covar
+
+    # Latitude weights
+    covar_estimator = ObservationRecipe.ScalarCovariance(
+        scalar = 10.0,
+        use_latitude_weights = true,
+        min_cosd_lat = 0.2,
+    )
+    scalar_covar = ObservationRecipe.covariance(
+        covar_estimator,
+        var,
+        sample_start_date,
+        sample_end_date,
+    )
+    @test scalar_covar ==
+          10.0 .* Diagonal(
+        ClimaAnalysis.flatten(
+            ext._lat_weights_var(window_var, min_cosd_lat = 0.2),
+        ).data,
+    )
+
+    # With NaNs
+    data = copy(var.data)
+    data[1, 1, 1] = NaN
+    data[3, 2, 4] = NaN
+    data[21, 3, 2]
+    nan_var = ClimaAnalysis.remake(var, data = data)
+    window_nan_var = ClimaAnalysis.window(
+        nan_var,
+        "time",
+        left = sample_start_date,
+        right = sample_end_date,
+    )
+
+    covar_estimator = ObservationRecipe.ScalarCovariance(scalar = 10.0)
+    scalar_covar = ObservationRecipe.covariance(
+        covar_estimator,
+        nan_var,
+        sample_start_date,
+        sample_end_date,
+    )
+    @test scalar_covar == 10.0 .* Diagonal(ones(data_length - 2))
+
+    # Latitude weights with NaNs
+    covar_estimator = ObservationRecipe.ScalarCovariance(
+        scalar = 10.0,
+        use_latitude_weights = true,
+        min_cosd_lat = 0.2,
+    )
+    scalar_covar = ObservationRecipe.covariance(
+        covar_estimator,
+        nan_var,
+        sample_start_date,
+        sample_end_date,
+    )
+    @test scalar_covar ==
+          10.0 .* Diagonal(
+        ClimaAnalysis.flatten(
+            ext._lat_weights_var(window_nan_var, min_cosd_lat = 0.2),
+        ).data,
+    )
 end
 
 @testset "SVDplusDCovariance" begin
