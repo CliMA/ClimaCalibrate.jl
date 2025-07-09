@@ -439,6 +439,18 @@ end
     @test lat_weights.data ==
           repeat(1.0 ./ max.(cosd.(lat), 3.0), outer = (1, 5, 3))
 
+    # 3D NaN case
+    data = collect(var.data)
+    data[1, 1, 1] = NaN
+    data[3, 2, 1] = NaN
+    var = ClimaAnalysis.remake(var, data = data)
+    lat_weights = ext._lat_weights_var(var)
+    correct_lat_weights =
+        repeat(1.0 ./ max.(cosd.(lat), 0.1), outer = (1, 5, 3))
+    correct_lat_weights[1, 1, 1] = NaN
+    correct_lat_weights[3, 2, 1] = NaN
+    @test isequal(lat_weights.data, correct_lat_weights)
+
     # Error handling
     # No latitude dimension
     var = make_template_var("lon", "time") |> initialize
@@ -709,6 +721,22 @@ end
     covar_estimator = ObservationRecipe.SeasonalDiagonalCovariance(
         use_latitude_weights = true,
     )
+    seasonal_covariance = ObservationRecipe.covariance(
+        covar_estimator,
+        lat_var,
+        Dates.DateTime(2007, 12),
+        Dates.DateTime(2007, 12),
+    )
+    sliced_var = ClimaAnalysis.slice(lat_var, time = 0.0)
+    @test seasonal_covariance ==
+          (1 / 2) *
+          Diagonal(ClimaAnalysis.flatten(ext._lat_weights_var(sliced_var)).data)
+
+    # Lat weight with NaN in data
+    data = lat_var.data
+    data[:, 3] .= NaN
+    data[:, 4] .= NaN
+    lat_var = ClimaAnalysis.remake(lat_var, data = data)
     seasonal_covariance = ObservationRecipe.covariance(
         covar_estimator,
         lat_var,
