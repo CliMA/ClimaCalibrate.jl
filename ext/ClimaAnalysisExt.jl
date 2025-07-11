@@ -6,7 +6,7 @@ import ClimaAnalysis: OutputVar
 import ClimaCalibrate.ObservationRecipe
 import ClimaCalibrate.ObservationRecipe: AbstractCovarianceEstimator
 import ClimaCalibrate.ObservationRecipe:
-    SeasonalDiagonalCovariance, SVDplusDCovariance
+    ScalarCovariance, SeasonalDiagonalCovariance, SVDplusDCovariance
 
 import EnsembleKalmanProcesses as EKP
 
@@ -18,6 +18,58 @@ import NaNStatistics: nanmean, nanvar
 import LinearAlgebra: Diagonal, I
 
 include("utils.jl")
+
+"""
+    covariance(covar_estimator::ScalarCovariance,
+               vars::Union{OutputVar, Iterable{OutputVar}},
+               start_date,
+               end_date)
+
+Compute the scalar covariance matrix.
+
+Data from `vars` will not be used to compute the covariance matrix.
+"""
+function ObservationRecipe.covariance(
+    covar_estimator::ScalarCovariance,
+    vars,
+    start_date,
+    end_date,
+)
+    # Convert dates to Dates.DateTime if they are strings
+    start_date = Dates.DateTime(start_date)
+    end_date = Dates.DateTime(end_date)
+
+    vars = _vars_to_iterable(vars)
+
+    for var in vars
+        _check_time_dim(var)
+    end
+
+    # Check if dates for start_date and end_date are in var
+    _check_dates_in_var(vars, start_date, end_date)
+
+    start_date <= end_date || error("$start_date should earlier than $end_date")
+
+    diagonals = map(vars) do var
+        var = ClimaAnalysis.window(var, "time", left = start_date, right = end_date)
+        flattened_data = ClimaAnalysis.flatten(var).data
+        diag_cov = ones(eltype(flattened_data), size(flattened_data)...)
+        diag_cov .*= covar_estimator.scalar
+
+        if covar_estimator.use_latitude_weights
+            flattened_lat_weights =
+                ClimaAnalysis.flatten(
+                    _lat_weights_var(
+                        var,
+                        min_cosd_lat = covar_estimator.min_cosd_lat,
+                    ),
+                ).data
+            diag_cov .*= flattened_lat_weights
+        end
+        diag_cov
+    end
+    return Diagonal(vcat(diagonals...))
+end
 
 """
     covariance(covar_estimator::SeasonalDiagonalCovariance,
