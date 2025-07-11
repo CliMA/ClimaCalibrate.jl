@@ -242,6 +242,7 @@ function ObservationRecipe.observation(
             ";",
         )
     )
+
     return EKP.Observation(
         Dict(
             "samples" => stacked_sample,
@@ -250,6 +251,25 @@ function ObservationRecipe.observation(
             "metadata" => metadata,
         ),
     )
+end
+
+"""
+    short_names(obs::EKP.Observation)
+
+Get the short names of the variables in the `EKP.Observation`.
+"""
+function ObservationRecipe.short_names(obs::EKP.Observation)
+    # Get the short names from the metadata rather than the name of the
+    # observation, because the name can be changed by the user
+    metadatas = EKP.get_metadata(obs)
+    eltype(metadatas) <: ClimaAnalysis.Var.Metadata ||
+        error("Metadata from ClimaAnalysis is only supported")
+
+    short_names = collect(
+        get(metadata.attributes, "short_name", nothing) for
+        metadata in metadatas
+    )
+    return short_names
 end
 
 """
