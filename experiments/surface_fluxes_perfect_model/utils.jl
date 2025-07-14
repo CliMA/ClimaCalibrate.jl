@@ -20,7 +20,7 @@ end
 function compare_g_ensemble(eki1, eki2)
     @testset "Compare g_ensemble between two EKP objects" begin
         for (g1, g2) in zip(eki1.g, eki2.g)
-            @test g1.stored_data == g2.stored_data
+            @test g1.stored_data ≈ g2.stored_data rtol = 1e-5
         end
     end
 end

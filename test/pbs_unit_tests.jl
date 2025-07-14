@@ -55,7 +55,7 @@ module list
 export JULIA_MPI_HAS_CUDA=true
 export CLIMACOMMS_DEVICE="CUDA"
 export CLIMACOMMS_CONTEXT="MPI"
-\$MPITRAMPOLINE_MPIEXEC -n 4 -ppn 2 set_gpu_rank julia --project=exp/dir test/iteration_001/member_001/model_run.jl
+\$MPITRAMPOLINE_MPIEXEC -n 4 -ppn 2 set_gpu_rank julia  --project=exp/dir test/iteration_001/member_001/model_run.jl
 """
 
 for (generated_str, test_str) in
