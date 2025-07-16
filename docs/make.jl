@@ -36,6 +36,7 @@ makedocs(
         "Getting Started" => "quickstart.md",
         "Distributed Calibration Tutorial" => "literate_example.md",
         "Backends" => "backends.md",
+        "Submission Scripts" => "submit_scripts.md",
         "Observations" => "observations.md",
         "Observation Recipes" => "observation_recipe.md",
         "Emulate and Sample" => "emulate_sample.md",
