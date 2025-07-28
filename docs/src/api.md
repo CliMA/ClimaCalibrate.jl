@@ -72,6 +72,8 @@ ClimaCalibrate.load_latest_ekp
 
 ```@docs
 ClimaCalibrate.ObservationRecipe.AbstractCovarianceEstimator
+ClimaCalibrate.ObservationRecipe.ScalarCovariance
+ClimaCalibrate.ObservationRecipe.ScalarCovariance()
 ClimaCalibrate.ObservationRecipe.SeasonalDiagonalCovariance
 ClimaCalibrate.ObservationRecipe.SeasonalDiagonalCovariance()
 ClimaCalibrate.ObservationRecipe.SVDplusDCovariance

@@ -1,6 +1,7 @@
 module ObservationRecipe
 
-export SeasonalDiagonalCovariance,
+export ScalarCovariance,
+    SeasonalDiagonalCovariance,
     SVDplusDCovariance,
     covariance,
     observation,
@@ -32,6 +33,66 @@ ObservationRecipe.covariance(
 and return a noise covariance matrix.
 """
 abstract type AbstractCovarianceEstimator end
+
+"""
+    ScalarCovariance <: AbstractCovarianceEstimator
+
+Contain the necessary information to construct the scalar covariance matrix.
+"""
+struct ScalarCovariance{FT1 <: AbstractFloat, FT2 <: AbstractFloat} <:
+       AbstractCovarianceEstimator
+    """Scalar to multiply the identity matrix by"""
+    scalar::FT1
+
+    """Use latitude weights"""
+    use_latitude_weights::Bool
+
+    """The minimum cosine weight when using latitude weighting"""
+    min_cosd_lat::FT2
+end
+
+"""
+    ScalarCovariance(;
+        scalar = 1.0,
+        use_latitude_weights = false,
+        min_cosd_lat = 0.1,
+    )
+
+Create a `ScalarCovariance` which specifies how the covariance matrix should be
+formed. When used with `ObservationRecipe.observation` or
+`ObservationRecipe.covariance`, return a `Diagonal` matrix.
+
+Keyword arguments
+=====================
+
+- `scalar`: Scalar value to multiply the identity matrix by.
+
+- `use_latitude_weights`: If `true`, then latitude weighting is applied to the
+  covariance matrix. Latitude weighting is multiplying the values along the
+  diagonal of the covariance matrix by `(1 / max(cosd(lat), min_cosd_lat))`. See
+  the keyword argument `min_cosd_lat` for more information.
+
+- `min_cosd_lat`: Control the minimum latitude weight when
+  `use_latitude_weights` is `true`. The value for `min_cosd_lat` must be greater
+  than zero as values close to zero along the diagonal of the covariance matrix
+  can lead to issues when taking the inverse of the covariance matrix.
+"""
+function ScalarCovariance(;
+    scalar = 1.0,
+    use_latitude_weights = false,
+    min_cosd_lat = 0.1,
+)
+    if scalar <= zero(scalar)
+        error("The value for scalar ($scalar) should be positive")
+    end
+    if use_latitude_weights && min_cosd_lat <= zero(min_cosd_lat)
+        error(
+            "The value for min_cosd_lat ($min_cosd_lat) should be greater than zero",
+        )
+    end
+
+    return ScalarCovariance(scalar, use_latitude_weights, min_cosd_lat)
+end
 
 """
     SeasonalDiagonalCovariance <: AbstractCovarianceEstimator
