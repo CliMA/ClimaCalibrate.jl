@@ -10,6 +10,8 @@ import LinearAlgebra: Diagonal, I
 import Statistics
 import NaNStatistics: nanvar, nanmean
 
+import EnsembleKalmanProcesses as EKP
+
 # Since functions not defined in ext.jl are not exported, we need to access
 # them like this
 ext = Base.get_extension(ClimaCalibrate, :ClimaAnalysisExt)
@@ -1103,5 +1105,92 @@ end
             ObservationRecipe.short_names(obs),
             ["Hello", "world!", nothing],
         )
+    end
+end
+
+@testset "Get metadata from nth iteration" begin
+    if pkgversion(EnsembleKalmanProcesses) > v"2.4.3"
+        time =
+            ClimaAnalysis.Utils.date_to_time.(
+                Dates.DateTime(2007, 12),
+                [Dates.DateTime(2007, 12) + Dates.Month(3 * i) for i in 0:47],
+            )
+        time_var =
+            TemplateVar() |>
+            add_dim("time", time, units = "s") |>
+            add_attribs(
+                short_name = "time",
+                start_date = "2007-12-1",
+                blah = "blah2",
+            ) |>
+            one_to_n_data() |>
+            initialize
+
+        lon = [-45.0, 0.0, 45.0]
+        lon_var =
+            TemplateVar() |>
+            add_dim("lon", lon, units = "degrees") |>
+            add_dim("time", time, units = "s") |>
+            add_attribs(
+                short_name = "lon",
+                start_date = "2007-12-1",
+                super = "fun",
+            ) |>
+            one_to_n_data() |>
+            initialize
+
+        covar_estimator = ObservationRecipe.SeasonalDiagonalCovariance()
+        obs1 = ObservationRecipe.observation(
+            covar_estimator,
+            (time_var, lon_var),
+            Dates.DateTime(2007, 12),
+            Dates.DateTime(2008, 9),
+        )
+        obs2 = ObservationRecipe.observation(
+            covar_estimator,
+            time_var,
+            Dates.DateTime(2007, 12),
+            Dates.DateTime(2008, 9),
+        )
+        obs3 = ObservationRecipe.observation(
+            covar_estimator,
+            lon_var,
+            Dates.DateTime(2007, 12),
+            Dates.DateTime(2008, 9),
+        )
+
+        # Test with fixed minibatcher with no randomness
+        obs_series = EKP.ObservationSeries(
+            Dict(
+                "observations" => [obs1, obs2, obs3, obs1],
+                "names" => ["1", "2", "3", "4"],
+                "minibatcher" => ClimaCalibrate.minibatcher_over_samples(
+                    [1, 2, 3, 4],
+                    2,
+                ),
+            ),
+        )
+
+        metadata1 =
+            ObservationRecipe.get_metadata_for_nth_iteration(obs_series, 1)
+        metadata2 =
+            ObservationRecipe.get_metadata_for_nth_iteration(obs_series, 2)
+        metadata3 =
+            ObservationRecipe.get_metadata_for_nth_iteration(obs_series, 3)
+
+        @test length(metadata1) == 3
+        @test metadata1[1].attributes["short_name"] == "time"
+        @test metadata1[2].attributes["short_name"] == "lon"
+        @test metadata1[3].attributes["short_name"] == "time"
+
+        @test length(metadata2) == 3
+        @test metadata2[1].attributes["short_name"] == "lon"
+        @test metadata2[2].attributes["short_name"] == "time"
+        @test metadata2[3].attributes["short_name"] == "lon"
+
+        @test length(metadata3) == 3
+        @test metadata3[1].attributes["short_name"] == "time"
+        @test metadata3[2].attributes["short_name"] == "lon"
+        @test metadata3[3].attributes["short_name"] == "time"
     end
 end

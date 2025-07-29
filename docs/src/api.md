@@ -80,6 +80,7 @@ ClimaCalibrate.ObservationRecipe.SVDplusDCovariance
 ClimaCalibrate.ObservationRecipe.SVDplusDCovariance(sample_dates)
 ClimaCalibrate.ObservationRecipe.covariance
 ClimaCalibrate.ObservationRecipe.observation
+ClimaCalibrate.ObservationRecipe.get_metadata_from_nth_iteration
 ClimaCalibrate.ObservationRecipe.seasonally_aligned_yearly_sample_date_ranges
 ClimaCalibrate.ObservationRecipe.change_data_type
 ```

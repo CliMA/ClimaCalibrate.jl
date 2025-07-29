@@ -7,7 +7,8 @@ export ScalarCovariance,
     observation,
     short_names,
     seasonally_aligned_yearly_sample_date_ranges,
-    change_data_type
+    change_data_type,
+    get_metadata_from_nth_iteration,
 
 import Dates
 
