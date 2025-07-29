@@ -521,4 +521,48 @@ function ObservationRecipe.get_metadata_for_nth_iteration(obs_series, N)
     return vcat(metadata_vec...)
 end
 
+"""
+    reconstruct_g_mean_final(ekp::EKP.EnsembleKalmanProcess,
+                             observation::EKP.Observation)
+
+Reconstruct the mean forward model evaluation at the last iteration as a
+vector of `OutputVar`s.
+
+This function assumes `observation` contains the necessary metadata to reconstruct
+the `OutputVar`s. Note that the metadata comes from the observations.
+"""
+function ObservationRecipe.reconstruct_g_mean_final(
+    ekp::EKP.EnsembleKalmanProcess,
+)
+    obs_series = EKP.get_observation_series(ekp)
+    metadatas = ObservationRecipe.get_metadata_for_nth_iteration(
+        obs_series,
+        EKP.get_N_iterations(ekp),
+    )
+    eltype(metadatas) <: ClimaAnalysis.Var.Metadata || error(
+        "Getting the short names from an observation is only supported with metadata from ClimaAnalysis",
+    )
+    g_mean = EKP.get_g_mean_final(ekp)
+
+    # Check if length of g ensemble is the same as the length of the data in the metadatas
+    total_metadata_length =
+        sum(ClimaAnalysis.Var._data_size(metadata) for metadata in metadatas)
+    length(g_mean) != total_metadata_length && error(
+        "Length of g_mean_final is not the same as the length of all the metadata",
+    )
+
+    # Reconstruct each OutputVar from the metadata
+    index = Ref(1)
+    vars = map(metadatas) do metadata
+        data_size = ClimaAnalysis.Var._data_size(metadata)
+        start_idx = index[]
+        index[] += data_size
+        ClimaAnalysis.unflatten(
+            metadata,
+            g_mean[start_idx:(start_idx + data_size - 1)],
+        )
+    end
+    return vars
+end
+
 end

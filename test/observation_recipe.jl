@@ -11,6 +11,7 @@ import Statistics
 import NaNStatistics: nanvar, nanmean
 
 import EnsembleKalmanProcesses as EKP
+using EnsembleKalmanProcesses.ParameterDistributions
 
 # Since functions not defined in ext.jl are not exported, we need to access
 # them like this
@@ -1192,5 +1193,227 @@ end
         @test metadata3[1].attributes["short_name"] == "time"
         @test metadata3[2].attributes["short_name"] == "lon"
         @test metadata3[3].attributes["short_name"] == "time"
+    end
+end
+
+@testset "Reconstruct mean g ens final" begin
+    if pkgversion(EnsembleKalmanProcesses) > v"2.4.3"
+        # Test with a two OutputVars and two iterations with a single
+        # observation (no observation series)
+        time =
+            ClimaAnalysis.Utils.date_to_time.(
+                Dates.DateTime(2007, 12),
+                [Dates.DateTime(2007, 12) + Dates.Month(3 * i) for i in 0:47],
+            )
+        time_var =
+            TemplateVar() |>
+            add_dim("time", time, units = "s") |>
+            add_attribs(
+                short_name = "hi",
+                long_name = "hello",
+                start_date = "2007-12-1",
+                blah = "blah2",
+            ) |>
+            one_to_n_data() |>
+            initialize
+
+        lon = [-45.0, 0.0, 45.0]
+        lon_var =
+            TemplateVar() |>
+            add_dim("lon", lon, units = "degrees") |>
+            add_dim("time", time, units = "s") |>
+            add_attribs(
+                short_name = "hi",
+                long_name = "hello",
+                start_date = "2007-12-1",
+                super = "fun",
+            ) |>
+            one_to_n_data() |>
+            initialize
+
+        covar_estimator = ObservationRecipe.SeasonalDiagonalCovariance()
+        obs = ObservationRecipe.observation(
+            covar_estimator,
+            (time_var, lon_var),
+            Dates.DateTime(2007, 12),
+            Dates.DateTime(2008, 9),
+        )
+
+        prior = constrained_gaussian("pi_groups_coeff", 1.0, 0.3, 0, Inf)
+
+        eki = EKP.EnsembleKalmanProcess(
+            obs,
+            EKP.TransformUnscented(prior, impose_prior = true),
+            verbose = true,
+            scheduler = EKP.DataMisfitController(on_terminate = "continue"),
+        )
+        G_ens = reshape(collect(1.0:48.0), 16, 3)
+        EKP.update_ensemble!(eki, G_ens)
+        vars = ObservationRecipe.reconstruct_g_mean_final(eki)
+
+        # Test OutputVar is constructed correctly
+        @test length(vars) == 2
+        for (i, var) in enumerate((time_var, lon_var))
+            @test vars[i].attributes == var.attributes
+            @test vars[i].dim_attributes == var.dim_attributes
+            @test vars[i].dims["time"] == first(var.dims["time"], 4)
+        end
+        @test vars[1].data == vec(mean(G_ens[1:4, :], dims = 2))
+        @test vars[2].data == reshape(mean(G_ens[5:end, :], dims = 2), 3, 4)
+
+        # Another iteration
+        G_ens = reshape(collect(100.0:147.0), 16, 3)
+        EKP.update_ensemble!(eki, G_ens)
+        vars = ObservationRecipe.reconstruct_g_mean_final(eki)
+
+        # Test OutputVar is reconstructed correctly
+        @test length(vars) == 2
+        for (i, var) in enumerate((time_var, lon_var))
+            @test vars[i].attributes == var.attributes
+            @test vars[i].dim_attributes == var.dim_attributes
+            @test vars[i].dims["time"] == first(var.dims["time"], 4)
+        end
+
+        @test vars[1].data == vec(mean(G_ens[1:4, :], dims = 2))
+        @test vars[2].data == reshape(mean(G_ens[5:end, :], dims = 2), 3, 4)
+
+        # Test with multiple OutputVars with two iterations with a minibatch of
+        # size 1 and an observation series
+        obs1 = ObservationRecipe.observation(
+            covar_estimator,
+            (time_var, lon_var),
+            Dates.DateTime(2007, 12),
+            Dates.DateTime(2008, 9),
+        )
+        obs2 = ObservationRecipe.observation(
+            covar_estimator,
+            (time_var, lon_var),
+            Dates.DateTime(2008, 12),
+            Dates.DateTime(2009, 9),
+        )
+
+        obs_series = EKP.ObservationSeries(
+            Dict(
+                "observations" => [obs1, obs2],
+                "names" => ["1", "2"],
+                "minibatcher" =>
+                    ClimaCalibrate.minibatcher_over_samples([1, 2], 1),
+            ),
+        )
+
+        eki = EKP.EnsembleKalmanProcess(
+            obs_series,
+            EKP.TransformUnscented(prior, impose_prior = true),
+            verbose = true,
+            scheduler = EKP.DataMisfitController(on_terminate = "continue"),
+        )
+
+        G_ens = reshape(collect(100.0:147.0), 16, 3)
+        EKP.update_ensemble!(eki, G_ens)
+        vars = ObservationRecipe.reconstruct_g_mean_final(eki)
+
+        # Test OutputVar is constructed correctly
+        @test length(vars) == 2
+        for (i, var) in enumerate((time_var, lon_var))
+            @test vars[i].attributes == var.attributes
+            @test vars[i].dim_attributes == var.dim_attributes
+            @test vars[i].dims["time"] == first(var.dims["time"], 4)
+        end
+        @test vars[1].data == vec(mean(G_ens[1:4, :], dims = 2))
+        @test vars[2].data == reshape(mean(G_ens[5:end, :], dims = 2), 3, 4)
+
+        G_ens = reshape(collect(200.0:247.0), 16, 3)
+        EKP.update_ensemble!(eki, G_ens)
+        vars = ObservationRecipe.reconstruct_g_mean_final(eki)
+
+        # Test OutputVar is constructed correctly
+        @test length(vars) == 2
+        for (i, var) in enumerate((time_var, lon_var))
+            @test vars[i].attributes == var.attributes
+            @test vars[i].dim_attributes == var.dim_attributes
+            @test vars[i].dims["time"] == var.dims["time"][5:8]
+        end
+
+        @test vars[1].data == vec(mean(G_ens[1:4, :], dims = 2))
+        @test vars[2].data == reshape(mean(G_ens[5:end, :], dims = 2), 3, 4)
+
+        # Test with multiple OutputVars with two iterations with a minibatch of
+        # size 2 and an observation series
+        obs3 = ObservationRecipe.observation(
+            covar_estimator,
+            (time_var, lon_var),
+            Dates.DateTime(2009, 12),
+            Dates.DateTime(2010, 9),
+        )
+        obs4 = ObservationRecipe.observation(
+            covar_estimator,
+            (time_var, lon_var),
+            Dates.DateTime(2010, 12),
+            Dates.DateTime(2011, 9),
+        )
+        obs_series = EKP.ObservationSeries(
+            Dict(
+                "observations" => [obs1, obs2, obs3, obs4],
+                "names" => ["1", "2", "3", "4"],
+                "minibatcher" => ClimaCalibrate.minibatcher_over_samples(
+                    [1, 2, 3, 4],
+                    2,
+                ),
+            ),
+        )
+
+        eki = EKP.EnsembleKalmanProcess(
+            obs_series,
+            EKP.TransformUnscented(prior, impose_prior = true),
+            verbose = true,
+            scheduler = EKP.DataMisfitController(on_terminate = "continue"),
+        )
+
+        G_ens = reshape(collect(1.0:96.0), 32, 3)
+        EKP.update_ensemble!(eki, G_ens)
+        vars = ObservationRecipe.reconstruct_g_mean_final(eki)
+
+        # Test OutputVar is constructed correctly
+        @test length(vars) == 4
+        for (i, var) in enumerate((time_var, lon_var, time_var, lon_var))
+            @test vars[i].attributes == var.attributes
+            @test vars[i].dim_attributes == var.dim_attributes
+            if i in (1, 2)
+                @test vars[i].dims["time"] == var.dims["time"][1:4]
+            elseif i in (3, 4)
+                @test vars[i].dims["time"] == var.dims["time"][5:8]
+            else
+                error("You are not supposed to be here!")
+            end
+        end
+
+        @test vars[1].data == vec(mean(G_ens[1:4, :], dims = 2))
+        @test vars[2].data == reshape(mean(G_ens[5:16, :], dims = 2), 3, 4)
+        @test vars[3].data == vec(mean(G_ens[17:20, :], dims = 2))
+        @test vars[4].data == reshape(mean(G_ens[21:end, :], dims = 2), 3, 4)
+
+        # Another iteration
+        G_ens = reshape(collect(100.0:195.0), 32, 3)
+        EKP.update_ensemble!(eki, G_ens)
+        vars = ObservationRecipe.reconstruct_g_mean_final(eki)
+
+        # Test OutputVar is constructed correctly
+        @test length(vars) == 4
+        for (i, var) in enumerate((time_var, lon_var, time_var, lon_var))
+            @test vars[i].attributes == var.attributes
+            @test vars[i].dim_attributes == var.dim_attributes
+            if i in (1, 2)
+                @test vars[i].dims["time"] == var.dims["time"][9:12]
+            elseif i in (3, 4)
+                @test vars[i].dims["time"] == var.dims["time"][13:16]
+            else
+                error("You are not supposed to be here!")
+            end
+        end
+
+        @test vars[1].data == vec(mean(G_ens[1:4, :], dims = 2))
+        @test vars[2].data == reshape(mean(G_ens[5:16, :], dims = 2), 3, 4)
+        @test vars[3].data == vec(mean(G_ens[17:20, :], dims = 2))
+        @test vars[4].data == reshape(mean(G_ens[21:end, :], dims = 2), 3, 4)
     end
 end

@@ -107,6 +107,10 @@ can be used with `ClimaAnalysis.unflatten` to reconstruct the original
 [documentation](https://clima.github.io/ClimaAnalysis.jl/dev/api/#FlatVar) about
 `ClimaAnalysis.FlatVar` for more information.
 
+`ObservationRecipe` provides a helper function for reconstructing the mean
+forward map evaluation with [`ObservationRecipe.reconstruct_g_mean_final`](@ref
+ClimaCalibrate.ObservationRecipe.reconstruct_g_mean_final).
+
 ## Frequently asked questions
 
 **Q: I need to compute `g_ensemble` and I do not know how the data of the `OutputVar`s is flattened.**
