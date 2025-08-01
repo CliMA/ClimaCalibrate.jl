@@ -1066,3 +1066,42 @@ end
     )
 
 end
+
+@testset "Short names of observation" begin
+    if pkgversion(EnsembleKalmanProcesses) > v"2.4.2"
+        time =
+            ClimaAnalysis.Utils.date_to_time.(
+                Dates.DateTime(2007, 12),
+                [Dates.DateTime(2007, 12) + Dates.Month(i) for i in 0:2],
+            )
+        var1 =
+            TemplateVar() |>
+            add_dim("time", time, units = "s") |>
+            add_attribs(short_name = "Hello", start_date = "2007-12-1") |>
+            initialize
+
+        var2 =
+            TemplateVar() |>
+            add_dim("time", time, units = "s") |>
+            add_attribs(short_name = "world!", start_date = "2007-12-1") |>
+            initialize
+
+        var3 =
+            TemplateVar() |>
+            add_dim("time", time, units = "s") |>
+            add_attribs(no_short_name = "no", start_date = "2007-12-1") |>
+            initialize
+
+        covar_estimator = ObservationRecipe.ScalarCovariance()
+        obs = ObservationRecipe.observation(
+            covar_estimator,
+            (var1, var2, var3),
+            Dates.DateTime(2007, 12, 1),
+            Dates.DateTime(2008, 1, 1),
+        )
+        @test isequal(
+            ObservationRecipe.short_names(obs),
+            ["Hello", "world!", nothing],
+        )
+    end
+end
