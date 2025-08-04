@@ -2,6 +2,7 @@ module ClimaAnalysisExt
 
 import ClimaAnalysis
 import ClimaAnalysis: OutputVar
+import ClimaAnalysis.Var: Metadata # might change later...
 
 import ClimaCalibrate.ObservationRecipe
 import ClimaCalibrate.ObservationRecipe: AbstractCovarianceEstimator
@@ -563,6 +564,124 @@ function ObservationRecipe.reconstruct_g_mean_final(
         )
     end
     return vars
+end
+
+
+# TODO: Add a keyword argument for sign_check and units_check
+
+"""
+    ObservationRecipe.fill_g_ens_col!(col, ekp, vars...)
+
+Fill `col` of a G ensemble matrix from the `OutputVar`s `vars` and `ekp`.
+
+The column of the G ensemble matrix does not need to be filled out completely
+by this function. As such, you can call this function with the same `col`, but
+different `vars` to fill out the column of the G ensemble matrix.
+
+It is assumed that a single `OutputVar` corresponds to one or more
+metadata in an `EKP.observation`.
+
+This function relies on the short names in the
+metadata. This function will not behave correctly if the short names are
+mislabled or not present.
+
+Furthermore, this function assumes that all observations are generated using
+`ObservationRecipe.Observation` which guarantees the correct placement of
+metadata.
+"""
+function ObservationRecipe.fill_g_ens_col(
+    col,
+    ekp,
+    vars::OutputVar...,
+    sign_check = true,
+    units_check = true,
+    consecutive_indices_check = true,
+)
+    # Check all short names are unique in vars
+    obs_series = EKP.get_observation_series(ekp)
+    metadata = ObservationRecipe.get_metadata_for_nth_iteration(
+        obs_series,
+        EKP.get_N_iterations(ekp),
+    )
+    md_short_names = collect(ClimaAnalysis.short_name(md) for md in metadata)
+    any(isnothing, md_short_names) && error(
+        "One of the observations does not has a short name; add a short name to the OutputVar before making an observation from it",
+    )
+
+    # Collect all short names in vars and throw error if a short name cannot be found
+    var_short_names = collect(ClimaAnalysisExt.short_name(var) for var in vars)
+    any(isnothing, var_short_names) && error(
+        "One of the OutputVars does not has a short name; add a short name to the OutputVar before creating it",
+    )
+
+    # Check that there are not any extraneous OutputVars
+    issubset(var_short_names, md_short_names) || error(
+        "There is one or more short names of the `OutputVar`s ($var_short_names) that is not present in the short names of the metadata ($md_short_names)",
+    )
+
+    # TODO: Check that it is possible to get the length elsewhere since I think
+    # EKP stores it, but the way it is done does not make it easy right now
+    # (since we concatenate everything when making some of the covariance matrix)
+
+    # Construct dictionary mapping short name to metadata
+    short_name_to_md_range_map = Dict{String, Vector{ClimaAnalysis.Var.Metadata, UnitRange{Int64}}}()
+    index = Ref(1)
+    for md in metadata
+        short_name = ClimaAnalysis.short_name(md)
+        metadata_vec = get!(
+            short_name_to_md_range_map,
+            short_name,
+            Tuple{ClimaAnalysis.Var.Metadata, UnitRange{Int64}}[],
+        )
+        start_idx = index[]
+        index[] += data_size
+        push!(metadata_vec, (md, start_idx:(start_idx + data_size - 1)))
+    end
+
+    # TODO: Automatic check for everything
+    # TODO: For the sign check, I need the data itself in the observation
+    # TODO: For the units check, I can access it from the metadata
+    # TODO: For the consecutive_indices_check, I need that from _match_dates
+    for var in vars
+        metadata_ranges_vec = short_name_to_md_ranges_map[metadata]
+        for (md, range) in metadata_ranges_vec
+            match_dates_var = _match_dates(var, md)
+            if !isnothing(match_dates_var)
+                flattened_data = flatten(match_dates_var, md).data
+                col[range] = flattened_data
+            end
+        end
+    end
+    return nothing
+end
+
+"""
+    _match_dates(var::OutputVar, metadata::Metadata)
+
+Return a `OutputVar` whose dates are the same as the dates in `metadata`.
+
+If not all dates in `var` can be found in the dates in `metadata`, then `nothing`
+is returned.
+"""
+function _match_dates(var::OutputVar, metadata::Metadata)
+    obs_dates = ClimaAnalysis.dates(metadata)
+    sim_dates = ClimaAnalysis.dates(var)
+    common_date_indices = indexin(obs_dates, sim_dates)
+
+    any(isnothing, common_date_indices) || return nothing
+
+    var_time_name = ClimaAnalysis.time_name(var)
+    dims = copy(var.dims)
+    dims[var_time_name] = dims[var_time_name][common_date_indices]
+
+    time_idx = var.dim2index[var_time_name]
+    time_indices = ntuple(
+        x -> ifelse(x == time_idx, common_date_indices, Colon()),
+        ndims(var.data),
+    )
+    data = view(var.data, time_indices)
+
+    return ClimaAnalysis.remake(var, dims = dims, data = data)
 end
 
 end

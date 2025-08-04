@@ -9,7 +9,8 @@ export ScalarCovariance,
     seasonally_aligned_yearly_sample_date_ranges,
     change_data_type,
     get_metadata_for_nth_iteration,
-    reconstruct_g_mean_final
+    reconstruct_g_mean_final,
+    fill_g_ens_col
 
 import Dates
 
@@ -287,5 +288,7 @@ function change_data_type end
 function reconstruct_g_mean_final end
 
 function get_metadata_for_nth_iteration end
+
+function fill_g_ens_col end
 
 end
