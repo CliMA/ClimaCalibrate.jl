@@ -278,6 +278,8 @@ function observation end
 
 function short_names end
 
+function date_range end
+
 function seasonally_aligned_yearly_sample_date_ranges end
 
 function change_data_type end

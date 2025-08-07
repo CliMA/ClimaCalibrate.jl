@@ -327,6 +327,21 @@ function ObservationRecipe.short_names(obs::EKP.Observation)
 end
 
 """
+    date_range(ekp::TODO)
+
+Find a tuple of the earliest and latest dates of the samples from the metadata
+in `ekp`.
+"""
+function ObservationRecipe.date_range(ekp)
+    # Get the metadata
+
+    # Iterate, use ClimaAnalysis.dates, and keep track of the minimum and
+    # maximum
+
+    # Return it as a tuple
+end
+
+"""
     seasonally_aligned_yearly_sample_date_ranges(var::OutputVar)
 
 Generate sample dates that conform to a seasonally aligned year from
