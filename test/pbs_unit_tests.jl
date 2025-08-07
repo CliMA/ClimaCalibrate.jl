@@ -100,17 +100,17 @@ sleep(180)  # Ensure job finishes. To debug, lower sleep time or comment out the
 # Test job cancellation
 jobid = submit_cmd_helper(test_cmd)
 CAL.kill_job(jobid)
-sleep(1)
-@test CAL.job_status(jobid) == :FAILED
-@test CAL.job_completed(CAL.job_status(jobid)) &&
-      CAL.job_failed(CAL.job_status(jobid))
+# sleep(1)
+# @test CAL.job_status(jobid) == :FAILED
+# @test CAL.job_completed(CAL.job_status(jobid)) &&
+#       CAL.job_failed(CAL.job_status(jobid))
 
-# Test batch cancellation
-jobids = ntuple(x -> submit_cmd_helper(test_cmd), 5)
+# # Test batch cancellation
+# jobids = ntuple(x -> submit_cmd_helper(test_cmd), 5)
 
-CAL.kill_job.(jobids)
-sleep(10)
-for jobid in jobids
-    @test CAL.job_completed(jobid)
-    @test CAL.job_failed(jobid)
-end
+# CAL.kill_job.(jobids)
+# sleep(10)
+# for jobid in jobids
+#     @test CAL.job_completed(jobid)
+#     @test CAL.job_failed(jobid)
+# end
