@@ -8,6 +8,7 @@ using SafeTestsets
 @safetestset "Julia backend" begin include("julia_backend.jl") end
 @safetestset "Aqua" begin include("aqua.jl") end
 @safetestset "Observation recipe" begin include("observation_recipe.jl") end
+@safetestset "PBS requeue integration" begin include("pbs_requeue_tests.jl") end
 #! format: on
 
 nothing
