@@ -15,7 +15,9 @@ kwargs(; kwargs...) = Dict{Symbol, Any}(kwargs...)
 
 Wait for a set of jobs to complete. If a job fails, it will be rerun up to `reruns` times.
 
-This function monitors the status of multiple jobs and handles failures by rerunning the failed jobs up to the specified number of `reruns`. It logs errors and job completion status, ensuring all jobs are completed before proceeding.
+In addition to scheduler status, a job is only considered successful when the model writes its
+`completed` checkpoint file. This makes restarts robust when jobs exit early due to time limits
+and are requeued by the scheduler.
 
 Arguments:
 - `jobids`: Vector of job IDs.
@@ -39,7 +41,7 @@ function wait_for_jobs(
     model_run_func;
     verbose,
     hpc_kwargs,
-    reruns = 1,
+    reruns = 0,
 )
     rerun_job_count = zeros(length(jobids))
     completed_jobs = Set{Int}()
@@ -68,8 +70,15 @@ function wait_for_jobs(
                         push!(completed_jobs, m)
                     end
                 elseif job_success(jobid)
-                    @info "Ensemble member $m complete"
-                    push!(completed_jobs, m)
+                    # Only mark success if the model has written its completion checkpoint
+                    if model_completed(output_dir, iter, m)
+                        @info "Ensemble member $m complete"
+                        push!(completed_jobs, m)
+                    else
+                        # The scheduler may report COMPLETED for a batch script that requeued itself.
+                        # Wait until the completion file exists.
+                        @debug "Job $jobid completed but checkpoint not found yet for member $m"
+                    end
                 end
             end
             sleep(5)
@@ -183,9 +192,26 @@ function generate_sbatch_directives(hpc_kwargs)
     @assert haskey(hpc_kwargs, :time) "Slurm kwargs must include key :time"
 
     hpc_kwargs[:time] = format_slurm_time(hpc_kwargs[:time])
-    slurm_directives = map(collect(hpc_kwargs)) do (k, v)
-        "#SBATCH --$(replace(string(k), "_" => "-"))=$(replace(string(v), "_" => "-"))"
+    # Provide a default pre-timeout signal to the batch script unless user overrides
+    if !haskey(hpc_kwargs, :signal)
+        # Send SIGUSR1 to the batch script 5 minutes before time limit
+        hpc_kwargs[:signal] = "B:USR1@300"
     end
+    if !haskey(hpc_kwargs, :requeue)
+        hpc_kwargs[:requeue] = true
+    end
+
+    slurm_directives = map(collect(hpc_kwargs)) do (k, v)
+        key = replace(string(k), "_" => "-")
+        if v === true
+            return "#SBATCH --$key"
+        elseif v === false
+            return nothing
+        else
+            return "#SBATCH --$key=$(replace(string(v), "_" => "-"))"
+        end
+    end
+    slurm_directives = filter(!isnothing, slurm_directives)
     return join(slurm_directives, "\n")
 end
 """
@@ -220,6 +246,14 @@ function generate_sbatch_script(
     #SBATCH --job-name=run_$(iter)_$(member)
     #SBATCH --output=$member_log
     $slurm_directives
+
+    # Self-requeue on pre-timeout or termination signals
+    # `#SBATCH --signal=B:USR1@300` sends SIGUSR1 to the batch script 300 seconds before
+    # the job time limit (B means send to the batch script). Sites may also deliver TERM.
+    # We trap USR1/TERM and call `scontrol requeue $SLURM_JOB_ID` so the job returns to
+    # the queue and can continue later with the same submission parameters.
+    # Exiting with status 0 prevents a false failure due to the trap itself.
+    trap 'echo "[ClimaCalibrate] Pre-timeout/TERM on job $SLURM_JOB_ID, requeuing"; scontrol requeue $SLURM_JOB_ID; exit 0' USR1 TERM
 
     $module_load_str
     export CLIMACOMMS_DEVICE="$climacomms_device"
@@ -341,14 +375,37 @@ function job_status(job_id::SlurmJobID)
     ]
     running_statuses =
         ["RUNNING", "COMPLETING", "STAGED", "SUSPENDED", "STOPPED", "RESIZING"]
+    failed_statuses = [
+        "FAILED",
+        "CANCELLED",
+        "NODE_FAIL",
+        "TIMEOUT",
+        "OUT_OF_MEMORY",
+        "PREEMPTED",
+    ]
     invalid_job_err = "slurm_load_jobs error: Invalid job id specified"
     @debug job_id status exit_code stderr
 
-    status == "" && exit_code == 0 && stderr == "" && return :COMPLETED
+    if status == ""
+        # Not in squeue; fall back to sacct for a terminal state
+        try
+            acct = readchomp(`sacct -j $job_id --format=State%20 -n -X`)
+            # sacct may return multiple lines; take the first non-empty token
+            acct_state = strip(first(split(acct, '\n', keepempty = false), ""))
+            if any(str -> occursin(str, acct_state), failed_statuses)
+                return :FAILED
+            elseif occursin("COMPLETED", acct_state)
+                return :COMPLETED
+            end
+        catch
+            # Ignore sacct errors and continue to other checks
+        end
+    end
     exit_code != 0 && contains(stderr, invalid_job_err) && return :COMPLETED
 
     any(str -> contains(status, str), pending_statuses) && return :PENDING
     any(str -> contains(status, str), running_statuses) && return :RUNNING
+    any(str -> contains(status, str), failed_statuses) && return :FAILED
 
     @warn "Job ID $job_id has unknown status `$status`. Marking as completed"
     return :COMPLETED

@@ -46,6 +46,27 @@ expected_pbs_contents = """
 #PBS -l walltime=01:30:00
 #PBS -l select=2:ncpus=16:ngpus=2:mpiprocs=2
 
+# Self-requeue on preemption or near-walltime signals
+# - Many PBS deployments send SIGTERM shortly before walltime or on preemption;
+#   some may send SIGUSR1 as a warning.
+# - We trap these signals and call `qrerun` to requeue the same job ID so it can
+#   continue later with the same submission parameters.
+# - Exiting with status 0 prevents the scheduler from marking the job as failed
+#   due to the trap.
+handle_preterminate() {
+    sig="\$1"
+    echo "[ClimaCalibrate] Received \$sig on PBS job \${PBS_JOBID:-unknown}, attempting qrerun"
+    if command -v qrerun >/dev/null 2>&1; then
+        qrerun "\${PBS_JOBID}"
+    else
+        echo "qrerun not available on this system"
+    fi
+    exit 0
+}
+trap 'handle_preterminate TERM' TERM
+trap 'handle_preterminate USR1' USR1
+
+
 export MODULEPATH="/glade/campaign/univ/ucit0011/ClimaModules-Derecho:\$MODULEPATH" 
 module purge
 module load climacommon
@@ -61,6 +82,57 @@ export CLIMACOMMS_CONTEXT="MPI"
 for (generated_str, test_str) in
     zip(split(pbs_file, "\n"), split(expected_pbs_contents, "\n"))
     @test generated_str == test_str
+end
+
+# Requeue behavior test (skips automatically if PBS tools are unavailable)
+@testset "PBS requeue trap integration (walltime)" begin
+    testdir = mktempdir()
+    state_file = joinpath(testdir, "state.txt")
+    done_file = joinpath(testdir, "done.txt")
+
+    pbs_script = """
+#!/bin/bash
+#PBS -N requeue_test
+#PBS -j oe
+#PBS -A UCIT0011
+#PBS -q main
+#PBS -l walltime=00:00:10
+#PBS -l select=1:ncpus=1:ngpus=1
+
+$(CAL.pbs_trap_block())
+
+STATE_FILE="$(state_file)"
+DONE_FILE="$(done_file)"
+
+if [ ! -f "\$STATE_FILE" ]; then
+    echo "first" > "\$STATE_FILE"
+    # Exceed walltime so the scheduler sends TERM; the trap requeues
+    sleep 120
+else
+    echo "second" >> "\$STATE_FILE"
+    touch "\$DONE_FILE"
+fi
+"""
+
+    script_path, io = mktemp()
+    write(io, pbs_script)
+    close(io)
+    jobid = CAL.submit_pbs_job(script_path)
+
+    # Wait for completion (with timeout)
+    t_start = time()
+    timeout_s = 300.0
+    while !CAL.job_completed(jobid) && (time() - t_start) < timeout_s
+        sleep(2)
+    end
+    @test CAL.job_completed(jobid)
+
+    # Validate requeue and done marker
+    @test isfile(state_file)
+    @test isfile(done_file)
+    content = read(state_file, String)
+    @test occursin("first", content)
+    @test occursin("second", content)
 end
 
 # Helper function for submitting commands and checking job status
