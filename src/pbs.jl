@@ -57,6 +57,8 @@ function generate_pbs_script(
     #PBS -l walltime=$walltime
     #PBS -l select=$num_nodes:ncpus=$cpus_per_node:ngpus=$gpus_per_node:mpiprocs=$ranks_per_node
 
+    $(pbs_trap_block())
+
     $module_load_str
 
     export JULIA_MPI_HAS_CUDA=true
@@ -72,6 +74,38 @@ function generate_pbs_script(
     CAL.write_model_completed("$output_dir", $iter, $member)
     """
     return pbs_script, julia_script
+end
+
+"""
+    pbs_trap_block()
+
+Return the bash snippet that makes PBS jobs requeue on preemption or near-walltime signals.
+
+This is included in the generated PBS scripts and is tested for presence to avoid
+duplicating the job snippet in tests.
+"""
+function pbs_trap_block()
+    return """
+    # Self-requeue on preemption or near-walltime signals
+    # - Many PBS deployments send SIGTERM shortly before walltime or on preemption;
+    #   some may send SIGUSR1 as a warning.
+    # - We trap these signals and call `qrerun` to requeue the same job ID so it can
+    #   continue later with the same submission parameters.
+    # - Exiting with status 0 prevents the scheduler from marking the job as failed
+    #   due to the trap.
+    handle_preterminate() {
+        sig="\$1"
+        echo "[ClimaCalibrate] Received \$sig on PBS job \${PBS_JOBID:-unknown}, attempting qrerun"
+        if command -v qrerun >/dev/null 2>&1; then
+            qrerun "\${PBS_JOBID}"
+        else
+            echo "qrerun not available on this system"
+        fi
+        exit 0
+    }
+    trap 'handle_preterminate TERM' TERM
+    trap 'handle_preterminate USR1' USR1
+    """
 end
 
 """
@@ -167,7 +201,7 @@ wait_for_jobs(
     module_load_str;
     verbose,
     hpc_kwargs,
-    reruns = 1,
+    reruns = 0,
 ) = wait_for_jobs(
     jobids,
     output_dir,
