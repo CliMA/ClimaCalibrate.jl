@@ -310,6 +310,7 @@ function calibrate(
     verbose = false,
     hpc_kwargs,
     exeflags = "",
+    reruns = 0,
 )
     ensemble_size = EKP.get_N_ens(ekp)
     @info "Initializing calibration" n_iterations ensemble_size output_dir
@@ -331,6 +332,7 @@ function calibrate(
             hpc_kwargs = hpc_kwargs,
             verbose = verbose,
             exeflags,
+            reruns,
         )
         @info "Completed iteration $iter, updating ensemble"
         ekp = load_ekp_struct(output_dir, iter)
@@ -354,6 +356,7 @@ function run_hpc_iteration(
     hpc_kwargs,
     verbose = false,
     exeflags = "",
+    reruns = 0,
 )
     @info "Iteration $iter"
     job_ids = map(1:ensemble_size) do member
@@ -382,7 +385,7 @@ function run_hpc_iteration(
             module_load_str;
             hpc_kwargs,
             verbose,
-            reruns = 0,
+            reruns,
         )
     end
 end
