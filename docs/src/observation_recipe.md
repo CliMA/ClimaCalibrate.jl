@@ -88,6 +88,29 @@ obs = ObservationRecipe.observation(
 )
 ```
 
+## Metadata
+
+!!! note
+    Metadata in `EKP.observation` is only added with versions of
+    EnsembleKalmanProcesses later than v2.4.2.
+"""
+
+When creating an observation with [`ObservationRecipe.observation`](@ref
+ClimaCalibrate.ObservationRecipe.observation), metadata is extracted from the
+`OutputVar`s and attached to the observation. The metadata for each observation
+can be accessed with `EKP.get_metadata(obs::EKP.Observation)` and the metadata
+for each iteration can be accessed with
+[`ObservationRecipe.get_metadata_for_nth_iteration`](@ref
+ClimaCalibrate.ObservationRecipe.get_metadata_for_nth_iteration). The metadata
+can be used with `ClimaAnalysis.unflatten` to reconstruct the original
+`OutputVar` before flattening. See the ClimaAnalysis
+[documentation](https://clima.github.io/ClimaAnalysis.jl/dev/api/#FlatVar) about
+`ClimaAnalysis.FlatVar` for more information.
+
+`ObservationRecipe` provides a helper function for reconstructing the mean
+forward map evaluation with [`ObservationRecipe.reconstruct_g_mean_final`](@ref
+ClimaCalibrate.ObservationRecipe.reconstruct_g_mean_final).
+
 ## Frequently asked questions
 
 **Q: I need to compute `g_ensemble` and I do not know how the data of the `OutputVar`s is flattened.**

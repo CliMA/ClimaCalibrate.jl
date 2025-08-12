@@ -7,7 +7,9 @@ export ScalarCovariance,
     observation,
     short_names,
     seasonally_aligned_yearly_sample_date_ranges,
-    change_data_type
+    change_data_type,
+    get_metadata_for_nth_iteration,
+    reconstruct_g_mean_final
 
 import Dates
 
@@ -281,5 +283,9 @@ function short_names end
 function seasonally_aligned_yearly_sample_date_ranges end
 
 function change_data_type end
+
+function reconstruct_g_mean_final end
+
+function get_metadata_for_nth_iteration end
 
 end
