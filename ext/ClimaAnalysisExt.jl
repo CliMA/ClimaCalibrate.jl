@@ -2,6 +2,7 @@ module ClimaAnalysisExt
 
 import ClimaAnalysis
 import ClimaAnalysis: OutputVar
+import ClimaAnalysis.Var: Metadata
 
 import ClimaCalibrate.ObservationRecipe
 import ClimaCalibrate.ObservationRecipe: AbstractCovarianceEstimator
@@ -546,23 +547,55 @@ function ObservationRecipe.reconstruct_g_mean_final(
 
     # Check if length of g ensemble is the same as the length of the data in the metadatas
     total_metadata_length =
-        sum(ClimaAnalysis.Var._data_size(metadata) for metadata in metadatas)
+        sum(metadata_length(metadata) for metadata in metadatas)
     length(g_mean) != total_metadata_length && error(
         "Length of g_mean_final is not the same as the length of all the metadata",
     )
 
     # Reconstruct each OutputVar from the metadata
-    index = Ref(1)
-    vars = map(metadatas) do metadata
-        data_size = ClimaAnalysis.Var._data_size(metadata)
-        start_idx = index[]
-        index[] += data_size
-        ClimaAnalysis.unflatten(
-            metadata,
-            g_mean[start_idx:(start_idx + data_size - 1)],
-        )
+    minibatch_indices = _get_minibatch_indices_for_nth_iteration(
+        obs_series,
+        EKP.get_N_iterations(ekp),
+    )
+    vars = map(metadatas, minibatch_indices) do metadata, range
+        ClimaAnalysis.unflatten(metadata, g_mean[range])
     end
     return vars
 end
+
+"""
+    _get_minibatch_indices_for_nth_iteration(ekp::EKP.EnsembleKalmanProcess, N)
+
+Get the indices that correspond to each metadata for the minibatch of the `N`th
+iteration.
+
+Note that the `indices` field in the `EKP.observation` cannot be used as the
+multiple `OutputVar`s are flattened and concatenated together as a single
+vector.
+"""
+function _get_minibatch_indices_for_nth_iteration(obs_series, N)
+    metadatas = ObservationRecipe.get_metadata_for_nth_iteration(obs_series, N)
+    index = Ref(1)
+    minibatch_indices = map(metadatas) do metadata
+        data_size = metadata_length(metadata)
+        start_idx = index[]
+        index[] += data_size
+        start_idx:(start_idx + data_size - 1)
+    end
+    return minibatch_indices
+end
+
+"""
+    metadata_length(metadata::Metadata)
+
+Compute the length of a `ClimaAnalysis.Var.Metadata`.
+"""
+function metadata_length(metadata::Metadata)
+    pkgversion(ClimaAnalysis) < v"0.5.19" &&
+        return ClimaAnalysis.Var._data_size(metadata)
+    return ClimaAnalysis.Var._data_length(metadata)
+end
+
+include("ensemble_builder.jl")
 
 end
