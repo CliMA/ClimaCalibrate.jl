@@ -2,6 +2,7 @@ module ClimaAnalysisExt
 
 import ClimaAnalysis
 import ClimaAnalysis: OutputVar
+import ClimaAnalysis.Var: Metadata
 
 import ClimaCalibrate.ObservationRecipe
 import ClimaCalibrate.ObservationRecipe: AbstractCovarianceEstimator
@@ -546,7 +547,7 @@ function ObservationRecipe.reconstruct_g_mean_final(
 
     # Check if length of g ensemble is the same as the length of the data in the metadatas
     total_metadata_length =
-        sum(ClimaAnalysis.Var._data_size(metadata) for metadata in metadatas)
+        sum(ClimaAnalysis.flattened_length(metadata) for metadata in metadatas)
     length(g_mean) != total_metadata_length && error(
         "Length of g_mean_final is not the same as the length of all the metadata",
     )
@@ -583,6 +584,15 @@ function _get_minibatch_indices_for_nth_iteration(obs_series, N)
         push!(minibatch_indices, start_idx:(start_idx + data_size - 1))
     end
     return minibatch_indices
+end
+
+"""
+    metadata_length(metadata::Metadata)
+
+Compute the length of a `ClimaAnalysis.Var.Metadata`.
+"""
+function metadata_length(metadata::Metadata)
+    return ClimaAnalysis.flattened_length(metadata)
 end
 
 
