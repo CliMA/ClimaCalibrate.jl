@@ -596,5 +596,6 @@ function metadata_length(metadata::Metadata)
     return ClimaAnalysis.Var._data_length(metadata)
 end
 
+include("ensemble_builder.jl")
 
 end
