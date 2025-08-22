@@ -1,7 +1,7 @@
 # ObservationRecipe
 
 !!! warning
-    To enable this extension, use `using ClimaAnalysis` or `import
+    To enable this module, use `using ClimaAnalysis` or `import
     ClimaAnalysis`.
 
 When handling weather and climate data, it can be tedious and error-prone when
@@ -93,7 +93,6 @@ obs = ObservationRecipe.observation(
 !!! note
     Metadata in `EKP.observation` is only added with versions of
     EnsembleKalmanProcesses later than v2.4.2.
-"""
 
 When creating an observation with [`ObservationRecipe.observation`](@ref
 ClimaCalibrate.ObservationRecipe.observation), metadata is extracted from the
