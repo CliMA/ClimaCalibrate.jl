@@ -586,14 +586,6 @@ function _get_minibatch_indices_for_nth_iteration(obs_series, N)
     return minibatch_indices
 end
 
-"""
-    metadata_length(metadata::Metadata)
-
-Compute the length of a `ClimaAnalysis.Var.Metadata`.
-"""
-function metadata_length(metadata::Metadata)
-    return ClimaAnalysis.flattened_length(metadata)
-end
-
+include("ensemble_builder.jl")
 
 end
