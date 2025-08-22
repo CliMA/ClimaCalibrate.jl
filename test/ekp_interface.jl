@@ -201,3 +201,9 @@ end
         bad_names,
     )
 end
+
+@testset "g_ens_mat" begin
+    g_ens_mat = CAL.g_ens_matrix(eki)
+    @test size(g_ens_mat) == (1, 10)
+    @test g_ens_mat isa Matrix{Float64}
+end
