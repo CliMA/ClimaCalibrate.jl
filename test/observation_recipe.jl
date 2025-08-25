@@ -703,13 +703,14 @@ end
         Dates.DateTime(2008, 9),
     )
 
-    # See this issue for the broken tests:
-    # https://github.com/CliMA/EnsembleKalmanProcesses.jl/issues/504
-    @test_broken eltype(svd_plus_d_covar.svd_cov.S) == Float32
-    @test_broken eltype(svd_plus_d_covar.svd_cov.U) == Float32
-    @test_broken eltype(svd_plus_d_covar.svd_cov.V) == Float32
-    @test_broken eltype(svd_plus_d_covar.svd_cov.Vt) == Float32
-    @test eltype(svd_plus_d_covar.diag_cov.diag) == Float32
+    if pkgversion(EnsembleKalmanProcesses) >= v"2.5.0"
+        # See https://github.com/CliMA/EnsembleKalmanProcesses.jl/issues/504
+        @test eltype(svd_plus_d_covar.svd_cov.S) == Float32
+        @test eltype(svd_plus_d_covar.svd_cov.U) == Float32
+        @test eltype(svd_plus_d_covar.svd_cov.V) == Float32
+        @test eltype(svd_plus_d_covar.svd_cov.Vt) == Float32
+        @test eltype(svd_plus_d_covar.diag_cov.diag) == Float32
+    end
 
     # Error handling
     time =
