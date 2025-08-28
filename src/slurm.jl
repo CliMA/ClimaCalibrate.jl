@@ -250,10 +250,10 @@ function generate_sbatch_script(
     # Self-requeue on pre-timeout or termination signals
     # `#SBATCH --signal=B:USR1@300` sends SIGUSR1 to the batch script 300 seconds before
     # the job time limit (B means send to the batch script). Sites may also deliver TERM.
-    # We trap USR1/TERM and call `scontrol requeue $SLURM_JOB_ID` so the job returns to
+    # We trap USR1/TERM and call `scontrol requeue \$SLURM_JOB_ID` so the job returns to
     # the queue and can continue later with the same submission parameters.
     # Exiting with status 0 prevents a false failure due to the trap itself.
-    trap 'echo "[ClimaCalibrate] Pre-timeout/TERM on job $SLURM_JOB_ID, requeuing"; scontrol requeue $SLURM_JOB_ID; exit 0' USR1 TERM
+    trap 'echo "[ClimaCalibrate] Pre-timeout/TERM on job \$SLURM_JOB_ID, requeuing"; scontrol requeue \$SLURM_JOB_ID; exit 0' USR1 TERM
 
     $module_load_str
     export CLIMACOMMS_DEVICE="$climacomms_device"

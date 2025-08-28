@@ -98,6 +98,9 @@ function module_load_string(::Type{DerechoBackend})
     module purge
     module load climacommon
     module list
+    export TMPDIR=\${SCRATCH}/temp
+    mkdir -p \${TMPDIR}
+    echo \$TMPDIR
     """
 end
 

@@ -46,13 +46,11 @@ expected_pbs_contents = """
 #PBS -l walltime=01:30:00
 #PBS -l select=2:ncpus=16:ngpus=2:mpiprocs=2
 
-# Self-requeue on preemption or near-walltime signals
-# - Many PBS deployments send SIGTERM shortly before walltime or on preemption;
-#   some may send SIGUSR1 as a warning.
-# - We trap these signals and call `qrerun` to requeue the same job ID so it can
-#   continue later with the same submission parameters.
-# - Exiting with status 0 prevents the scheduler from marking the job as failed
-#   due to the trap.
+# Self-requeue on preemption or near-walltime signals:
+# Trap SIGTERM on job termination and call `qrerun` to requeue the same job ID 
+# so it can continue later with the same submission parameters.
+# Exiting with status 0 prevents the scheduler from marking the job as failed
+# due to the trap.
 handle_preterminate() {
     sig="\$1"
     echo "[ClimaCalibrate] Received \$sig on PBS job \${PBS_JOBID:-unknown}, attempting qrerun"
@@ -64,8 +62,6 @@ handle_preterminate() {
     exit 0
 }
 trap 'handle_preterminate TERM' TERM
-trap 'handle_preterminate USR1' USR1
-
 
 export MODULEPATH="/glade/campaign/univ/ucit0011/ClimaModules-Derecho:\$MODULEPATH" 
 module purge

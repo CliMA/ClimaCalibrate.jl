@@ -86,13 +86,11 @@ duplicating the job snippet in tests.
 """
 function pbs_trap_block()
     return """
-    # Self-requeue on preemption or near-walltime signals
-    # - Many PBS deployments send SIGTERM shortly before walltime or on preemption;
-    #   some may send SIGUSR1 as a warning.
-    # - We trap these signals and call `qrerun` to requeue the same job ID so it can
-    #   continue later with the same submission parameters.
-    # - Exiting with status 0 prevents the scheduler from marking the job as failed
-    #   due to the trap.
+    # Self-requeue on preemption or near-walltime signals:
+    # Trap SIGTERM on job termination and call `qrerun` to requeue the same job ID 
+    # so it can continue later with the same submission parameters.
+    # Exiting with status 0 prevents the scheduler from marking the job as failed
+    # due to the trap.
     handle_preterminate() {
         sig="\$1"
         echo "[ClimaCalibrate] Received \$sig on PBS job \${PBS_JOBID:-unknown}, attempting qrerun"
@@ -104,7 +102,6 @@ function pbs_trap_block()
         exit 0
     }
     trap 'handle_preterminate TERM' TERM
-    trap 'handle_preterminate USR1' USR1
     """
 end
 
