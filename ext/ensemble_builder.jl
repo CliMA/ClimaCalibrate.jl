@@ -416,3 +416,64 @@ function EnsembleBuilder.missing_short_names(
     end
     return short_names
 end
+
+"""
+    Base.show(io::IO, g_ens_builder::GEnsembleBuilder)
+
+Show the index of the metadata, the short name of the metadata, the
+corresponding indices for the columns of the G ensemble matrix, and how many
+members are completed for the metadata.
+"""
+function Base.show(io::IO, g_ens_builder::GEnsembleBuilder)
+    # Collect all strings first to determine column widths
+    headers = (
+        "Index",
+        "Short name",
+        "G ensemble indices",
+        "Completed ($(last(size(g_ens_builder.completed))) ensemble members)",
+    )
+    rows = NTuple{length(headers), String}[]
+    for (i, metadata_info) in enumerate(g_ens_builder.metadata_vec)
+        short_name = ClimaAnalysis.short_name(metadata_info.metadata)
+        range_str = "$(first(metadata_info.range)):$(last(metadata_info.range))"
+        nums_completed = sum(g_ens_builder.completed[i, :])
+        push!(
+            rows,
+            (
+                string(metadata_info.index),
+                short_name,
+                range_str,
+                string(nums_completed),
+            ),
+        )
+    end
+
+    # Calculate maximum width for each column
+    col_widths = collect(
+        max(length(headers[i]), maximum(length(row[i]) for row in rows)) for
+        i in eachindex(headers)
+    )
+
+    # Print header
+    for i in eachindex(headers)
+        if i < length(headers)
+            printstyled(io, rpad(headers[i], col_widths[i] + 2), bold = true)
+        else
+            printstyled(io, headers[i], bold = true)
+        end
+    end
+    print(io, "\n")
+    println(io, "-"^(sum(col_widths) + 2 * length(headers) - 2))
+
+    # Print information about each metadata
+    for row in rows
+        for i in eachindex(row)
+            if i < length(row)
+                print(rpad(row[i], col_widths[i] + 2))
+            else
+                print(row[i])
+            end
+        end
+        print(io, "\n")
+    end
+end
