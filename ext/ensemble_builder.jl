@@ -36,6 +36,9 @@ struct GEnsembleBuilder{FT <: AbstractFloat, METADATAINFO <: MetadataInfo}
        the short name"""
     metadata_by_short_name::Dict{String, Vector{METADATAINFO}}
 
+    """A vector of metadata info ordered by how the observations are combined"""
+    metadata_vec::Vector{METADATAINFO}
+
     """A bit matrix which keeps track of which entries are filled out in the
     G ensemble matrix. The size of this matrix is the number of metadata for the
     minibatch by the number of ensemble members"""
@@ -359,4 +362,57 @@ matrix is completely filled out.
 """
 function EnsembleBuilder.get_g_ensemble(g_ens_builder::GEnsembleBuilder)
     return g_ens_builder.g_ens
+end
+
+"""
+    ranges_by_short_name(g_ens_builder::GEnsembleBuilder, short_name)
+
+Return a vector of ranges for the G ensemble matrix that correspond with the
+short name.
+"""
+function EnsembleBuilder.ranges_by_short_name(
+    g_ens_builder::GEnsembleBuilder,
+    short_name,
+)
+    metadata_by_short_name = g_ens_builder.metadata_by_short_name
+    haskey(metadata_by_short_name, short_name) || return UnitRange{Int64}[]
+    metadata_infos = metadata_by_short_name[short_name]
+    return collect(metadata_info.range for metadata_info in metadata_infos)
+end
+
+"""
+    metadata_by_short_name(g_ens_builder::GEnsembleBuilder, short_name)
+
+Return a vector of metadata that correspond with `short_name`.
+"""
+function EnsembleBuilder.metadata_by_short_name(
+    g_ens_builder::GEnsembleBuilder,
+    short_name,
+)
+    metadata_by_short_name = g_ens_builder.metadata_by_short_name
+    haskey(metadata_by_short_name, short_name) || return Metadata[]
+    metadata_infos = metadata_by_short_name[short_name]
+    return collect(metadata_info.metadata for metadata_info in metadata_infos)
+end
+
+"""
+    missing_short_names(g_ens_builder::GEnsembleBuilder, col_idx)
+
+Return a set of the short names of the metadata that are not filled out for the
+`col_idx`th column of `g_ens_builder`.
+"""
+function EnsembleBuilder.missing_short_names(
+    g_ens_builder::GEnsembleBuilder,
+    col_idx,
+)
+    completed_col = g_ens_builder.completed[:, col_idx]
+    short_names = Set{String}()
+    for i in eachindex(completed_col)
+        completed_col[i] && continue
+        push!(
+            short_names,
+            ClimaAnalysis.short_name(g_ens_builder.metadata_vec[i].metadata),
+        )
+    end
+    return short_names
 end

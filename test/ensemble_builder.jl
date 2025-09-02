@@ -356,6 +356,75 @@ end
     )
 end
 
+@testset "Utilities functions" begin
+    time =
+        ClimaAnalysis.Utils.date_to_time.(
+            Dates.DateTime(2007, 12),
+            [Dates.DateTime(2007, 12) + Dates.Month(3 * i) for i in 0:11],
+        )
+    time_var =
+        TemplateVar() |>
+        add_dim("time", time, units = "s") |>
+        add_attribs(
+            short_name = "hey",
+            start_date = "2007-12-1",
+            units = "m",
+        ) |>
+        one_to_n_data() |>
+        initialize
+
+    lon = [-45.0, 0.0, 45.0]
+    lon_var =
+        TemplateVar() |>
+        add_dim("lon", lon, units = "degrees") |>
+        add_dim("time", time, units = "s") |>
+        add_attribs(short_name = "hi", start_date = "2007-12-1", units = "m") |>
+        one_to_n_data() |>
+        initialize
+
+    covar_estimator = ObservationRecipe.SeasonalDiagonalCovariance()
+
+    obs_vec = [
+        ObservationRecipe.observation(
+            covar_estimator,
+            (time_var, lon_var),
+            "2007-12-1",
+            "2008-9-1",
+        ),
+    ]
+    obs_series = EKP.ObservationSeries(
+        Dict(
+            "observations" => obs_vec,
+            "names" => ["1"],
+            "minibatcher" =>
+                ClimaCalibrate.minibatcher_over_samples([1], 1),
+        ),
+    )
+
+    prior = constrained_gaussian("pi_groups_coeff", 1.0, 0.3, 0, Inf)
+    eki = EKP.EnsembleKalmanProcess(
+        obs_series,
+        EKP.TransformUnscented(prior, impose_prior = true),
+        verbose = true,
+        scheduler = EKP.DataMisfitController(on_terminate = "continue"),
+    )
+
+    g_ens_builder = EnsembleBuilder.GEnsembleBuilder(eki)
+
+    @test EnsembleBuilder.ranges_by_short_name(g_ens_builder, "hey") == [1:4]
+    @test EnsembleBuilder.ranges_by_short_name(g_ens_builder, "hi") == [5:16]
+    @test all(
+        metadata -> ClimaAnalysis.short_name(metadata) == "hey",
+        EnsembleBuilder.metadata_by_short_name(g_ens_builder, "hey"),
+    )
+    @test all(
+        metadata -> ClimaAnalysis.short_name(metadata) == "hi",
+        EnsembleBuilder.metadata_by_short_name(g_ens_builder, "hi"),
+    )
+    @test EnsembleBuilder.missing_short_names(g_ens_builder, 1) ==
+          Set{String}(["hey", "hi"])
+end
+
 @testset "Error handling when constructing GEnsembleBuilder" begin
     time =
         ClimaAnalysis.Utils.date_to_time.(
