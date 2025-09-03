@@ -156,6 +156,26 @@ function EnsembleBuilder.fill_g_ens_col!(
 end
 
 """
+    EnsembleBuilder.fill_g_ens_col!(g_ens_builder::GEnsembleBuilder,
+                                    col_idx,
+                                    val::AbstractFloat)
+
+Fill the `col_idx`th column of the G ensemble matrix with `val`.
+
+This is useful if you want to completely fill a column of a G ensemble matrix
+with `NaN`s if a simulation crashed.
+"""
+function EnsembleBuilder.fill_g_ens_col!(
+    g_ens_builder::GEnsembleBuilder,
+    col_idx,
+    val::AbstractFloat,
+)
+    g_ens_builder.g_ens[:, col_idx] .= val
+    g_ens_builder.completed[:, col_idx] .= true
+    return nothing
+end
+
+"""
     _try_fill_g_ens_col_with_var!(g_ens_builder::GEnsembleBuilder,
                                   col_idx,
                                   var::OutputVar,

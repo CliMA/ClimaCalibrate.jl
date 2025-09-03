@@ -423,6 +423,10 @@ end
     )
     @test EnsembleBuilder.missing_short_names(g_ens_builder, 1) ==
           Set{String}(["hey", "hi"])
+
+    EnsembleBuilder.fill_g_ens_col!(g_ens_builder, 1, NaN32)
+    @test all(isnan, g_ens_builder.g_ens[:, 1])
+    @test all(g_ens_builder.completed[:, 1])
 end
 
 @testset "Error handling when constructing GEnsembleBuilder" begin
