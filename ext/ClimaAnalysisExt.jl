@@ -275,6 +275,17 @@ function ObservationRecipe.observation(
     # Check if start date and end date exist in vars
     _check_dates_in_var(vars, start_date, end_date)
 
+    # Check if dates are unique and short name exists
+    for var in vars
+        allunique(ClimaAnalysis.dates(var)) || @warn(
+            "Dates in OutputVar with short name $(short_name(var)) are not unique. You will not be able to use GEnsembleBuilder",
+        )
+    end
+
+    any(==(""), ClimaAnalysis.short_name.(vars)) && @warn(
+        "There are OutputVar(s) with no short name. You will not be able to use GEnsembleBuilder"
+    )
+
     # Get the flattened sample and metadata
     windowed_vars =
         ClimaAnalysis.window.(vars, "time", left = start_date, right = end_date)
