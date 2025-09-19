@@ -703,13 +703,14 @@ end
         Dates.DateTime(2008, 9),
     )
 
-    # See this issue for the broken tests:
-    # https://github.com/CliMA/EnsembleKalmanProcesses.jl/issues/504
-    @test_broken eltype(svd_plus_d_covar.svd_cov.S) == Float32
-    @test_broken eltype(svd_plus_d_covar.svd_cov.U) == Float32
-    @test_broken eltype(svd_plus_d_covar.svd_cov.V) == Float32
-    @test_broken eltype(svd_plus_d_covar.svd_cov.Vt) == Float32
-    @test eltype(svd_plus_d_covar.diag_cov.diag) == Float32
+    if pkgversion(EnsembleKalmanProcesses) >= v"2.5.0"
+        # See https://github.com/CliMA/EnsembleKalmanProcesses.jl/issues/504
+        @test eltype(svd_plus_d_covar.svd_cov.S) == Float32
+        @test eltype(svd_plus_d_covar.svd_cov.U) == Float32
+        @test eltype(svd_plus_d_covar.svd_cov.V) == Float32
+        @test eltype(svd_plus_d_covar.svd_cov.Vt) == Float32
+        @test eltype(svd_plus_d_covar.diag_cov.diag) == Float32
+    end
 
     # Error handling
     time =
@@ -1109,91 +1110,106 @@ end
     end
 end
 
-@testset "Get metadata from nth iteration" begin
-    if pkgversion(EnsembleKalmanProcesses) > v"2.4.3"
-        time =
-            ClimaAnalysis.Utils.date_to_time.(
-                Dates.DateTime(2007, 12),
-                [Dates.DateTime(2007, 12) + Dates.Month(3 * i) for i in 0:47],
-            )
-        time_var =
-            TemplateVar() |>
-            add_dim("time", time, units = "s") |>
-            add_attribs(
-                short_name = "time",
-                start_date = "2007-12-1",
-                blah = "blah2",
-            ) |>
-            one_to_n_data() |>
-            initialize
-
-        lon = [-45.0, 0.0, 45.0]
-        lon_var =
-            TemplateVar() |>
-            add_dim("lon", lon, units = "degrees") |>
-            add_dim("time", time, units = "s") |>
-            add_attribs(
-                short_name = "lon",
-                start_date = "2007-12-1",
-                super = "fun",
-            ) |>
-            one_to_n_data() |>
-            initialize
-
-        covar_estimator = ObservationRecipe.SeasonalDiagonalCovariance()
-        obs1 = ObservationRecipe.observation(
-            covar_estimator,
-            (time_var, lon_var),
+@testset "Get information about metadata from nth iteration" begin
+    pkgversion(EnsembleKalmanProcesses) > v"2.4.3" || return
+    time =
+        ClimaAnalysis.Utils.date_to_time.(
             Dates.DateTime(2007, 12),
-            Dates.DateTime(2008, 9),
+            [Dates.DateTime(2007, 12) + Dates.Month(3 * i) for i in 0:47],
         )
-        obs2 = ObservationRecipe.observation(
-            covar_estimator,
-            time_var,
-            Dates.DateTime(2007, 12),
-            Dates.DateTime(2008, 9),
-        )
-        obs3 = ObservationRecipe.observation(
-            covar_estimator,
-            lon_var,
-            Dates.DateTime(2007, 12),
-            Dates.DateTime(2008, 9),
-        )
+    time_var =
+        TemplateVar() |>
+        add_dim("time", time, units = "s") |>
+        add_attribs(
+            short_name = "time",
+            start_date = "2007-12-1",
+            blah = "blah2",
+        ) |>
+        one_to_n_data() |>
+        initialize
 
-        # Test with fixed minibatcher with no randomness
-        obs_series = EKP.ObservationSeries(
-            Dict(
-                "observations" => [obs1, obs2, obs3, obs1],
-                "names" => ["1", "2", "3", "4"],
-                "minibatcher" => ClimaCalibrate.minibatcher_over_samples(
-                    [1, 2, 3, 4],
-                    2,
-                ),
-            ),
-        )
+    lon = [-45.0, 0.0, 45.0]
+    lon_var =
+        TemplateVar() |>
+        add_dim("lon", lon, units = "degrees") |>
+        add_dim("time", time, units = "s") |>
+        add_attribs(
+            short_name = "lon",
+            start_date = "2007-12-1",
+            super = "fun",
+        ) |>
+        one_to_n_data() |>
+        initialize
 
-        metadata1 =
-            ObservationRecipe.get_metadata_for_nth_iteration(obs_series, 1)
-        metadata2 =
-            ObservationRecipe.get_metadata_for_nth_iteration(obs_series, 2)
-        metadata3 =
-            ObservationRecipe.get_metadata_for_nth_iteration(obs_series, 3)
+    covar_estimator = ObservationRecipe.SeasonalDiagonalCovariance()
+    obs1 = ObservationRecipe.observation(
+        covar_estimator,
+        (time_var, lon_var),
+        Dates.DateTime(2007, 12),
+        Dates.DateTime(2008, 9),
+    )
+    obs2 = ObservationRecipe.observation(
+        covar_estimator,
+        time_var,
+        Dates.DateTime(2007, 12),
+        Dates.DateTime(2008, 9),
+    )
+    obs3 = ObservationRecipe.observation(
+        covar_estimator,
+        lon_var,
+        Dates.DateTime(2007, 12),
+        Dates.DateTime(2008, 9),
+    )
 
-        @test length(metadata1) == 3
-        @test metadata1[1].attributes["short_name"] == "time"
-        @test metadata1[2].attributes["short_name"] == "lon"
-        @test metadata1[3].attributes["short_name"] == "time"
+    # Test with fixed minibatcher with no randomness
+    obs_series = EKP.ObservationSeries(
+        Dict(
+            "observations" => [obs1, obs2, obs3, obs1],
+            "names" => ["1", "2", "3", "4"],
+            "minibatcher" =>
+                ClimaCalibrate.minibatcher_over_samples([1, 2, 3, 4], 2),
+        ),
+    )
 
-        @test length(metadata2) == 3
-        @test metadata2[1].attributes["short_name"] == "lon"
-        @test metadata2[2].attributes["short_name"] == "time"
-        @test metadata2[3].attributes["short_name"] == "lon"
+    metadata1 = ObservationRecipe.get_metadata_for_nth_iteration(obs_series, 1)
+    metadata2 = ObservationRecipe.get_metadata_for_nth_iteration(obs_series, 2)
+    metadata3 = ObservationRecipe.get_metadata_for_nth_iteration(obs_series, 3)
+    metadata_indices1 =
+        ext._get_minibatch_indices_for_nth_iteration(obs_series, 1)
+    metadata_indices2 =
+        ext._get_minibatch_indices_for_nth_iteration(obs_series, 2)
+    metadata_indices3 =
+        ext._get_minibatch_indices_for_nth_iteration(obs_series, 3)
 
-        @test length(metadata3) == 3
-        @test metadata3[1].attributes["short_name"] == "time"
-        @test metadata3[2].attributes["short_name"] == "lon"
-        @test metadata3[3].attributes["short_name"] == "time"
-    end
+    @test length(metadata1) == 3
+    @test metadata1[1].attributes["short_name"] == "time"
+    @test metadata1[2].attributes["short_name"] == "lon"
+    @test metadata1[3].attributes["short_name"] == "time"
+
+    @test length(metadata_indices1) == 3
+    @test metadata_indices1[1] == 1:4
+    @test metadata_indices1[2] == 5:16
+    @test metadata_indices1[3] == 17:20
+
+    @test length(metadata2) == 3
+    @test metadata2[1].attributes["short_name"] == "lon"
+    @test metadata2[2].attributes["short_name"] == "time"
+    @test metadata2[3].attributes["short_name"] == "lon"
+
+    @test length(metadata_indices1) == 3
+    @test metadata_indices2[1] == 1:12
+    @test metadata_indices2[2] == 13:16
+    @test metadata_indices2[3] == 17:28
+
+    @test length(metadata3) == 3
+    @test metadata3[1].attributes["short_name"] == "time"
+    @test metadata3[2].attributes["short_name"] == "lon"
+    @test metadata3[3].attributes["short_name"] == "time"
+
+    @test length(metadata_indices1) == 3
+    @test metadata_indices1[1] == 1:4
+    @test metadata_indices1[2] == 5:16
+    @test metadata_indices1[3] == 17:20
 end
 
 @testset "Reconstruct mean g ens final" begin

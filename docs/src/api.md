@@ -86,3 +86,16 @@ ClimaCalibrate.ObservationRecipe.reconstruct_g_mean_final
 ClimaCalibrate.ObservationRecipe.seasonally_aligned_yearly_sample_date_ranges
 ClimaCalibrate.ObservationRecipe.change_data_type
 ```
+
+## Ensemble Builder Interface
+
+```@docs
+ClimaAnalysisExt.GEnsembleBuilder
+ClimaCalibrate.EnsembleBuilder.GEnsembleBuilder
+ClimaCalibrate.EnsembleBuilder.fill_g_ens_col!
+ClimaCalibrate.EnsembleBuilder.is_complete
+ClimaCalibrate.EnsembleBuilder.get_g_ensemble
+ClimaCalibrate.EnsembleBuilder.ranges_by_short_name
+ClimaCalibrate.EnsembleBuilder.metadata_by_short_name
+ClimaCalibrate.EnsembleBuilder.missing_short_names
+```
