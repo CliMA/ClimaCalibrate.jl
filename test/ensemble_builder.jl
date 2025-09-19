@@ -49,17 +49,20 @@ import ClimaAnalysis.Template:
     # Check short names
     attribs = Dict("short_name" => "hi")
     diff_short_name_var = ClimaAnalysis.remake(var, attributes = attribs)
-    @test !ext._same_short_names(var, make_metadata(diff_short_name_var))
+    short_name_matcher = EnsembleBuilder.ShortNameMatcher()
+    @test !EnsembleBuilder.match(short_name_matcher, var, make_metadata(diff_short_name_var))
 
     # Check set of dimensions are the same
     dims = Dict("lon" => lat)
     diff_dim_var = ClimaAnalysis.remake(var, dims = dims)
-    @test !ext._same_dim_names(var, make_metadata(diff_dim_var))
+    dim_name_matcher = EnsembleBuilder.DimNameMatcher()
+    @test !EnsembleBuilder.match(dim_name_matcher, var, make_metadata(diff_dim_var))
 
     # Check units are the same
     attribs = Dict("short_name" => "hi", "units" => "m^2")
     diff_units_var = ClimaAnalysis.remake(var, attributes = attribs)
-    @test !ext._same_units(var, make_metadata(diff_units_var))
+    units_matcher = EnsembleBuilder.UnitsMatcher()
+    @test !EnsembleBuilder.match(units_matcher, var, make_metadata(diff_units_var))
 
     # Check units of dimensions are the same
     diff_dim_units_var =
@@ -67,16 +70,18 @@ import ClimaAnalysis.Template:
         add_dim("lat", lat, units = "degrees_west") |>
         add_attribs(short_name = "hey") |>
         initialize
-    @test !ext._same_dim_units(var, make_metadata(diff_dim_units_var))
+    dim_units_matcher = EnsembleBuilder.DimUnitsMatcher()
+    @test !EnsembleBuilder.match(dim_units_matcher, var, make_metadata(diff_dim_units_var))
 
     # Check values of nontemporal dimensions are the same
+    dim_values_matcher = EnsembleBuilder.DimValuesMatcher()
     diff_lat = [-80.0, 0.0, 80.0]
     var =
         TemplateVar() |>
         add_dim("lat", diff_lat, units = "degrees_west") |>
         add_attribs(short_name = "hey") |>
         initialize
-    @test !ext._compatible_dims_values(var, make_metadata(diff_dim_units_var))
+    @test !EnsembleBuilder.match(dim_values_matcher, var, make_metadata(diff_dim_units_var))
 
     # Check temporal dimension
     date_var1 =
@@ -89,7 +94,7 @@ import ClimaAnalysis.Template:
         add_dim("time", [-2.0, -1.0, 0.0], units = "s") |>
         add_attribs(start_date = "2010-12-01T00:00:44") |>
         initialize
-    @test ext._compatible_dims_values(date_var1, make_metadata(date_var2))
+    @test EnsembleBuilder.match(dim_values_matcher, date_var1, make_metadata(date_var2))
 end
 
 @testset "Match dates" begin
