@@ -4,6 +4,7 @@ import ClimaAnalysis
 import ClimaCalibrate
 import ClimaCalibrate.ObservationRecipe
 import ClimaCalibrate.EnsembleBuilder
+import ClimaCalibrate.Checker
 import EnsembleKalmanProcesses
 import OrderedCollections: OrderedDict
 import Statistics: mean
@@ -49,17 +50,36 @@ import ClimaAnalysis.Template:
     # Check short names
     attribs = Dict("short_name" => "hi")
     diff_short_name_var = ClimaAnalysis.remake(var, attributes = attribs)
-    @test !ext._same_short_names(var, make_metadata(diff_short_name_var))
+    short_name_checker = Checker.ShortNameChecker()
+    @test !Checker.check(
+        short_name_checker,
+        var,
+        make_metadata(diff_short_name_var),
+    )
+    @test_logs (:info, r"Short names are not the same") Checker.check(
+        short_name_checker,
+        var,
+        make_metadata(diff_short_name_var),
+        verbose = true,
+    )
 
     # Check set of dimensions are the same
     dims = Dict("lon" => lat)
     diff_dim_var = ClimaAnalysis.remake(var, dims = dims)
-    @test !ext._same_dim_names(var, make_metadata(diff_dim_var))
+    dim_name_checker = Checker.DimNameChecker()
+    @test !Checker.check(dim_name_checker, var, make_metadata(diff_dim_var))
+    @test_logs (:info, r"Dimensions are not the same between the OutputVar") Checker.check(
+        dim_name_checker,
+        var,
+        make_metadata(diff_dim_var),
+        verbose = true,
+    )
 
     # Check units are the same
     attribs = Dict("short_name" => "hi", "units" => "m^2")
     diff_units_var = ClimaAnalysis.remake(var, attributes = attribs)
-    @test !ext._same_units(var, make_metadata(diff_units_var))
+    units_checker = Checker.UnitsChecker()
+    @test !Checker.check(units_checker, var, make_metadata(diff_units_var))
 
     # Check units of dimensions are the same
     diff_dim_units_var =
@@ -67,16 +87,38 @@ import ClimaAnalysis.Template:
         add_dim("lat", lat, units = "degrees_west") |>
         add_attribs(short_name = "hey") |>
         initialize
-    @test !ext._same_dim_units(var, make_metadata(diff_dim_units_var))
+    dim_units_checker = Checker.DimUnitsChecker()
+    @test !Checker.check(
+        dim_units_checker,
+        var,
+        make_metadata(diff_dim_units_var),
+    )
+    @test_logs (:info, r"are not the same between OutputVar") Checker.check(
+        dim_units_checker,
+        var,
+        make_metadata(diff_dim_units_var),
+        verbose = true,
+    )
 
     # Check values of nontemporal dimensions are the same
+    dim_values_checker = Checker.DimValuesChecker()
     diff_lat = [-80.0, 0.0, 80.0]
     var =
         TemplateVar() |>
         add_dim("lat", diff_lat, units = "degrees_west") |>
         add_attribs(short_name = "hey") |>
         initialize
-    @test !ext._compatible_dims_values(var, make_metadata(diff_dim_units_var))
+    @test !Checker.check(
+        dim_values_checker,
+        var,
+        make_metadata(diff_dim_units_var),
+    )
+    @test_logs (:info, r"is not the same as values of dimension") Checker.check(
+        dim_values_checker,
+        var,
+        make_metadata(diff_dim_units_var),
+        verbose = true,
+    )
 
     # Check temporal dimension
     date_var1 =
@@ -89,7 +131,30 @@ import ClimaAnalysis.Template:
         add_dim("time", [-2.0, -1.0, 0.0], units = "s") |>
         add_attribs(start_date = "2010-12-01T00:00:44") |>
         initialize
-    @test ext._compatible_dims_values(date_var1, make_metadata(date_var2))
+    @test Checker.check(dim_values_checker, date_var1, make_metadata(date_var2))
+
+    diff_dates_var =
+        TemplateVar() |>
+        add_dim("time", [-2.0, -1.0, 0.0, 1.0], units = "s") |>
+        add_attribs(start_date = "2010-12-01T00:00:44") |>
+        initialize
+    @test !Checker.check(
+        dim_values_checker,
+        date_var1,
+        make_metadata(diff_dates_var),
+    )
+    @test_logs (:info, r"is not a subset of the dates/times of the OutputVar") !Checker.check(
+        dim_values_checker,
+        date_var1,
+        make_metadata(diff_dates_var),
+        verbose = true,
+    )
+    sequential_indices_checker = Checker.SequentialIndicesChecker()
+    @test Checker.check(
+        sequential_indices_checker,
+        date_var1,
+        make_metadata(date_var2),
+    )
 end
 
 @testset "Match dates" begin

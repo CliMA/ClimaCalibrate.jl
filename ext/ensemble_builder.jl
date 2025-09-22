@@ -1,6 +1,8 @@
 import ClimaCalibrate.EnsembleBuilder as EnsembleBuilder
 import ClimaCalibrate: g_ens_matrix
 
+include("checkers.jl")
+
 """
     MetadataInfo{METADATA <: Metadata}
 
@@ -28,7 +30,11 @@ An object to help build G ensemble matrix by using the metadata stored in the
 construct the corresponding G ensemble matrix for the current iteration of the
 calibration.
 """
-struct GEnsembleBuilder{FT <: AbstractFloat, METADATAINFO <: MetadataInfo}
+struct GEnsembleBuilder{
+    FT <: AbstractFloat,
+    METADATAINFO <: MetadataInfo,
+    T <: Tuple{Vararg{AbstractChecker}},
+}
     """G ensemble matrix that is returned by the observation map"""
     g_ens::Matrix{FT}
 
@@ -43,6 +49,9 @@ struct GEnsembleBuilder{FT <: AbstractFloat, METADATAINFO <: MetadataInfo}
     G ensemble matrix. The size of this matrix is the number of metadata for the
     minibatch by the number of ensemble members"""
     completed::BitMatrix
+
+    """A list of checkers used to check the OutputVar to the list of metadata"""
+    checkers::T
 end
 
 """
@@ -93,6 +102,13 @@ function EnsembleBuilder.GEnsembleBuilder(
         short_name_to_metadata_map,
         all_metadata_vec,
         completed,
+        (
+            ShortNameChecker(),
+            DimNameChecker(),
+            DimUnitsChecker(),
+            UnitsChecker(),
+            DimValuesChecker(),
+        ),
     )
 end
 
@@ -191,7 +207,8 @@ function _try_fill_g_ens_col_with_var!(
     metadata_info::MetadataInfo,
 )
     (; metadata, range, index) = metadata_info
-    _is_compatible_with_metadata(var, metadata) || return false
+    _is_compatible_with_metadata(g_ens_builder.checkers, var, metadata) ||
+        return false
     match_dates_var = _match_dates(var, metadata)
     g_ens_builder.g_ens[range, col_idx] .=
         ClimaAnalysis.flatten(match_dates_var, metadata).data
@@ -205,123 +222,21 @@ function _try_fill_g_ens_col_with_var!(
 end
 
 """
-    _is_compatible_with_metadata(var::OutputVar, metadata::Metadata)
+    _is_compatible_with_metadata(
+        checkers,
+        var::OutputVar,
+        metadata::Metadata
+    )
 
 Return `true` if `var` can be flattened with `metadata` and fill out the
 column of the G ensemble matrix corresponding to the `metadata`.
 """
-function _is_compatible_with_metadata(var::OutputVar, metadata::Metadata)
-    return _same_short_names(var, metadata) &&
-           _same_dim_names(var, metadata) &&
-           _same_dim_units(var, metadata) &&
-           _same_units(var, metadata) &&
-           # For the temporal dimension, only check if the times of metadata is
-           # a subset of the times of var, because _match_dates will get the
-           # correct dates for us
-           _compatible_dims_values(var, metadata)
-end
-
-"""
-    _same_short_names(var::OutputVar, metadata::Metadata)
-
-Return `true` if `var` and `metadata` have the same short name, `false`
-otherwise.
-"""
-_same_short_names(var::OutputVar, metadata::Metadata) =
-# Do not need to check if the short name is there, since we already know that
-# the short name of metadata exists
-    ClimaAnalysis.short_name(var) == ClimaAnalysis.short_name(metadata)
-
-"""
-    _same_dim_names(var::OutputVar, metadata::Metadata)
-
-Return `true` if `var` and `metadata` have the same dimensions, `false`
-otherwise.
-"""
-_same_dim_names(var::OutputVar, metadata::Metadata) = issetequal(
-    ClimaAnalysis.conventional_dim_name.(keys(var.dims)),
-    ClimaAnalysis.conventional_dim_name.(keys(metadata.dims)),
+function _is_compatible_with_metadata(
+    checkers,
+    var::OutputVar,
+    metadata::Metadata,
 )
-
-"""
-    _same_units(var::OutputVar, metadata::Metadata)
-
-Return `true` if `var` and `metadata` have the same units, `false` otherwise.
-"""
-function _same_units(var::OutputVar, metadata::Metadata)
-    var_units = ClimaAnalysis.units(var)
-    metadata_units = ClimaAnalysis.units(metadata)
-    if var_units == "" || metadata_units == ""
-        @warn("Var or metadata may be missing units")
-    end
-    return var_units == metadata_units
-end
-
-"""
-    _same_dim_units(var::OutputVar, metadata::Metadata)
-
-Return `true` if the units of the dimensions in `var` and `metadata` are the
-same, `false` otherwise. This function assumes `var` and `metadata` have the
-same dimensions.
-"""
-function _same_dim_units(var::OutputVar, metadata::Metadata)
-    for var_dim_name in keys(var.dims)
-        md_dim_name = ClimaAnalysis.Var.find_corresponding_dim_name_in_var(
-            var_dim_name,
-            metadata,
-        )
-        var_dim_units = ClimaAnalysis.dim_units(var, var_dim_name)
-        md_dim_units = ClimaAnalysis.dim_units(metadata, md_dim_name)
-        var_dim_units == md_dim_units || return false
-        if var_dim_units == "" || md_dim_units == ""
-            @warn(
-                "Units for $(ClimaAnalysis.conventional_dim_name(var_dim_name)) is missing in var or metadata"
-            )
-        end
-    end
-    return true
-end
-
-"""
-    _compatible_dims_values(var::OutputVar, metadata::Metadata)
-
-Check if the values of the dimensions in `var` and `metadata` are compatible
-for the purpose of filling out the G ensemble matrix.
-
-The nontemporal dimensions are compatible if the values are approximately the
-same. The temporal dimensions are compatible if the temporal dimension of
-`metadata` is a subset of the temporal dimension of `var`.
-"""
-function _compatible_dims_values(var::OutputVar, metadata::Metadata)
-    for var_dim_name in keys(var.dims)
-        md_dim_name = ClimaAnalysis.Var.find_corresponding_dim_name_in_var(
-            var_dim_name,
-            metadata,
-        )
-        if ClimaAnalysis.conventional_dim_name(var_dim_name) != "time"
-            all(isapprox(var.dims[var_dim_name], metadata.dims[md_dim_name])) ||
-                return false
-        else
-            dates_or_times(metadata) ⊆ dates_or_times(var) || return false
-        end
-    end
-    return true
-end
-
-"""
-    dates_or_times(var::OutputVar)
-
-Return the temporal dimension of `var` as dates if possible and time otherwise.
-
-This function assumes that a temporal dimension exists in `var`.
-"""
-function dates_or_times(var_or_metadata::Union{OutputVar, Metadata})
-    temporal_dim = try
-        ClimaAnalysis.dates(var_or_metadata)
-    catch
-        ClimaAnalysis.times(var_or_metadata)
-    end
-    return temporal_dim
+    return all(Checker.check(checker, var, metadata) for checker in checkers)
 end
 
 """

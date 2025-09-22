@@ -100,3 +100,15 @@ ClimaCalibrate.EnsembleBuilder.ranges_by_short_name
 ClimaCalibrate.EnsembleBuilder.metadata_by_short_name
 ClimaCalibrate.EnsembleBuilder.missing_short_names
 ```
+
+## Checker Interface
+
+```@docs
+ClimaCalibrate.Checker.AbstractChecker
+ClimaCalibrate.Checker.ShortNameChecker
+ClimaCalibrate.Checker.DimNameChecker
+ClimaCalibrate.Checker.DimUnitsChecker
+ClimaCalibrate.Checker.UnitsChecker
+ClimaCalibrate.Checker.DimValuesChecker
+ClimaCalibrate.Checker.check
+```
