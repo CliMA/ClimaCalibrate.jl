@@ -183,3 +183,45 @@ function Checker.check(
     return true
 end
 
+"""
+    Checker.check(
+        ::SequentialIndicesChecker,
+        var::OutputVar,
+        metadata::Metadata;
+        verbose = false,
+    )
+
+Return `true` if the dates of `var` map to sequential indices of the dates of
+`metadata`, `false` otherwise.
+
+!!! note "Use this check"
+    It is recommended to always enable this check when possible.
+
+!!! note "Why use this check?"
+    This check is helpful in ensuring that the dates are matched correctly
+    between `var` and `metadata`. For example, without this check, if the
+    simulation data contain monthly averages and metadata track seasonal
+    averages, then no error is thrown, because all dates in `metadata` are in
+    all the dates in `var`.
+"""
+function Checker.check(
+    ::SequentialIndicesChecker,
+    var::OutputVar,
+    metadata::Metadata;
+    verbose = false,
+)
+    obs_dates = ClimaAnalysis.dates(metadata)
+    sim_dates = ClimaAnalysis.dates(var)
+    sim_indices_for_obs_dates = indexin(obs_dates, sim_dates)
+
+    # Do not need to check for nothing in sim_indices_for_obs_dates because
+    # of DimValuesChecker
+    for i in eachindex(sim_indices_for_obs_dates)[2:end]
+        if sim_indices_for_obs_dates[i] != sim_indices_for_obs_dates[i - 1] + 1
+            verbose &&
+                @info "Dates of OutputVar ($sim_dates) do not map to sequential indices ($sim_indices_for_obs_dates) of the dates of the metadata ($obs_dates)."
+            return false
+        end
+    end
+    return true
+end
