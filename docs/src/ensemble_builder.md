@@ -28,7 +28,7 @@ flattening or vectorizing your `OutputVar` and filling out your G ensemble
 matrix with consistency checks between the simulation data and observational
 data. This eliminates user errors, such as checking for the ordering of the
 dimensions when flattening the `OutputVar`, checking that the dimensions are
-consistent, and checking the units between observational and simulational data.
+consistent, and checking the units between observational and simulation data.
 
 ## `GEnsembleBuilder`
 
@@ -74,7 +74,7 @@ In particular, the `OutputVar`s from the simulation data should match the
     removing spinup) to match the times of the observations.
 
 !!! warning "Matching dates"
-    There is no checks for how dates are matched which can easily lead to
+    There are no checks for how dates are matched which can easily lead to
     errors. For example, if the simulation data contain monthly averages and
     metadata track seasonal averages, then no error is thrown, because all dates
     in `metadata` are in all the dates in `var`.
