@@ -149,11 +149,41 @@ import ClimaAnalysis.Template:
         make_metadata(diff_dates_var),
         verbose = true,
     )
+
+    # Check indices are sequential
     sequential_indices_checker = Checker.SequentialIndicesChecker()
     @test Checker.check(
         sequential_indices_checker,
         date_var1,
         make_metadata(date_var2),
+    )
+
+    date_var3 =
+        TemplateVar() |>
+        add_dim("time", [1.0], units = "s") |>
+        add_attribs(start_date = "2010-12-01T00:00:42") |>
+        initialize
+    @test Checker.check(
+        sequential_indices_checker,
+        date_var1,
+        make_metadata(date_var3),
+    )
+
+    date_var4 =
+        TemplateVar() |>
+        add_dim("time", [0.0, 2.0], units = "s") |>
+        add_attribs(start_date = "2010-12-01T00:00:42") |>
+        initialize
+    @test !Checker.check(
+        sequential_indices_checker,
+        date_var1,
+        make_metadata(date_var4),
+    )
+    @test_logs (:info, r"do not map to sequential indices") Checker.check(
+        sequential_indices_checker,
+        date_var1,
+        make_metadata(date_var4),
+        verbose = true,
     )
 end
 
