@@ -27,7 +27,13 @@ function Checker.check(
 )
     # Do not need to check if the short name is there, since we already know that
     # the short name of metadata exists
-    return ClimaAnalysis.short_name(var) == ClimaAnalysis.short_name(metadata)
+    var_short_name = ClimaAnalysis.short_name(var)
+    metadata_short_name = ClimaAnalysis.short_name(metadata)
+    same_short_name = var_short_name == metadata_short_name
+    verbose &&
+        !same_short_name &&
+        @info "Short names are not the same between the OutputVar ($var_short_name) and metadata ($metadata_short_name)"
+    return same_short_name
 end
 
 """
@@ -47,10 +53,14 @@ function Checker.check(
     metadata::Metadata;
     verbose = false,
 )
-    return issetequal(
-        ClimaAnalysis.conventional_dim_name.(keys(var.dims)),
-        ClimaAnalysis.conventional_dim_name.(keys(metadata.dims)),
-    )
+    var_dim_names = ClimaAnalysis.conventional_dim_name.(keys(var.dims))
+    metadata_dim_names =
+        ClimaAnalysis.conventional_dim_name.(keys(metadata.dims))
+    same_dim_names = issetequal(var_dim_names, metadata_dim_names)
+    verbose &&
+        !same_dim_names &&
+        @info "Dimensions are not the same between the OutputVar ($var_dim_names) and metadata ($metadata_dim_names)"
+    return same_dim_names
 end
 
 """
@@ -78,7 +88,11 @@ function Checker.check(
         )
         var_dim_units = ClimaAnalysis.dim_units(var, var_dim_name)
         md_dim_units = ClimaAnalysis.dim_units(metadata, md_dim_name)
-        var_dim_units == md_dim_units || return false
+        same_dim_units = var_dim_units == md_dim_units
+        verbose &&
+            !same_dim_units &&
+            @info "Units of dimension ($var_dim_name) are not the same between OutputVar ($var_dim_units) and metadata ($md_dim_units)"
+        same_dim_units || return false
         if var_dim_units == "" || md_dim_units == ""
             @warn(
                 "Units for $(ClimaAnalysis.conventional_dim_name(var_dim_name)) is missing in var or metadata"
@@ -109,7 +123,11 @@ function Checker.check(
     if var_units == "" || metadata_units == ""
         @warn("Var or metadata may be missing units")
     end
-    return var_units == metadata_units
+    same_units = var_units == metadata_units
+    verbose &&
+        !same_units &&
+        @info "Units of OutputVar ($var_units) are not the same as units of metadata ($metadata_units)"
+    return same_units
 end
 
 """
@@ -140,13 +158,26 @@ function Checker.check(
             metadata,
         )
         if ClimaAnalysis.conventional_dim_name(var_dim_name) != "time"
-            all(isapprox(var.dims[var_dim_name], metadata.dims[md_dim_name])) ||
+            same_dim_values = all(
+                isapprox(var.dims[var_dim_name], metadata.dims[md_dim_name]),
+            )
+            if !same_dim_values
+                verbose &&
+                    @info "Values of dimension ($var_dim_name) in OutputVar ($(var.dims[var_dim_name])) is not the same as values of dimension in metadata ($(metadata.dims[md_dim_name])))"
                 return false
+            end
         else
             # For the temporal dimension, only check if the times of metadata is
-            # a subset of the times of var, because _check_dates will get the
+            # a subset of the times of var, because _match_dates will get the
             # correct dates for us
-            dates_or_times(metadata) ⊆ dates_or_times(var) || return false
+            var_dates_or_times = dates_or_times(var)
+            metadata_dates_or_times = dates_or_times(metadata)
+            subset_of_var_dates = metadata_dates_or_times ⊆ var_dates_or_times
+            if !subset_of_var_dates
+                verbose &&
+                    @info "Dates/times of metadata ($metadata_dates_or_times) is not a subset of the dates/times of the OutputVar ($var_dates_or_times)"
+                return false
+            end
         end
     end
     return true
