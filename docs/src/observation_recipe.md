@@ -85,8 +85,8 @@ end_date = sample_date_ranges[1][2]
 obs = ObservationRecipe.observation(
     covar_estimator,
     vars,
-    start_date = start_date,
-    end_date = end_date,
+    start_date,
+    end_date,
 )
 ```
 
