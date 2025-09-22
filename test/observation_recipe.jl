@@ -598,6 +598,59 @@ end
     )
 end
 
+@testset "Latitude weights to matrix of samples" begin
+    lat = [-90.0, -30.0, 30.0, 90.0]
+    lon = [-60.0, -30.0, 0.0, 30.0, 60.0]
+    time =
+        ClimaAnalysis.Utils.date_to_time.(
+            Dates.DateTime(2007, 12),
+            [Dates.DateTime(i, 12, 1) for i in 2007:2009],
+        )
+    var =
+        TemplateVar() |>
+        add_dim("time", time, units = "s") |>
+        add_dim("lon", lon, units = "degrees") |>
+        add_dim("lat", lat, units = "degrees") |>
+        add_attribs(
+            short_name = "hi",
+            long_name = "hello",
+            start_date = "2007-12-1",
+            blah = "blah2",
+        ) |>
+        one_to_n_data(collected = true) |>
+        initialize
+
+    sample_date_ranges = [
+        (Dates.DateTime(i, 12, 1), Dates.DateTime(i, 12, 1)) for i in 2007:2009
+    ]
+
+    stacked_samples = ext._stacked_samples((var,), sample_date_ranges)
+    stacked_sample_matrix_no_lat_weights = hcat(stacked_samples...)
+    stacked_sample_matrix_with_lat_weights =
+        copy(stacked_sample_matrix_no_lat_weights)
+
+    ext._apply_lat_weights_to_samples!(
+        stacked_sample_matrix_with_lat_weights,
+        (var,),
+        Dates.DateTime(2007, 12, 1),
+        Dates.DateTime(2007, 12, 1),
+        min_cosd_lat = 0.15,
+    )
+    time_slice = ClimaAnalysis.slice(var, time = Dates.DateTime(2007, 12, 1))
+    lat_weights_per_column =
+        sqrt.(
+            ClimaAnalysis.flatten(
+                ext._lat_weights_var(time_slice, min_cosd_lat = 0.15),
+            ).data,
+        )
+    lat_weights_per_column =
+        reshape(lat_weights_per_column, length(lat_weights_per_column), 1)
+    @test isequal(
+        stacked_sample_matrix_with_lat_weights,
+        stacked_sample_matrix_no_lat_weights .* lat_weights_per_column,
+    )
+end
+
 @testset "SVDplusDCovariance" begin
     lat = [-90.0, -30.0, 30.0, 90.0]
     lon = [-60.0, -30.0, 0.0, 30.0, 60.0]
@@ -688,6 +741,43 @@ end
             ),
         ) .^ 2,
     )
+
+    # Test latitude weights
+    covar_estimator_lat_weights = ObservationRecipe.SVDplusDCovariance(
+        sample_date_ranges;
+        use_latitude_weights = true,
+        min_cosd_lat = 0.2,
+    )
+    covar_estimator_no_lat_weights = ObservationRecipe.SVDplusDCovariance(
+        sample_date_ranges;
+        use_latitude_weights = false,
+    )
+    svd_plus_d_covar_with_lat_weights = ObservationRecipe.covariance(
+        covar_estimator_lat_weights,
+        var,
+        Dates.DateTime(2007, 12),
+        Dates.DateTime(2008, 9),
+    )
+    svd_plus_d_covar_with_no_lat_weights = ObservationRecipe.covariance(
+        covar_estimator_no_lat_weights,
+        var,
+        Dates.DateTime(2007, 12),
+        Dates.DateTime(2008, 9),
+    )
+    # Note: Computing the SVD part of the covariance matrix is random, so it is
+    # difficult to test. As such, we check that the result is different when
+    # latitude weights is not applied
+    function reconstruct(A)
+        U, S, V = A
+        return U * Diagonal(S) * V'
+    end
+    @test any(
+        .!isapprox.(
+            reconstruct(svd_plus_d_covar_with_lat_weights.svd_cov),
+            reconstruct(svd_plus_d_covar_with_no_lat_weights.svd_cov),
+        ),
+    )
+
 
     # Test float type
     covar_estimator = ObservationRecipe.SVDplusDCovariance(
