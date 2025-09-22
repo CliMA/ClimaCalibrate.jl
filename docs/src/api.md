@@ -110,5 +110,6 @@ ClimaCalibrate.Checker.DimNameChecker
 ClimaCalibrate.Checker.DimUnitsChecker
 ClimaCalibrate.Checker.UnitsChecker
 ClimaCalibrate.Checker.DimValuesChecker
+ClimaCalibrate.Checker.SequentialIndicesChecker
 ClimaCalibrate.Checker.check
 ```
