@@ -16,7 +16,7 @@ import Statistics
 import Statistics: mean
 import NaNStatistics: nanmean, nanvar
 
-import LinearAlgebra: Diagonal, I
+import LinearAlgebra: Diagonal, I, diagind
 
 include("utils.jl")
 
@@ -570,6 +570,41 @@ function ObservationRecipe.reconstruct_g_mean_final(
     )
     vars = map(metadatas, minibatch_indices) do metadata, range
         ClimaAnalysis.unflatten(metadata, g_mean[range])
+    end
+    return vars
+end
+
+"""
+    reconstruct_diag_cov(obs::EKP.Observation)
+
+Reconstruct the diagonal of the covariance matrix in `obs` as a vector of
+`OutputVar`s.
+
+This function only supports observations that contain diagonal covariance
+matrices.
+"""
+function ObservationRecipe.reconstruct_diag_cov(obs::EKP.Observation)
+    all_metadata = EKP.get_metadata(obs)
+    covs = EKP.get_covs(obs)
+
+    eltype(covs) <: Diagonal || error(
+        "The function reconstruct_diag_cov only supports observations with diagonal covariance matrices. Found covariance matrices of the type $(eltype(covs))",
+    )
+
+    # It would be nice to use a view instead of copying everything, but it makes
+    # the indexing a bit more difficult
+    cov_diags = mapreduce(cov -> view(cov, diagind(cov)), vcat, covs)
+
+    start_index = 1
+    vars = OutputVar[]
+    for metadata in all_metadata
+        data_size = ClimaAnalysis.flattened_length(metadata)
+        var = ClimaAnalysis.unflatten(
+            metadata,
+            view(cov_diags, start_index:(start_index + data_size - 1)),
+        )
+        push!(vars, var)
+        start_index += data_size
     end
     return vars
 end

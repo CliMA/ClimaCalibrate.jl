@@ -286,6 +286,8 @@ function change_data_type end
 
 function reconstruct_g_mean_final end
 
+function reconstruct_diag_cov end
+
 function get_metadata_for_nth_iteration end
 
 end
