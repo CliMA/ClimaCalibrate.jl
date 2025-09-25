@@ -221,6 +221,15 @@ function ObservationRecipe.covariance(
 
     # Compute SVD of covariance matrix
     stacked_sample_matrix = hcat(stacked_samples...)
+
+    covar_estimator.use_latitude_weights && _apply_lat_weights_to_samples!(
+        stacked_sample_matrix,
+        vars,
+        start_date,
+        end_date,
+        min_cosd_lat = covar_estimator.min_cosd_lat,
+    )
+
     gamma_low_rank = EKP.tsvd_cov_from_samples(stacked_sample_matrix)
 
     # Add model error scale. This may not make sense if the samples do not
@@ -239,6 +248,48 @@ function ObservationRecipe.covariance(
     regularization = covar_estimator.regularization * I
 
     return EKP.SVDplusD(gamma_low_rank, model_error_scale + regularization)
+end
+
+"""
+    _apply_lat_weights_to_samples!(stacked_sample_matrix,
+                                   vars::Iterable{OutputVar},
+                                   start_date,
+                                   end_date,
+                                   min_cosd_lat = 0.1)
+
+Apply latitude weights to the matrix of samples.
+
+The latitude weights applied is `1 / sqrt(max(cosd(lat), min_cosd_lat))` to each
+column of the matrix.
+"""
+function _apply_lat_weights_to_samples!(
+    stacked_sample_matrix,
+    vars,
+    start_date,
+    end_date;
+    min_cosd_lat = 0.1,
+)
+    flattened_lat_weights = (
+        ClimaAnalysis.flatten(
+            _lat_weights_var(
+                ClimaAnalysis.window(
+                    var,
+                    "time",
+                    left = start_date,
+                    right = end_date,
+                ),
+                min_cosd_lat = min_cosd_lat,
+            ),
+        ).data for var in vars
+    )
+    flattened_lat_weights = sqrt.(vcat(flattened_lat_weights...))
+    flattened_lat_weights =
+        reshape(flattened_lat_weights, length(flattened_lat_weights), 1)
+    # It is okay to find the latitude weights for a single column and apply it
+    # to every other column, because the flattening of OutputVars should be the
+    # same for each column
+    stacked_sample_matrix .*= flattened_lat_weights
+    return nothing
 end
 
 """
