@@ -346,8 +346,9 @@ function observation_map_and_update!(ekp, output_dir, iteration, prior)
     terminate = update_ensemble!(ekp, g_ensemble, output_dir, iteration, prior)
     try
         analyze_iteration(ekp, g_ensemble, prior, output_dir, iteration)
-    catch e
-        @error "Error during `analyze_iteration`:" exception = catch_backtrace()
+    catch ret_code
+        @error "`analyze_iteration` crashed. See stacktrace" exception =
+            (ret_code, catch_backtrace())
     end
     return terminate
 end
