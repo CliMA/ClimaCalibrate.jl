@@ -115,7 +115,9 @@ end
 """
     EnsembleBuilder.fill_g_ens_col!(g_ens_builder::GEnsembleBuilder,
                                     col_idx,
-                                    vars::OutputVar...)
+                                    vars::OutputVar...;
+                                    checkers = (,)
+                                    verbose = false)
 
 Fill the `col_idx`th of the G ensemble matrix from the `OutputVar`s `vars` and
 `ekp`.
@@ -137,7 +139,9 @@ the correct placement of metadata.
 function EnsembleBuilder.fill_g_ens_col!(
     g_ens_builder::GEnsembleBuilder,
     col_idx,
-    vars::OutputVar...,
+    vars::OutputVar...;
+    checkers = (),
+    verbose = false,
 )
     # Check all OutputVars contain a short name
     var_short_names = collect(ClimaAnalysis.short_name(var) for var in vars)
@@ -161,7 +165,9 @@ function EnsembleBuilder.fill_g_ens_col!(
                 g_ens_builder,
                 col_idx,
                 var,
-                metadata_info,
+                metadata_info;
+                checkers = checkers,
+                verbose = verbose,
             )
         end
         use_var || @warn(
@@ -204,11 +210,22 @@ function _try_fill_g_ens_col_with_var!(
     g_ens_builder::GEnsembleBuilder,
     col_idx,
     var::OutputVar,
-    metadata_info::MetadataInfo,
+    metadata_info::MetadataInfo;
+    checkers = (),
+    verbose = false,
 )
     (; metadata, range, index) = metadata_info
-    _is_compatible_with_metadata(g_ens_builder.checkers, var, metadata) ||
+
+    # Call checkers in g_ens_builder and user passed checkers
+    _is_compatible_with_metadata(
+        g_ens_builder.checkers,
+        var,
+        metadata;
+        verbose = verbose,
+    ) || return false
+    _is_compatible_with_metadata(checkers, var, metadata; verbose = verbose) ||
         return false
+
     match_dates_var = _match_dates(var, metadata)
     g_ens_builder.g_ens[range, col_idx] .=
         ClimaAnalysis.flatten(match_dates_var, metadata).data
@@ -225,7 +242,9 @@ end
     _is_compatible_with_metadata(
         checkers,
         var::OutputVar,
-        metadata::Metadata
+        metadata::Metadata;
+        checkers = (),
+        verbose = false,
     )
 
 Return `true` if `var` can be flattened with `metadata` and fill out the
@@ -234,9 +253,13 @@ column of the G ensemble matrix corresponding to the `metadata`.
 function _is_compatible_with_metadata(
     checkers,
     var::OutputVar,
-    metadata::Metadata,
+    metadata::Metadata;
+    verbose = false,
 )
-    return all(Checker.check(checker, var, metadata) for checker in checkers)
+    return all(
+        Checker.check(checker, var, metadata; verbose = verbose) for
+        checker in checkers
+    )
 end
 
 """
