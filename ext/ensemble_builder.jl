@@ -217,14 +217,18 @@ function _try_fill_g_ens_col_with_var!(
     (; metadata, range, index) = metadata_info
 
     # Call checkers in g_ens_builder and user passed checkers
-    _is_compatible_with_metadata(
+    _validate_var_against_metadata(
         g_ens_builder.checkers,
         var,
         metadata;
         verbose = verbose,
     ) || return false
-    _is_compatible_with_metadata(checkers, var, metadata; verbose = verbose) ||
-        return false
+    _validate_var_against_metadata(
+        checkers,
+        var,
+        metadata;
+        verbose = verbose,
+    ) || return false
 
     match_dates_var = _match_dates(var, metadata)
     g_ens_builder.g_ens[range, col_idx] .=
@@ -239,7 +243,7 @@ function _try_fill_g_ens_col_with_var!(
 end
 
 """
-    _is_compatible_with_metadata(
+    _validate_var_against_metadata(
         checkers,
         var::OutputVar,
         metadata::Metadata;
@@ -250,7 +254,7 @@ end
 Return `true` if `var` can be flattened with `metadata` and fill out the
 column of the G ensemble matrix corresponding to the `metadata`.
 """
-function _is_compatible_with_metadata(
+function _validate_var_against_metadata(
     checkers,
     var::OutputVar,
     metadata::Metadata;
