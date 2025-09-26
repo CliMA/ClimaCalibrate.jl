@@ -83,6 +83,7 @@ ClimaCalibrate.ObservationRecipe.observation
 ClimaCalibrate.ObservationRecipe.short_names
 ClimaCalibrate.ObservationRecipe.get_metadata_for_nth_iteration
 ClimaCalibrate.ObservationRecipe.reconstruct_g_mean_final
+ClimaCalibrate.ObservationRecipe.reconstruct_diag_cov
 ClimaCalibrate.ObservationRecipe.seasonally_aligned_yearly_sample_date_ranges
 ClimaCalibrate.ObservationRecipe.change_data_type
 ```

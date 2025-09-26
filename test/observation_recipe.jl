@@ -1433,3 +1433,96 @@ end
         @test vars[4].data == reshape(mean(G_ens[21:end, :], dims = 2), 3, 4)
     end
 end
+
+@testset "Reconstruct diagonal of covariance" begin
+    time =
+        ClimaAnalysis.Utils.date_to_time.(
+            Dates.DateTime(2007, 12),
+            [Dates.DateTime(2007, 12) + Dates.Month(3 * i) for i in 0:47],
+        )
+    time_var =
+        TemplateVar() |>
+        add_dim("time", time, units = "s") |>
+        add_attribs(short_name = "time", start_date = "2007-12-1") |>
+        one_to_n_data() |>
+        initialize
+
+    lon = [-45.0, 0.0, 45.0]
+    lon_var =
+        TemplateVar() |>
+        add_dim("lon", lon, units = "degrees") |>
+        add_dim("time", time, units = "s") |>
+        add_attribs(short_name = "lon", start_date = "2007-12-1") |>
+        one_to_n_data() |>
+        initialize
+
+    covar_estimator = ObservationRecipe.SeasonalDiagonalCovariance()
+    obs1 = ObservationRecipe.observation(
+        covar_estimator,
+        (time_var, lon_var),
+        Dates.DateTime(2007, 12),
+        Dates.DateTime(2009, 9),
+    )
+    obs2 = ObservationRecipe.observation(
+        covar_estimator,
+        time_var,
+        Dates.DateTime(2007, 12),
+        Dates.DateTime(2009, 9),
+    )
+    obs3 = ObservationRecipe.observation(
+        covar_estimator,
+        permutedims(lon_var, ("time", "lon")),
+        Dates.DateTime(2007, 12),
+        Dates.DateTime(2009, 9),
+    )
+
+    covs1 = ObservationRecipe.reconstruct_diag_cov(obs1)
+    covs2 = ObservationRecipe.reconstruct_diag_cov(obs2)
+    covs3 = ObservationRecipe.reconstruct_diag_cov(obs3)
+
+    @test length(covs1) == 2
+    @test length(covs2) == 1
+    @test length(covs3) == 1
+
+    time_var_from_covs1 = covs1[1]
+    lat_var_from_covs2 = covs1[2]
+    time_var_from_covs2 = covs2[1]
+    lat_var_from_covs3 = permutedims(covs3[1], ("lon", "time"))
+
+    @test isequal(time_var_from_covs1.data, time_var_from_covs2.data)
+    @test isequal(lat_var_from_covs2.data, lat_var_from_covs3.data)
+
+    var3d =
+        TemplateVar() |>
+        add_dim("time", time, units = "s") |>
+        add_dim("lat", [-45.0, 10.0, 42.0], units = "degrees") |>
+        add_dim("lon", [0.0, 1.0], units = "degrees") |>
+        add_attribs(short_name = "time", start_date = "2007-12-1") |>
+        ones_data() |>
+        initialize
+
+    covar_estimator = ObservationRecipe.ScalarCovariance(
+        scalar = 5.0,
+        use_latitude_weights = true,
+        min_cosd_lat = 0.01,
+    )
+    obs4 = ObservationRecipe.observation(
+        covar_estimator,
+        var3d,
+        Dates.DateTime(2007, 12),
+        Dates.DateTime(2007, 12),
+    )
+    covs4 = ObservationRecipe.reconstruct_diag_cov(obs4)
+    var_from_covs4 = covs4[1]
+    # The second index is the latitude dimension and with ScalarCovariance with
+    # latitude weights, the weights should all be the same along a particular
+    # latitude
+    for i in 1:3
+        @test allequal(var_from_covs4.data[:, i, :])
+    end
+
+    # Test that none of them are equal to any of the other ones
+    @test !isequal(var_from_covs4.data[:, 1, :], var_from_covs4.data[:, 2, :])
+    @test !isequal(var_from_covs4.data[:, 2, :], var_from_covs4.data[:, 3, :])
+    @test !isequal(var_from_covs4.data[:, 1, :], var_from_covs4.data[:, 3, :])
+end
