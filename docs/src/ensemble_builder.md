@@ -68,6 +68,9 @@ In particular, the `OutputVar`s from the simulation data should match the
   metadata in the observations,
 - the units of the variables.
 
+For more information about the checks that are performed, see the
+[Checkers](#checkers) section.
+
 !!! info "Spinup and windowing times"
     Internally, the correct dates are matched between the observational and
     simulation data. As a result, you do not need to window the times (e.g. when
@@ -78,6 +81,13 @@ In particular, the `OutputVar`s from the simulation data should match the
     errors. For example, if the simulation data contain monthly averages and
     metadata track seasonal averages, then no error is thrown, because all dates
     in `metadata` are in all the dates in `var`.
+
+    For these reasons, it is recommended to pass
+    [`SequentialIndicesChecker`](@ref ClimaCalibrate.Checker.SequentialIndicesChecker)
+    to the `checkers` keyword argument of
+    [`fill_g_ens_col!`](@ref ClimaCalibrate.EnsembleBuilder.fill_g_ens_col!)
+    which will check that the dates used to fill the G ensemble matrix
+    correspond to sequential indices in the simulation data.
 
 After preprocessing the `OutputVar`s, you can call
 [`fill_g_ens_col!`](@ref ClimaCalibrate.EnsembleBuilder.fill_g_ens_col!) to fill
@@ -122,3 +132,74 @@ return it from `ClimaCalibrate.observation_map`.
 ```julia
 g_ens = EnsembleBuilder.get_g_ensemble(g_ens_builder)
 ```
+
+# Checkers
+
+To determine whether a `OutputVar` matches with a metadata, `GEnsembleBuilder`
+uses `Checker`s to check and compare the contents of a `OutputVar` and with that
+of the metadata. For example, the short names are checked between the
+`OutputVar` and metadata with
+[`ShortNameChecker`](@ref ClimaCalibrate.Checker.ShortNameChecker).
+
+## Built-in checkers
+
+`ClimaCalibrate` provides several built-in checkers:
+
+- [`ShortNameChecker`](@ref ClimaCalibrate.Checker.ShortNameChecker): Check
+  that the short names match between `OutputVar` and metadata
+- [`DimNameChecker`](@ref ClimaCalibrate.Checker.DimNameChecker): Check
+  the type of dimensions are the same
+- [`UnitsChecker`](@ref ClimaCalibrate.Checker.UnitsChecker): Check the
+  variable units are the same
+- [`DimUnitsChecker`](@ref ClimaCalibrate.Checker.DimUnitsChecker): Check
+  the units of the dimensions are the same
+- [`DimValuesChecker`](@ref ClimaCalibrate.Checker.DimValuesChecker): Check the
+  values of the dimensions are the same
+- [`SequentialIndicesChecker`](@ref ClimaCalibrate.Checker.SequentialIndicesChecker):
+  Check the indices of the dates of the simulation data corresponding to the
+  dates of the metadata is sequential.
+
+By default, `GEnsembleBuilder` uses the first five checkers to validate
+compatibility between . You can also provide additional checkers using the `checkers`
+keyword argument in `fill_g_ens_col!`:
+
+```julia
+# Use additional checker for sequential indices
+EnsembleBuilder.fill_g_ens_col!(
+    g_ens_builder,
+    1, 
+    var,
+    checkers = (SequentialIndicesChecker(),)
+)
+```
+
+## Implementing custom checkers
+
+To create a custom checker, define a struct that inherits from `AbstractChecker`
+and implement the `check` method:
+
+```julia
+import ClimaCalibrate.Checker
+
+# Define your custom checker
+struct NothingChecker <: Checker.AbstractChecker end
+
+# Implement the check method
+function Checker.check(
+    ::NothingChecker,
+    var,
+    metadata;
+    verbose = false
+)
+    verbose && @info "This is always true."
+    return true
+end
+```
+
+The `Checker.check` function should
+- accept a checker instance, an `OutputVar`, and `Metadata`,
+- return `true` if the check passes, `false` otherwise,
+- and optionally log informative messages when `verbose = true`.
+
+For more information about `OutputVar` and `Metadata`, see the
+[ClimaAnalysis documentation](https://clima.github.io/ClimaAnalysis.jl/dev/).
