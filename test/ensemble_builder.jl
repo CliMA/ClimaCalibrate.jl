@@ -355,12 +355,8 @@ end
         @test !EnsembleBuilder.is_complete(g_ens_builder)
         # Permute dimensions to test that the dimensions are permuted correctly
         # before flattening
-        EnsembleBuilder.fill_g_ens_col!(
-            g_ens_builder,
-            i,
-            time_var,
-        )
-        EnsembleBuilder.fill_g_ens_col!(
+        @test EnsembleBuilder.fill_g_ens_col!(g_ens_builder, i, time_var)
+        @test EnsembleBuilder.fill_g_ens_col!(
             g_ens_builder,
             i,
             permutedims(lon_var, ("time", "lon")),
@@ -387,8 +383,8 @@ end
     g_ens_builder = EnsembleBuilder.GEnsembleBuilder(eki)
     for i in 1:3
         @test !EnsembleBuilder.is_complete(g_ens_builder)
-        EnsembleBuilder.fill_g_ens_col!(g_ens_builder, i, time_var)
-        EnsembleBuilder.fill_g_ens_col!(g_ens_builder, i, lon_var)
+        @test EnsembleBuilder.fill_g_ens_col!(g_ens_builder, i, time_var)
+        @test EnsembleBuilder.fill_g_ens_col!(g_ens_builder, i, lon_var)
     end
     @test EnsembleBuilder.is_complete(g_ens_builder)
     flat_time_var = window_and_flatten(
@@ -411,7 +407,8 @@ end
     g_ens_builder = EnsembleBuilder.GEnsembleBuilder(eki)
     for i in 1:3
         @test !EnsembleBuilder.is_complete(g_ens_builder)
-        EnsembleBuilder.fill_g_ens_col!(g_ens_builder, i, time_var)
+        @test EnsembleBuilder.fill_g_ens_col!(g_ens_builder, i, time_var)
+        @test !EnsembleBuilder.fill_g_ens_col!(g_ens_builder, i, lon_var)
     end
     @test EnsembleBuilder.is_complete(g_ens_builder)
     flat_time_var = window_and_flatten(
@@ -524,7 +521,7 @@ end
     @test EnsembleBuilder.missing_short_names(g_ens_builder, 1) ==
           Set{String}(["hey", "hi"])
 
-    EnsembleBuilder.fill_g_ens_col!(g_ens_builder, 1, NaN32)
+    @test EnsembleBuilder.fill_g_ens_col!(g_ens_builder, 1, NaN32)
     @test all(isnan, g_ens_builder.g_ens[:, 1])
     @test all(g_ens_builder.completed[:, 1])
 end

@@ -120,7 +120,7 @@ end
                                     verbose = false)
 
 Fill the `col_idx`th of the G ensemble matrix from the `OutputVar` `var` and
-`ekp`.
+`ekp`. If it was successful, return `true`, otherwise, return `false`.
 
 It is assumed that the times or dates of a single `OutputVar` is a superset of
 the times or dates of one or more metadata in the minibatch.
@@ -170,7 +170,7 @@ function EnsembleBuilder.fill_g_ens_col!(
     use_var || @warn(
         "OutputVar with the short name $(ClimaAnalysis.short_name(var)) was passed as an input, but did not match with any of the metadata"
     )
-    return nothing
+    return use_var
 end
 
 """
@@ -179,6 +179,8 @@ end
                                     val::AbstractFloat)
 
 Fill the `col_idx`th column of the G ensemble matrix with `val`.
+
+This returns `true`.
 
 This is useful if you want to completely fill a column of a G ensemble matrix
 with `NaN`s if a simulation crashed.
@@ -190,7 +192,7 @@ function EnsembleBuilder.fill_g_ens_col!(
 )
     g_ens_builder.g_ens[:, col_idx] .= val
     g_ens_builder.completed[:, col_idx] .= true
-    return nothing
+    return true
 end
 
 """
