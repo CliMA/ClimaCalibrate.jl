@@ -1,8 +1,6 @@
 import ClimaCalibrate.EnsembleBuilder as EnsembleBuilder
 import ClimaCalibrate: g_ens_matrix
 
-include("checkers.jl")
-
 """
     MetadataInfo{METADATA <: Metadata}
 
