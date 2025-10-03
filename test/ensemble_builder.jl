@@ -359,6 +359,10 @@ end
             g_ens_builder,
             i,
             time_var,
+        )
+        EnsembleBuilder.fill_g_ens_col!(
+            g_ens_builder,
+            i,
             permutedims(lon_var, ("time", "lon")),
         )
     end
@@ -383,7 +387,8 @@ end
     g_ens_builder = EnsembleBuilder.GEnsembleBuilder(eki)
     for i in 1:3
         @test !EnsembleBuilder.is_complete(g_ens_builder)
-        EnsembleBuilder.fill_g_ens_col!(g_ens_builder, i, time_var, lon_var)
+        EnsembleBuilder.fill_g_ens_col!(g_ens_builder, i, time_var)
+        EnsembleBuilder.fill_g_ens_col!(g_ens_builder, i, lon_var)
     end
     @test EnsembleBuilder.is_complete(g_ens_builder)
     flat_time_var = window_and_flatten(
