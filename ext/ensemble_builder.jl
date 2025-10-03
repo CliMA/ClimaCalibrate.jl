@@ -115,16 +115,12 @@ end
 """
     EnsembleBuilder.fill_g_ens_col!(g_ens_builder::GEnsembleBuilder,
                                     col_idx,
-                                    vars::OutputVar...;
+                                    var::OutputVar;
                                     checkers = (,)
                                     verbose = false)
 
-Fill the `col_idx`th of the G ensemble matrix from the `OutputVar`s `vars` and
+Fill the `col_idx`th of the G ensemble matrix from the `OutputVar` `var` and
 `ekp`.
-
-The column of the G ensemble matrix does not need to be filled out completely by
-this function. As such, you can call this function with the same `col_idx`, but
-different `vars` to gradually fill out the column of the G ensemble matrix.
 
 It is assumed that the times or dates of a single `OutputVar` is a superset of
 the times or dates of one or more metadata in the minibatch.
@@ -139,41 +135,41 @@ the correct placement of metadata.
 function EnsembleBuilder.fill_g_ens_col!(
     g_ens_builder::GEnsembleBuilder,
     col_idx,
-    vars::OutputVar...;
+    var::OutputVar;
     checkers = (),
     verbose = false,
 )
-    # Check all OutputVars contain a short name
-    var_short_names = collect(ClimaAnalysis.short_name(var) for var in vars)
-    any(==(""), var_short_names) && error(
-        "One of the OutputVars does not has a short name; add a short name to the OutputVar before creating it",
+    # Short name is used to prune out metadata that can be used as
+    # metadata_by_short_name maps short names to metadata
+    var_short_name = ClimaAnalysis.short_name(var)
+    var_short_name == "" && error(
+        "The OutputVar does not has a short name. Add a short name to the OutputVar.",
     )
 
     metadata_by_short_name = g_ens_builder.metadata_by_short_name
-    for (i, var) in enumerate(vars)
-        var_short_name = ClimaAnalysis.short_name(var)
-        metadata_info_vec = if haskey(metadata_by_short_name, var_short_name)
-            metadata_by_short_name[var_short_name]
-        else
-            empty(metadata_by_short_name |> first |> last)
-        end
-        use_var = false
-        # Try every metadata_info in the vector, because a single var can be
-        # used for multiple metadata
-        for metadata_info in metadata_info_vec
-            use_var |= _try_fill_g_ens_col_with_var!(
-                g_ens_builder,
-                col_idx,
-                var,
-                metadata_info;
-                checkers = checkers,
-                verbose = verbose,
-            )
-        end
-        use_var || @warn(
-            "OutputVar at index $i with the short name $(ClimaAnalysis.short_name(var)) was passed as an input, but did not match with any of the metadata"
+    var_short_name = ClimaAnalysis.short_name(var)
+    metadata_info_vec = if haskey(metadata_by_short_name, var_short_name)
+        metadata_by_short_name[var_short_name]
+    else
+        empty(metadata_by_short_name |> first |> last)
+    end
+
+    # Try every metadata_info in the vector, because a single var can be
+    # used for multiple metadata
+    use_var = false
+    for metadata_info in metadata_info_vec
+        use_var |= _try_fill_g_ens_col_with_var!(
+            g_ens_builder,
+            col_idx,
+            var,
+            metadata_info,
+            checkers = checkers,
+            verbose = verbose,
         )
     end
+    use_var || @warn(
+        "OutputVar with the short name $(ClimaAnalysis.short_name(var)) was passed as an input, but did not match with any of the metadata"
+    )
     return nothing
 end
 
