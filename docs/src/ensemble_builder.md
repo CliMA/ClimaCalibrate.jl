@@ -97,18 +97,17 @@ the G ensemble matrix using the `OutputVars`.
 # -- preprocessing OutputVars from the first ensemble member--
 # var1, var2, and var3 are OutputVars of different quantities
 # The second argument is which column of the G ensemble matrix to fill out
-EnsembleBuilder.fill_g_ens_col!(g_ens_builder, 1, var1, var2, var3)
+vars = (var1, var2, var3)
+for var in vars
+    EnsembleBuilder.fill_g_ens_col!(g_ens_builder, 1, var)
+end
 ```
 
-The function `fill_g_ens_col!` can take in any number of `OutputVar`s. This
-allows for flexibility for how you want to preprocess the `OutputVar`s. For
-example, you can preprocess all the `OutputVar`s of a single ensemble member and
-pass all the `OutputVar`s to `fill_g_ens_col!`. On the other hand, you can
+In this example, all the `OutputVar`s of a single ensemble member are
+preprocessed and pass to `fill_g_ens_col!` in a loop. On the other hand, one can
 preprocess a single `OutputVar`, pass it to `fill_g_ens_col!`, and repeat for
 all the other `OutputVar`s. We recommend the latter approach as loading all the
-`OutputVar`s simultaneously can consume a lot of memory. Furthermore, it allows
-for easier debugging when only a single `OutputVar` is passed to
-`fill_g_ens_col!`.
+`OutputVar`s simultaneously can consume a lot of memory.
 
 !!! note "Unused OutputVars"
     If a `OutputVar` is passed to `fill_g_ens_col!` and it is not used, an error
