@@ -37,14 +37,12 @@ ClimaCalibrate.initialize(eki, prior, output_dir)
 
 ClimaCalibrate.run_hpc_iteration(
     backend,
-    eki,
     0,
     ensemble_size,
     output_dir,
     experiment_dir,
     interruption_model_interface,
-    ClimaCalibrate.module_load_string(backend),
-    prior;
+    ClimaCalibrate.module_load_string(backend);
     hpc_kwargs,
 )
 
