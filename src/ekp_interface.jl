@@ -309,6 +309,50 @@ function save_eki_and_parameters(eki, output_dir, iteration, prior)
 end
 
 """
+    _construct_intial_unconstrained_ensemble(
+        process::EKP.Process,
+        prior::PD.ParameterDistribution;
+        ensemble_size = 0,
+        rng = MersenneTwister(1234),
+    )
+
+Construct the initial ensemble of unconstrained parameters given the `process` and
+`prior`.
+
+For `EKP.Unscented` and `EKP.TransformUnscented`, the `ensemble_size` is
+determined by the `process` and `rng` is not used. These keyword arguments are
+needed when the `process` is not `EKP.Unscented` and `EKP.TransformUnscented`.
+"""
+function _construct_intial_unconstrained_ensemble(
+    process::Union{EKP.Unscented, EKP.TransformUnscented},
+    prior::PD.ParameterDistribution;
+    ensemble_size = 0,
+    rng = MersenneTwister(1234),
+)
+    ensemble_size > 0 &&
+        @info "$process automatically choose the ensemble size. Ignoring the argument $ensemble_size for the ensemble size"
+    return EKP.construct_initial_ensemble(prior, process, constrained = false)
+end
+
+function _construct_intial_unconstrained_ensemble(
+    process::EKP.Process,
+    prior::PD.ParameterDistribution;
+    ensemble_size = 0,
+    rng = MersenneTwister(1234),
+)
+    ensemble_size == 0 && error(
+        "Ensemble size is 0. Pass a positive value for ensemble_size as a keyword argument",
+    )
+    return EKP.construct_initial_ensemble(
+        rng,
+        prior,
+        N_ens,
+        constrained = false,
+    )
+
+end
+
+"""
     update_ensemble(output_dir::AbstractString, iteration, prior)
 
 Updates the EnsembleKalmanProcess object and saves the parameters for the next iteration.
