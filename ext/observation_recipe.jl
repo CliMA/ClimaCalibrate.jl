@@ -558,13 +558,24 @@ end
 For the `N`th iteration, get the metadata of the observation(s) being processed.
 """
 function ObservationRecipe.get_metadata_for_nth_iteration(obs_series, N)
+    minibatch_obs =
+        ObservationRecipe.get_observations_for_nth_iteration(obs_series, N)
+    metadata_vec = map(obs -> EKP.get_metadata(obs), minibatch_obs)
+    return vcat(metadata_vec...)
+end
+
+"""
+    ObservationRecipe.get_observations_for_nth_iteration(obs_series, N)
+
+For the `N`th iteration, get the observation(s) being processed.
+"""
+function ObservationRecipe.get_observations_for_nth_iteration(obs_series, N)
     num_epoches = EKP.get_length_epoch(obs_series)
     # EKP.get_minibatch fails with N > num_epoches, so we use mod1 to go back to
     # the first epoch which seems consistent with what EKP does
     minibatch_indices = EKP.get_minibatch(obs_series, mod1(N, num_epoches))
     minibatch_obs = EKP.get_observations(obs_series)[minibatch_indices]
-    metadata_vec = map(obs -> EKP.get_metadata(obs), minibatch_obs)
-    return vcat(metadata_vec...)
+    return minibatch_obs
 end
 
 """
