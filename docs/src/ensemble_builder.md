@@ -157,6 +157,10 @@ of the metadata. For example, the short names are checked between the
 - [`SequentialIndicesChecker`](@ref ClimaCalibrate.Checker.SequentialIndicesChecker):
   Check the indices of the dates of the simulation data corresponding to the
   dates of the metadata is sequential.
+- [`SignChecker`](@ref ClimaCalibrate.Checker.SignChecker):
+  Check that the proportion of positive values in the simulation data and
+  observational data are approximately equal (within a default threshold of
+  0.05).
 
 By default, `GEnsembleBuilder` uses the first five checkers to validate
 compatibility between . You can also provide additional checkers using the `checkers`

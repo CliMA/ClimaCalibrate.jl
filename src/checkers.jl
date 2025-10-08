@@ -77,13 +77,25 @@ corresponding to the dates of the metadata is sequential.
 struct SequentialIndicesChecker <: AbstractChecker end
 
 """
+    struct SignChecker{FT <: AbstractFloat} <: AbstractChecker
+
 A struct that checks that the proportion of positive values in the simulation
 data and observational data is roughly the same.
-"""
-struct SignChecker <: AbstractChecker end
 
+To change the default threshold of 0.05, you can pass a float to `SignChecker`.
+```julia
+import ClimaCalibrate
+sign_checker = ClimaCalibrate.Checker.SignChecker(0.01)
+```
 """
-    check(checker::AbstractChecker; verbose = false)
+@kwdef struct SignChecker{FT <: AbstractFloat} <: AbstractChecker
+    threshold::FT = 0.05
+    function SignChecker(threshold)
+        zero(threshold) <= threshold <= one(threshold) ?
+        new{typeof(threshold)}(threshold) :
+        error("Threshold ($threshold) should be between zero and one")
+    end
+end
 
 """
     check(checker::AbstractChecker,
