@@ -188,7 +188,8 @@ function Checker.check(
     ::NothingChecker,
     var,
     metadata;
-    verbose = false
+    data = nothing,
+    verbose = false,
 )
     verbose && @info "This is always true."
     return true

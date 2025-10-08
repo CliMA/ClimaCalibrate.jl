@@ -124,7 +124,7 @@ end
     EnsembleBuilder.fill_g_ens_col!(g_ens_builder::GEnsembleBuilder,
                                     col_idx,
                                     var::OutputVar;
-                                    checkers = (,)
+                                    checkers = (),
                                     verbose = false)
 
 Fill the `col_idx`th of the G ensemble matrix from the `OutputVar` `var` and
@@ -221,6 +221,8 @@ function _try_fill_g_ens_col_with_var!(
     verbose = false,
 )
     (; metadata, range, index) = metadata_info
+    (; obs_data) = g_ens_builder
+    data = view(obs_data, range)
 
     # Call checkers in g_ens_builder and user passed checkers
     _validate_var_against_metadata(
@@ -228,12 +230,14 @@ function _try_fill_g_ens_col_with_var!(
         var,
         metadata;
         verbose = verbose,
+        data,
     ) || return false
     _validate_var_against_metadata(
         checkers,
         var,
         metadata;
         verbose = verbose,
+        data,
     ) || return false
 
     match_dates_var = _match_dates(var, metadata)
@@ -253,7 +257,7 @@ end
         checkers,
         var::OutputVar,
         metadata::Metadata;
-        checkers = (),
+        data,
         verbose = false,
     )
 
@@ -264,10 +268,11 @@ function _validate_var_against_metadata(
     checkers,
     var::OutputVar,
     metadata::Metadata;
+    data,
     verbose = false,
 )
     return all(
-        Checker.check(checker, var, metadata; verbose = verbose) for
+        Checker.check(checker, var, metadata; data, verbose = verbose) for
         checker in checkers
     )
 end

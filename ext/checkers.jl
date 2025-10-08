@@ -13,6 +13,7 @@ import ClimaCalibrate.Checker
         ::ShortNameChecker,
         var::OutputVar,
         metadata::Metadata;
+        data = nothing,
         verbose = false,
     )
 
@@ -23,6 +24,7 @@ function Checker.check(
     ::ShortNameChecker,
     var::OutputVar,
     metadata::Metadata;
+    data = nothing,
     verbose = false,
 )
     # Do not need to check if the short name is there, since we already know that
@@ -41,6 +43,7 @@ end
         ::DimNameChecker,
         var::OutputVar,
         metadata::Metadata;
+        data = nothing,
         verbose = false,
     )
 
@@ -51,6 +54,7 @@ function Checker.check(
     ::DimNameChecker,
     var::OutputVar,
     metadata::Metadata;
+    data = nothing,
     verbose = false,
 )
     var_dim_names = ClimaAnalysis.conventional_dim_name.(keys(var.dims))
@@ -68,6 +72,7 @@ end
         ::DimUnitsChecker,
         var::OutputVar,
         metadata::Metadata;
+        data = nothing,
         verbose = false,
     )
 
@@ -79,6 +84,7 @@ function Checker.check(
     ::DimUnitsChecker,
     var::OutputVar,
     metadata::Metadata;
+    data = nothing,
     verbose = false,
 )
     for var_dim_name in keys(var.dims)
@@ -107,6 +113,7 @@ end
         ::UnitsChecker,
         var::OutputVar,
         metadata::Metadata;
+        data = nothing,
         verbose = false,
     )
 
@@ -116,6 +123,7 @@ function Checker.check(
     ::UnitsChecker,
     var::OutputVar,
     metadata::Metadata;
+    data = nothing,
     verbose = false,
 )
     var_units = ClimaAnalysis.units(var)
@@ -135,6 +143,7 @@ end
         ::DimValuesMatch,
         var::OutputVar,
         metadata::Metadata;
+        data = nothing,
         verbose = false,
     )
 
@@ -150,6 +159,7 @@ function Checker.check(
     ::DimValuesChecker,
     var::OutputVar,
     metadata::Metadata;
+    data = nothing,
     verbose = false,
 )
     for var_dim_name in keys(var.dims)
@@ -188,6 +198,7 @@ end
         ::SequentialIndicesChecker,
         var::OutputVar,
         metadata::Metadata;
+        data = nothing,
         verbose = false,
     )
 
@@ -208,6 +219,7 @@ function Checker.check(
     ::SequentialIndicesChecker,
     var::OutputVar,
     metadata::Metadata;
+    data = nothing,
     verbose = false,
 )
     obs_dates = ClimaAnalysis.dates(metadata)
