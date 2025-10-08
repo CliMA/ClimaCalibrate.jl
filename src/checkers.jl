@@ -17,6 +17,7 @@ import ClimaCalibrate.Checker
 Checker.check(::YourChecker,
               var::OutputVar,
               metadata::Metadata;
+              data = nothing,
               verbose = false)
 ```
 
@@ -74,6 +75,12 @@ A struct that checks that the indices of the dates of the simulation data
 corresponding to the dates of the metadata is sequential.
 """
 struct SequentialIndicesChecker <: AbstractChecker end
+
+"""
+A struct that checks that the proportion of positive values in the simulation
+data and observational data is roughly the same.
+"""
+struct SignChecker <: AbstractChecker end
 
 """
     check(checker::AbstractChecker; verbose = false)
