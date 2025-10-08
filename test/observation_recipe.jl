@@ -1270,6 +1270,9 @@ end
         ext._get_minibatch_indices_for_nth_iteration(obs_series, 2)
     metadata_indices3 =
         ext._get_minibatch_indices_for_nth_iteration(obs_series, 3)
+    obs1 = ObservationRecipe.get_observations_for_nth_iteration(obs_series, 1)
+    obs2 = ObservationRecipe.get_observations_for_nth_iteration(obs_series, 2)
+    obs3 = ObservationRecipe.get_observations_for_nth_iteration(obs_series, 3)
 
     @test length(metadata1) == 3
     @test metadata1[1].attributes["short_name"] == "time"
@@ -1300,6 +1303,10 @@ end
     @test metadata_indices1[1] == 1:4
     @test metadata_indices1[2] == 5:16
     @test metadata_indices1[3] == 17:20
+
+    @test obs1 == [obs_series.observations[1], obs_series.observations[2]]
+    @test obs2 == [obs_series.observations[3], obs_series.observations[4]]
+    @test obs3 == [obs_series.observations[1], obs_series.observations[2]]
 end
 
 @testset "Reconstruct mean g ens final" begin
