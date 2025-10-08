@@ -36,6 +36,9 @@ struct GEnsembleBuilder{
     """G ensemble matrix that is returned by the observation map"""
     g_ens::Matrix{FT}
 
+    """Observational data for the current iteration"""
+    obs_data::Vector{FT}
+
     """Dictionary which map short name to a vector of metadata associated with
        the short name"""
     metadata_by_short_name::Dict{String, Vector{METADATAINFO}}
@@ -65,6 +68,12 @@ function EnsembleBuilder.GEnsembleBuilder(
     obs_series = EKP.get_observation_series(ekp)
     N = EKP.get_N_iterations(ekp) + 1
     metadatas = ObservationRecipe.get_metadata_for_nth_iteration(obs_series, N)
+
+    # It is a little wasteful to allocate the data here, but it is easier to
+    # index if it is a single vector
+    obs = ObservationRecipe.get_observations_for_nth_iteration(obs_series, N)
+    stacked_obs = mapreduce(EKP.get_obs, vcat, obs)
+
     eltype(metadatas) <: ClimaAnalysis.Var.Metadata || error(
         "GEnsembleBuilder is only compatible with metadata from ClimaAnalysis",
     )
@@ -97,6 +106,7 @@ function EnsembleBuilder.GEnsembleBuilder(
 
     return GEnsembleBuilder(
         G_ens,
+        stacked_obs,
         short_name_to_metadata_map,
         all_metadata_vec,
         completed,
