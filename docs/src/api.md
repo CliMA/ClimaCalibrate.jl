@@ -66,6 +66,7 @@ ClimaCalibrate.parameter_path
 ClimaCalibrate.minibatcher_over_samples
 ClimaCalibrate.observation_series_from_samples
 ClimaCalibrate.load_latest_ekp
+ClimaCalibrate.run_initial_ensemble
 ```
 
 ## Observation Recipe Interface
