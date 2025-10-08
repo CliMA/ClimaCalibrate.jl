@@ -5,7 +5,8 @@ import ClimaCalibrate.Checker:
     DimUnitsChecker,
     UnitsChecker,
     DimValuesChecker,
-    SequentialIndicesChecker
+    SequentialIndicesChecker,
+    SignChecker
 import ClimaCalibrate.Checker
 
 """
@@ -236,4 +237,38 @@ function Checker.check(
         end
     end
     return true
+end
+
+"""
+    Checker.check(
+        ::SignChecker,
+        var::OutputVar,
+        metadata::Metadata;
+        data,
+        verbose = false,
+    )
+
+Return `true` if the absolute difference of the proportion of positive values in
+`var.data` and the proportion of positive values in `data` is less than the threshold
+defined in `SignChecker`, `false` otherwise.
+"""
+function Checker.check(
+    checker::SignChecker,
+    var::OutputVar,
+    metadata::Metadata;
+    data,
+    verbose = false,
+)
+    obs_pos_proportion = mean(data .> 0)
+
+    # This is inaccurate, because not all the values in var.data will end up in
+    # the G ensemble matrix. See _match_dates for one case. However, the mean
+    # should not change that much with additional times.
+    sim_pos_proportion = nanmean(var.data .> 0)
+
+    same_sign = abs(obs_pos_proportion - sim_pos_proportion) < checker.threshold
+    !same_sign &&
+        verbose &&
+        @info "Proportion of positive values in the simulation data ($sim_pos_proportion) is not the same as the proportion of positive values in the observational data ($obs_pos_proportion)"
+    return same_sign
 end
