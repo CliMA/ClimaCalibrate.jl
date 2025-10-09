@@ -81,6 +81,7 @@ ClimaCalibrate.ObservationRecipe.SVDplusDCovariance(sample_dates)
 ClimaCalibrate.ObservationRecipe.covariance
 ClimaCalibrate.ObservationRecipe.observation
 ClimaCalibrate.ObservationRecipe.short_names
+ClimaCalibrate.ObservationRecipe.get_observations_for_nth_iteration
 ClimaCalibrate.ObservationRecipe.get_metadata_for_nth_iteration
 ClimaCalibrate.ObservationRecipe.reconstruct_g_mean_final
 ClimaCalibrate.ObservationRecipe.reconstruct_diag_cov
@@ -111,5 +112,6 @@ ClimaCalibrate.Checker.DimUnitsChecker
 ClimaCalibrate.Checker.UnitsChecker
 ClimaCalibrate.Checker.DimValuesChecker
 ClimaCalibrate.Checker.SequentialIndicesChecker
+ClimaCalibrate.Checker.SignChecker
 ClimaCalibrate.Checker.check
 ```

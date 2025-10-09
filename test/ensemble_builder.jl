@@ -35,6 +35,7 @@ import ClimaAnalysis.Template:
 
 @testset "Is compatible with metadata" begin
     make_metadata(var) = ClimaAnalysis.flatten(var).metadata
+    make_flat_data(var) = ClimaAnalysis.flatten(var).data
     lat = [-90.0, 0.0, 90.0]
     var =
         TemplateVar() |>
@@ -183,6 +184,31 @@ import ClimaAnalysis.Template:
         sequential_indices_checker,
         date_var1,
         make_metadata(date_var4),
+        verbose = true,
+    )
+
+    # Check sign of data
+    sign_checker = Checker.SignChecker()
+    neg_var = ClimaAnalysis.remake(var, data = -var.data)
+
+    @test Checker.check(
+        sign_checker,
+        var,
+        make_metadata(var),
+        data = make_flat_data(var),
+    )
+    @test !Checker.check(
+        sign_checker,
+        var,
+        make_metadata(neg_var),
+        data = make_flat_data(neg_var),
+    )
+
+    @test_logs (:info, r"Proportion of positive values in the simulation data ") Checker.check(
+        sign_checker,
+        var,
+        make_metadata(neg_var),
+        data = make_flat_data(neg_var),
         verbose = true,
     )
 end

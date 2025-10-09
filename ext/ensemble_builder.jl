@@ -36,6 +36,9 @@ struct GEnsembleBuilder{
     """G ensemble matrix that is returned by the observation map"""
     g_ens::Matrix{FT}
 
+    """Observational data for the current iteration"""
+    obs_data::Vector{FT}
+
     """Dictionary which map short name to a vector of metadata associated with
        the short name"""
     metadata_by_short_name::Dict{String, Vector{METADATAINFO}}
@@ -65,6 +68,12 @@ function EnsembleBuilder.GEnsembleBuilder(
     obs_series = EKP.get_observation_series(ekp)
     N = EKP.get_N_iterations(ekp) + 1
     metadatas = ObservationRecipe.get_metadata_for_nth_iteration(obs_series, N)
+
+    # It is a little wasteful to allocate the data here, but it is easier to
+    # index if it is a single vector
+    obs = ObservationRecipe.get_observations_for_nth_iteration(obs_series, N)
+    stacked_obs = mapreduce(EKP.get_obs, vcat, obs)
+
     eltype(metadatas) <: ClimaAnalysis.Var.Metadata || error(
         "GEnsembleBuilder is only compatible with metadata from ClimaAnalysis",
     )
@@ -97,6 +106,7 @@ function EnsembleBuilder.GEnsembleBuilder(
 
     return GEnsembleBuilder(
         G_ens,
+        stacked_obs,
         short_name_to_metadata_map,
         all_metadata_vec,
         completed,
@@ -211,6 +221,8 @@ function _try_fill_g_ens_col_with_var!(
     verbose = false,
 )
     (; metadata, range, index) = metadata_info
+    (; obs_data) = g_ens_builder
+    data = view(obs_data, range)
 
     # Call checkers in g_ens_builder and user passed checkers
     _validate_var_against_metadata(
@@ -218,12 +230,14 @@ function _try_fill_g_ens_col_with_var!(
         var,
         metadata;
         verbose = verbose,
+        data = data,
     ) || return false
     _validate_var_against_metadata(
         checkers,
         var,
         metadata;
         verbose = verbose,
+        data = data,
     ) || return false
 
     match_dates_var = _match_dates(var, metadata)
@@ -243,7 +257,7 @@ end
         checkers,
         var::OutputVar,
         metadata::Metadata;
-        checkers = (),
+        data = data,
         verbose = false,
     )
 
@@ -254,11 +268,12 @@ function _validate_var_against_metadata(
     checkers,
     var::OutputVar,
     metadata::Metadata;
+    data = nothing,
     verbose = false,
 )
     return all(
-        Checker.check(checker, var, metadata; verbose = verbose) for
-        checker in checkers
+        Checker.check(checker, var, metadata; verbose = verbose, data = data)
+        for checker in checkers
     )
 end
 

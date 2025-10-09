@@ -5,7 +5,8 @@ import ClimaCalibrate.Checker:
     DimUnitsChecker,
     UnitsChecker,
     DimValuesChecker,
-    SequentialIndicesChecker
+    SequentialIndicesChecker,
+    SignChecker
 import ClimaCalibrate.Checker
 
 """
@@ -13,6 +14,7 @@ import ClimaCalibrate.Checker
         ::ShortNameChecker,
         var::OutputVar,
         metadata::Metadata;
+        data = nothing,
         verbose = false,
     )
 
@@ -23,6 +25,7 @@ function Checker.check(
     ::ShortNameChecker,
     var::OutputVar,
     metadata::Metadata;
+    data = nothing,
     verbose = false,
 )
     # Do not need to check if the short name is there, since we already know that
@@ -41,6 +44,7 @@ end
         ::DimNameChecker,
         var::OutputVar,
         metadata::Metadata;
+        data = nothing,
         verbose = false,
     )
 
@@ -51,6 +55,7 @@ function Checker.check(
     ::DimNameChecker,
     var::OutputVar,
     metadata::Metadata;
+    data = nothing,
     verbose = false,
 )
     var_dim_names = ClimaAnalysis.conventional_dim_name.(keys(var.dims))
@@ -68,6 +73,7 @@ end
         ::DimUnitsChecker,
         var::OutputVar,
         metadata::Metadata;
+        data = nothing,
         verbose = false,
     )
 
@@ -79,6 +85,7 @@ function Checker.check(
     ::DimUnitsChecker,
     var::OutputVar,
     metadata::Metadata;
+    data = nothing,
     verbose = false,
 )
     for var_dim_name in keys(var.dims)
@@ -107,6 +114,7 @@ end
         ::UnitsChecker,
         var::OutputVar,
         metadata::Metadata;
+        data = nothing,
         verbose = false,
     )
 
@@ -116,6 +124,7 @@ function Checker.check(
     ::UnitsChecker,
     var::OutputVar,
     metadata::Metadata;
+    data = nothing,
     verbose = false,
 )
     var_units = ClimaAnalysis.units(var)
@@ -135,6 +144,7 @@ end
         ::DimValuesMatch,
         var::OutputVar,
         metadata::Metadata;
+        data = nothing,
         verbose = false,
     )
 
@@ -150,6 +160,7 @@ function Checker.check(
     ::DimValuesChecker,
     var::OutputVar,
     metadata::Metadata;
+    data = nothing,
     verbose = false,
 )
     for var_dim_name in keys(var.dims)
@@ -188,6 +199,7 @@ end
         ::SequentialIndicesChecker,
         var::OutputVar,
         metadata::Metadata;
+        data = nothing,
         verbose = false,
     )
 
@@ -208,6 +220,7 @@ function Checker.check(
     ::SequentialIndicesChecker,
     var::OutputVar,
     metadata::Metadata;
+    data = nothing,
     verbose = false,
 )
     obs_dates = ClimaAnalysis.dates(metadata)
@@ -224,4 +237,43 @@ function Checker.check(
         end
     end
     return true
+end
+
+"""
+    Checker.check(
+        ::SignChecker,
+        var::OutputVar,
+        metadata::Metadata;
+        data = nothing,
+        verbose = false,
+    )
+
+Return `true` if the absolute difference of the proportion of positive values in
+`var.data` and the proportion of positive values in `data` is less than 0.05,
+`false` otherwise.
+"""
+function Checker.check(
+    ::SignChecker,
+    var::OutputVar,
+    metadata::Metadata;
+    data = nothing,
+    verbose = false,
+)
+    if isnothing(data)
+        @info "nothing is provided for data, skipping check"
+        return true
+    end
+
+    obs_pos_proportion = mean(data .> 0)
+
+    # This is inaccurate, because not all the values in var.data will end up in
+    # the G ensemble matrix. See _match_dates for one case. However, the mean
+    # should not change that much with additional times.
+    sim_pos_proportion = nanmean(var.data .> 0)
+
+    same_sign = abs(obs_pos_proportion - sim_pos_proportion) < 0.05
+    !same_sign &&
+        verbose &&
+        @info "Proportion of positive values in the simulation data ($sim_pos_proportion) is not the same as the proportion of positive values in the observational data ($obs_pos_proportion)"
+    return same_sign
 end
