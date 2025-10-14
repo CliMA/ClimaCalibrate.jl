@@ -83,6 +83,33 @@ ClimaCalibrate.ObservationRecipe.observation
 ClimaCalibrate.ObservationRecipe.short_names
 ClimaCalibrate.ObservationRecipe.get_metadata_for_nth_iteration
 ClimaCalibrate.ObservationRecipe.reconstruct_g_mean_final
+ClimaCalibrate.ObservationRecipe.reconstruct_diag_cov
 ClimaCalibrate.ObservationRecipe.seasonally_aligned_yearly_sample_date_ranges
 ClimaCalibrate.ObservationRecipe.change_data_type
+```
+
+## Ensemble Builder Interface
+
+```@docs
+ClimaAnalysisExt.GEnsembleBuilder
+ClimaCalibrate.EnsembleBuilder.GEnsembleBuilder
+ClimaCalibrate.EnsembleBuilder.fill_g_ens_col!
+ClimaCalibrate.EnsembleBuilder.is_complete
+ClimaCalibrate.EnsembleBuilder.get_g_ensemble
+ClimaCalibrate.EnsembleBuilder.ranges_by_short_name
+ClimaCalibrate.EnsembleBuilder.metadata_by_short_name
+ClimaCalibrate.EnsembleBuilder.missing_short_names
+```
+
+## Checker Interface
+
+```@docs
+ClimaCalibrate.Checker.AbstractChecker
+ClimaCalibrate.Checker.ShortNameChecker
+ClimaCalibrate.Checker.DimNameChecker
+ClimaCalibrate.Checker.DimUnitsChecker
+ClimaCalibrate.Checker.UnitsChecker
+ClimaCalibrate.Checker.DimValuesChecker
+ClimaCalibrate.Checker.SequentialIndicesChecker
+ClimaCalibrate.Checker.check
 ```

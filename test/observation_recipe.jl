@@ -598,6 +598,59 @@ end
     )
 end
 
+@testset "Latitude weights to matrix of samples" begin
+    lat = [-90.0, -30.0, 30.0, 90.0]
+    lon = [-60.0, -30.0, 0.0, 30.0, 60.0]
+    time =
+        ClimaAnalysis.Utils.date_to_time.(
+            Dates.DateTime(2007, 12),
+            [Dates.DateTime(i, 12, 1) for i in 2007:2009],
+        )
+    var =
+        TemplateVar() |>
+        add_dim("time", time, units = "s") |>
+        add_dim("lon", lon, units = "degrees") |>
+        add_dim("lat", lat, units = "degrees") |>
+        add_attribs(
+            short_name = "hi",
+            long_name = "hello",
+            start_date = "2007-12-1",
+            blah = "blah2",
+        ) |>
+        one_to_n_data(collected = true) |>
+        initialize
+
+    sample_date_ranges = [
+        (Dates.DateTime(i, 12, 1), Dates.DateTime(i, 12, 1)) for i in 2007:2009
+    ]
+
+    stacked_samples = ext._stacked_samples((var,), sample_date_ranges)
+    stacked_sample_matrix_no_lat_weights = hcat(stacked_samples...)
+    stacked_sample_matrix_with_lat_weights =
+        copy(stacked_sample_matrix_no_lat_weights)
+
+    ext._apply_lat_weights_to_samples!(
+        stacked_sample_matrix_with_lat_weights,
+        (var,),
+        Dates.DateTime(2007, 12, 1),
+        Dates.DateTime(2007, 12, 1),
+        min_cosd_lat = 0.15,
+    )
+    time_slice = ClimaAnalysis.slice(var, time = Dates.DateTime(2007, 12, 1))
+    lat_weights_per_column =
+        sqrt.(
+            ClimaAnalysis.flatten(
+                ext._lat_weights_var(time_slice, min_cosd_lat = 0.15),
+            ).data,
+        )
+    lat_weights_per_column =
+        reshape(lat_weights_per_column, length(lat_weights_per_column), 1)
+    @test isequal(
+        stacked_sample_matrix_with_lat_weights,
+        stacked_sample_matrix_no_lat_weights .* lat_weights_per_column,
+    )
+end
+
 @testset "SVDplusDCovariance" begin
     lat = [-90.0, -30.0, 30.0, 90.0]
     lon = [-60.0, -30.0, 0.0, 30.0, 60.0]
@@ -689,6 +742,43 @@ end
         ) .^ 2,
     )
 
+    # Test latitude weights
+    covar_estimator_lat_weights = ObservationRecipe.SVDplusDCovariance(
+        sample_date_ranges;
+        use_latitude_weights = true,
+        min_cosd_lat = 0.2,
+    )
+    covar_estimator_no_lat_weights = ObservationRecipe.SVDplusDCovariance(
+        sample_date_ranges;
+        use_latitude_weights = false,
+    )
+    svd_plus_d_covar_with_lat_weights = ObservationRecipe.covariance(
+        covar_estimator_lat_weights,
+        var,
+        Dates.DateTime(2007, 12),
+        Dates.DateTime(2008, 9),
+    )
+    svd_plus_d_covar_with_no_lat_weights = ObservationRecipe.covariance(
+        covar_estimator_no_lat_weights,
+        var,
+        Dates.DateTime(2007, 12),
+        Dates.DateTime(2008, 9),
+    )
+    # Note: Computing the SVD part of the covariance matrix is random, so it is
+    # difficult to test. As such, we check that the result is different when
+    # latitude weights is not applied
+    function reconstruct(A)
+        U, S, V = A
+        return U * Diagonal(S) * V'
+    end
+    @test any(
+        .!isapprox.(
+            reconstruct(svd_plus_d_covar_with_lat_weights.svd_cov),
+            reconstruct(svd_plus_d_covar_with_no_lat_weights.svd_cov),
+        ),
+    )
+
+
     # Test float type
     covar_estimator = ObservationRecipe.SVDplusDCovariance(
         sample_date_ranges,
@@ -703,13 +793,14 @@ end
         Dates.DateTime(2008, 9),
     )
 
-    # See this issue for the broken tests:
-    # https://github.com/CliMA/EnsembleKalmanProcesses.jl/issues/504
-    @test_broken eltype(svd_plus_d_covar.svd_cov.S) == Float32
-    @test_broken eltype(svd_plus_d_covar.svd_cov.U) == Float32
-    @test_broken eltype(svd_plus_d_covar.svd_cov.V) == Float32
-    @test_broken eltype(svd_plus_d_covar.svd_cov.Vt) == Float32
-    @test eltype(svd_plus_d_covar.diag_cov.diag) == Float32
+    if pkgversion(EnsembleKalmanProcesses) >= v"2.5.0"
+        # See https://github.com/CliMA/EnsembleKalmanProcesses.jl/issues/504
+        @test eltype(svd_plus_d_covar.svd_cov.S) == Float32
+        @test eltype(svd_plus_d_covar.svd_cov.U) == Float32
+        @test eltype(svd_plus_d_covar.svd_cov.V) == Float32
+        @test eltype(svd_plus_d_covar.svd_cov.Vt) == Float32
+        @test eltype(svd_plus_d_covar.diag_cov.diag) == Float32
+    end
 
     # Error handling
     time =
@@ -1109,91 +1200,106 @@ end
     end
 end
 
-@testset "Get metadata from nth iteration" begin
-    if pkgversion(EnsembleKalmanProcesses) > v"2.4.3"
-        time =
-            ClimaAnalysis.Utils.date_to_time.(
-                Dates.DateTime(2007, 12),
-                [Dates.DateTime(2007, 12) + Dates.Month(3 * i) for i in 0:47],
-            )
-        time_var =
-            TemplateVar() |>
-            add_dim("time", time, units = "s") |>
-            add_attribs(
-                short_name = "time",
-                start_date = "2007-12-1",
-                blah = "blah2",
-            ) |>
-            one_to_n_data() |>
-            initialize
-
-        lon = [-45.0, 0.0, 45.0]
-        lon_var =
-            TemplateVar() |>
-            add_dim("lon", lon, units = "degrees") |>
-            add_dim("time", time, units = "s") |>
-            add_attribs(
-                short_name = "lon",
-                start_date = "2007-12-1",
-                super = "fun",
-            ) |>
-            one_to_n_data() |>
-            initialize
-
-        covar_estimator = ObservationRecipe.SeasonalDiagonalCovariance()
-        obs1 = ObservationRecipe.observation(
-            covar_estimator,
-            (time_var, lon_var),
+@testset "Get information about metadata from nth iteration" begin
+    pkgversion(EnsembleKalmanProcesses) > v"2.4.3" || return
+    time =
+        ClimaAnalysis.Utils.date_to_time.(
             Dates.DateTime(2007, 12),
-            Dates.DateTime(2008, 9),
+            [Dates.DateTime(2007, 12) + Dates.Month(3 * i) for i in 0:47],
         )
-        obs2 = ObservationRecipe.observation(
-            covar_estimator,
-            time_var,
-            Dates.DateTime(2007, 12),
-            Dates.DateTime(2008, 9),
-        )
-        obs3 = ObservationRecipe.observation(
-            covar_estimator,
-            lon_var,
-            Dates.DateTime(2007, 12),
-            Dates.DateTime(2008, 9),
-        )
+    time_var =
+        TemplateVar() |>
+        add_dim("time", time, units = "s") |>
+        add_attribs(
+            short_name = "time",
+            start_date = "2007-12-1",
+            blah = "blah2",
+        ) |>
+        one_to_n_data() |>
+        initialize
 
-        # Test with fixed minibatcher with no randomness
-        obs_series = EKP.ObservationSeries(
-            Dict(
-                "observations" => [obs1, obs2, obs3, obs1],
-                "names" => ["1", "2", "3", "4"],
-                "minibatcher" => ClimaCalibrate.minibatcher_over_samples(
-                    [1, 2, 3, 4],
-                    2,
-                ),
-            ),
-        )
+    lon = [-45.0, 0.0, 45.0]
+    lon_var =
+        TemplateVar() |>
+        add_dim("lon", lon, units = "degrees") |>
+        add_dim("time", time, units = "s") |>
+        add_attribs(
+            short_name = "lon",
+            start_date = "2007-12-1",
+            super = "fun",
+        ) |>
+        one_to_n_data() |>
+        initialize
 
-        metadata1 =
-            ObservationRecipe.get_metadata_for_nth_iteration(obs_series, 1)
-        metadata2 =
-            ObservationRecipe.get_metadata_for_nth_iteration(obs_series, 2)
-        metadata3 =
-            ObservationRecipe.get_metadata_for_nth_iteration(obs_series, 3)
+    covar_estimator = ObservationRecipe.SeasonalDiagonalCovariance()
+    obs1 = ObservationRecipe.observation(
+        covar_estimator,
+        (time_var, lon_var),
+        Dates.DateTime(2007, 12),
+        Dates.DateTime(2008, 9),
+    )
+    obs2 = ObservationRecipe.observation(
+        covar_estimator,
+        time_var,
+        Dates.DateTime(2007, 12),
+        Dates.DateTime(2008, 9),
+    )
+    obs3 = ObservationRecipe.observation(
+        covar_estimator,
+        lon_var,
+        Dates.DateTime(2007, 12),
+        Dates.DateTime(2008, 9),
+    )
 
-        @test length(metadata1) == 3
-        @test metadata1[1].attributes["short_name"] == "time"
-        @test metadata1[2].attributes["short_name"] == "lon"
-        @test metadata1[3].attributes["short_name"] == "time"
+    # Test with fixed minibatcher with no randomness
+    obs_series = EKP.ObservationSeries(
+        Dict(
+            "observations" => [obs1, obs2, obs3, obs1],
+            "names" => ["1", "2", "3", "4"],
+            "minibatcher" =>
+                ClimaCalibrate.minibatcher_over_samples([1, 2, 3, 4], 2),
+        ),
+    )
 
-        @test length(metadata2) == 3
-        @test metadata2[1].attributes["short_name"] == "lon"
-        @test metadata2[2].attributes["short_name"] == "time"
-        @test metadata2[3].attributes["short_name"] == "lon"
+    metadata1 = ObservationRecipe.get_metadata_for_nth_iteration(obs_series, 1)
+    metadata2 = ObservationRecipe.get_metadata_for_nth_iteration(obs_series, 2)
+    metadata3 = ObservationRecipe.get_metadata_for_nth_iteration(obs_series, 3)
+    metadata_indices1 =
+        ext._get_minibatch_indices_for_nth_iteration(obs_series, 1)
+    metadata_indices2 =
+        ext._get_minibatch_indices_for_nth_iteration(obs_series, 2)
+    metadata_indices3 =
+        ext._get_minibatch_indices_for_nth_iteration(obs_series, 3)
 
-        @test length(metadata3) == 3
-        @test metadata3[1].attributes["short_name"] == "time"
-        @test metadata3[2].attributes["short_name"] == "lon"
-        @test metadata3[3].attributes["short_name"] == "time"
-    end
+    @test length(metadata1) == 3
+    @test metadata1[1].attributes["short_name"] == "time"
+    @test metadata1[2].attributes["short_name"] == "lon"
+    @test metadata1[3].attributes["short_name"] == "time"
+
+    @test length(metadata_indices1) == 3
+    @test metadata_indices1[1] == 1:4
+    @test metadata_indices1[2] == 5:16
+    @test metadata_indices1[3] == 17:20
+
+    @test length(metadata2) == 3
+    @test metadata2[1].attributes["short_name"] == "lon"
+    @test metadata2[2].attributes["short_name"] == "time"
+    @test metadata2[3].attributes["short_name"] == "lon"
+
+    @test length(metadata_indices1) == 3
+    @test metadata_indices2[1] == 1:12
+    @test metadata_indices2[2] == 13:16
+    @test metadata_indices2[3] == 17:28
+
+    @test length(metadata3) == 3
+    @test metadata3[1].attributes["short_name"] == "time"
+    @test metadata3[2].attributes["short_name"] == "lon"
+    @test metadata3[3].attributes["short_name"] == "time"
+
+    @test length(metadata_indices1) == 3
+    @test metadata_indices1[1] == 1:4
+    @test metadata_indices1[2] == 5:16
+    @test metadata_indices1[3] == 17:20
 end
 
 @testset "Reconstruct mean g ens final" begin
@@ -1416,4 +1522,97 @@ end
         @test vars[3].data == vec(mean(G_ens[17:20, :], dims = 2))
         @test vars[4].data == reshape(mean(G_ens[21:end, :], dims = 2), 3, 4)
     end
+end
+
+@testset "Reconstruct diagonal of covariance" begin
+    time =
+        ClimaAnalysis.Utils.date_to_time.(
+            Dates.DateTime(2007, 12),
+            [Dates.DateTime(2007, 12) + Dates.Month(3 * i) for i in 0:47],
+        )
+    time_var =
+        TemplateVar() |>
+        add_dim("time", time, units = "s") |>
+        add_attribs(short_name = "time", start_date = "2007-12-1") |>
+        one_to_n_data() |>
+        initialize
+
+    lon = [-45.0, 0.0, 45.0]
+    lon_var =
+        TemplateVar() |>
+        add_dim("lon", lon, units = "degrees") |>
+        add_dim("time", time, units = "s") |>
+        add_attribs(short_name = "lon", start_date = "2007-12-1") |>
+        one_to_n_data() |>
+        initialize
+
+    covar_estimator = ObservationRecipe.SeasonalDiagonalCovariance()
+    obs1 = ObservationRecipe.observation(
+        covar_estimator,
+        (time_var, lon_var),
+        Dates.DateTime(2007, 12),
+        Dates.DateTime(2009, 9),
+    )
+    obs2 = ObservationRecipe.observation(
+        covar_estimator,
+        time_var,
+        Dates.DateTime(2007, 12),
+        Dates.DateTime(2009, 9),
+    )
+    obs3 = ObservationRecipe.observation(
+        covar_estimator,
+        permutedims(lon_var, ("time", "lon")),
+        Dates.DateTime(2007, 12),
+        Dates.DateTime(2009, 9),
+    )
+
+    covs1 = ObservationRecipe.reconstruct_diag_cov(obs1)
+    covs2 = ObservationRecipe.reconstruct_diag_cov(obs2)
+    covs3 = ObservationRecipe.reconstruct_diag_cov(obs3)
+
+    @test length(covs1) == 2
+    @test length(covs2) == 1
+    @test length(covs3) == 1
+
+    time_var_from_covs1 = covs1[1]
+    lat_var_from_covs2 = covs1[2]
+    time_var_from_covs2 = covs2[1]
+    lat_var_from_covs3 = permutedims(covs3[1], ("lon", "time"))
+
+    @test isequal(time_var_from_covs1.data, time_var_from_covs2.data)
+    @test isequal(lat_var_from_covs2.data, lat_var_from_covs3.data)
+
+    var3d =
+        TemplateVar() |>
+        add_dim("time", time, units = "s") |>
+        add_dim("lat", [-45.0, 10.0, 42.0], units = "degrees") |>
+        add_dim("lon", [0.0, 1.0], units = "degrees") |>
+        add_attribs(short_name = "time", start_date = "2007-12-1") |>
+        ones_data() |>
+        initialize
+
+    covar_estimator = ObservationRecipe.ScalarCovariance(
+        scalar = 5.0,
+        use_latitude_weights = true,
+        min_cosd_lat = 0.01,
+    )
+    obs4 = ObservationRecipe.observation(
+        covar_estimator,
+        var3d,
+        Dates.DateTime(2007, 12),
+        Dates.DateTime(2007, 12),
+    )
+    covs4 = ObservationRecipe.reconstruct_diag_cov(obs4)
+    var_from_covs4 = covs4[1]
+    # The second index is the latitude dimension and with ScalarCovariance with
+    # latitude weights, the weights should all be the same along a particular
+    # latitude
+    for i in 1:3
+        @test allequal(var_from_covs4.data[:, i, :])
+    end
+
+    # Test that none of them are equal to any of the other ones
+    @test !isequal(var_from_covs4.data[:, 1, :], var_from_covs4.data[:, 2, :])
+    @test !isequal(var_from_covs4.data[:, 2, :], var_from_covs4.data[:, 3, :])
+    @test !isequal(var_from_covs4.data[:, 1, :], var_from_covs4.data[:, 3, :])
 end

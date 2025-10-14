@@ -1,7 +1,7 @@
 # ObservationRecipe
 
 !!! warning
-    To enable this extension, use `using ClimaAnalysis` or `import
+    To enable this module, use `using ClimaAnalysis` or `import
     ClimaAnalysis`.
 
 When handling weather and climate data, it can be tedious and error-prone when
@@ -15,12 +15,14 @@ All functions assume that any data preprocessing is done with `ClimaAnalysis`.
 
 ### Covariance Estimators
 
-There are currently two covariance estimators, `SeasonalDiagonalCovariance` and
-`SVDplusDCovariance`, which are subtypes of `AbstractCovarianceEstimator`.
-`SeasonalDiagonalCovariance` approximates the observation noise covariance as a
-diagonal of variances across all the seasons for each observation, neglecting
-correlations between points. `SVDplusDCovariance` additionally approximates the
-correlations between points from, often limited, time series observations.
+There are currently two covariance estimators, `ScalarCovariance`,
+`SeasonalDiagonalCovariance`, and `SVDplusDCovariance`, which are subtypes of
+`AbstractCovarianceEstimator`. `ScalarCovariance` approximates the observation
+noise covariance as a scalar diagonal matrix. `SeasonalDiagonalCovariance`
+approximates the observation noise covariance as a diagonal of variances across
+all the seasons for each observation, neglecting correlations between points.
+`SVDplusDCovariance` additionally approximates the correlations between points
+from, often limited, time series observations.
 
 ### Necessary data preprocessing
 
@@ -83,8 +85,8 @@ end_date = sample_date_ranges[1][2]
 obs = ObservationRecipe.observation(
     covar_estimator,
     vars,
-    start_date = start_date,
-    end_date = end_date,
+    start_date,
+    end_date,
 )
 ```
 
@@ -93,7 +95,6 @@ obs = ObservationRecipe.observation(
 !!! note
     Metadata in `EKP.observation` is only added with versions of
     EnsembleKalmanProcesses later than v2.4.2.
-"""
 
 When creating an observation with [`ObservationRecipe.observation`](@ref
 ClimaCalibrate.ObservationRecipe.observation), metadata is extracted from the

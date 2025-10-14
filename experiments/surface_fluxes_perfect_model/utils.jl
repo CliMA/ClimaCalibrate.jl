@@ -111,7 +111,11 @@ function convergence_plot(
             xticks = 0:50,
             title = "Error for $param_name",
         )
-        Makie.lines!(ax, 0.0:(length(eki.error) - 1), eki.error)
+        Makie.lines!(
+            ax,
+            0.0:(length(EKP.get_error(eki)) - 1),
+            EKP.get_error(eki),
+        )
 
         ax = Makie.Axis(
             f[1, 2],

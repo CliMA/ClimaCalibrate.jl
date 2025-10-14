@@ -346,8 +346,9 @@ function observation_map_and_update!(ekp, output_dir, iteration, prior)
     terminate = update_ensemble!(ekp, g_ensemble, output_dir, iteration, prior)
     try
         analyze_iteration(ekp, g_ensemble, prior, output_dir, iteration)
-    catch e
-        @error "Error during `analyze_iteration`:" exception = catch_backtrace()
+    catch ret_code
+        @error "`analyze_iteration` crashed. See stacktrace" exception =
+            (ret_code, catch_backtrace())
     end
     return terminate
 end
@@ -424,4 +425,19 @@ function observation_series_from_samples(
     minibatcher = minibatcher_over_samples(samples, batch_size)
     names = isnothing(names) ? string.(1:length(samples)) : names
     return EKP.ObservationSeries(samples, minibatcher, names)
+end
+
+"""
+    g_ens_matrix(eki::EKP.EnsembleKalmanProcess{FT}) where {FT <: AbstractFloat}
+
+Construct an uninitialized G ensemble matrix of type `FT` for the current
+iteration.
+"""
+function g_ens_matrix(
+    eki::EKP.EnsembleKalmanProcess{FT},
+) where {FT <: AbstractFloat}
+    obs = EKP.get_obs(eki)
+    single_obs_len = sum(length(obs))
+    ensemble_size = EKP.get_N_ens(eki)
+    return Array{FT}(undef, single_obs_len, ensemble_size)
 end

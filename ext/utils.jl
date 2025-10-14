@@ -97,3 +97,19 @@ function _check_time_dim(var::OutputVar)
         error("Start date is not found in var")
     return nothing
 end
+
+"""
+    dates_or_times(var::OutputVar)
+
+Return the temporal dimension of `var` as dates if possible and time otherwise.
+
+This function assumes that a temporal dimension exists in `var`.
+"""
+function dates_or_times(var_or_metadata::Union{OutputVar, Metadata})
+    temporal_dim = try
+        ClimaAnalysis.dates(var_or_metadata)
+    catch
+        ClimaAnalysis.times(var_or_metadata)
+    end
+    return temporal_dim
+end
