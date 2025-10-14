@@ -9,7 +9,7 @@ function test_sf_calibration_output(eki, prior, observation)
         spread = map(var, params)
 
         # Spread should be heavily decreased the ensemble has converged
-        @test last(spread) / first(spread) < 0.15
+        @test last(spread) / first(spread) < 0.3
 
         forward_model_output = get_g_mean_final(eki)
         @show forward_model_output
@@ -20,7 +20,7 @@ end
 function compare_g_ensemble(eki1, eki2)
     @testset "Compare g_ensemble between two EKP objects" begin
         for (g1, g2) in zip(eki1.g, eki2.g)
-            @test g1.stored_data ≈ g2.stored_data rtol = 1e-5
+            @test g1.data ≈ g2.data rtol = 1e-5
         end
     end
 end

@@ -64,7 +64,7 @@ end
         prop in [:u, :accelerator, :localizer] && continue
         @test getproperty(eki, prop) == getproperty(user_constructed_eki, prop)
     end
-    @test eki.u[1].stored_data == user_constructed_eki.u[1].stored_data
+    @test eki.u[1].data == user_constructed_eki.u[1].data
 end
 
 @testset "Test loading latest EKP struct" begin
@@ -84,7 +84,7 @@ end
         @test getproperty(latest_ekp, prop) ==
               getproperty(eki_with_kwargs, prop)
     end
-    @test latest_ekp.u[1].stored_data == eki_with_kwargs.u[1].stored_data
+    @test latest_ekp.u[1].data == eki_with_kwargs.u[1].data
 end
 
 override_file =
