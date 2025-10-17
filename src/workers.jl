@@ -80,7 +80,7 @@ Keyword arguments can be passed to `srun`: `addprocs(SlurmManager(ntasks), gpus_
 
 By default the workers will inherit the running Julia environment.
 
-To run a calibration, call `calibrate(WorkerBackend, ...)`
+To run a calibration, call `calibrate(WorkerBackend(), ...)`
 
 To run functions on a worker, call `remotecall(func, worker_id, args...)`
 """
@@ -281,7 +281,7 @@ Keyword arguments can be passed to `qsub`: `addprocs(PBSManager(ntasks), nodes=2
 
 By default, the workers will inherit the running Julia environment.
 
-To run a calibration, call `calibrate(WorkerBackend, ...)`
+To run a calibration, call `calibrate(WorkerBackend(), ...)`
 
 To run functions on a worker, call `remotecall(func, worker_id, args...)`
 """

@@ -56,7 +56,7 @@ end
 )
 
 eki = calibrate(
-    WorkerBackend,
+    WorkerBackend(),
     ensemble_size,
     n_iterations,
     observation,

@@ -82,18 +82,18 @@ end
 
 Return a string that loads the correct modules for a given backend when executed via bash.
 """
-function module_load_string(::Type{CaltechHPCBackend})
+function module_load_string(::CaltechHPCBackend)
     return """export MODULEPATH="/groups/esm/modules:\$MODULEPATH"
     module purge
     module load climacommon/2024_10_09"""
 end
 
-function module_load_string(::Type{ClimaGPUBackend})
+function module_load_string(::ClimaGPUBackend)
     return """module purge
     module load julia/1.11.0 cuda/julia-pref openmpi/4.1.5-mpitrampoline"""
 end
 
-function module_load_string(::Type{DerechoBackend})
+function module_load_string(::DerechoBackend)
     return """export MODULEPATH="/glade/campaign/univ/ucit0011/ClimaModules-Derecho:\$MODULEPATH" 
     module purge
     module load climacommon
@@ -101,7 +101,7 @@ function module_load_string(::Type{DerechoBackend})
     """
 end
 
-function module_load_string(::Type{GCPBackend})
+function module_load_string(::GCPBackend)
     return """export OPAL_PREFIX="/sw/openmpi-5.0.5"
     export PATH="/sw/openmpi-5.0.5/bin:\$PATH"
     export LD_LIBRARY_PATH="/sw/openmpi-5.0.5/lib:\$LD_LIBRARY_PATH"
@@ -150,7 +150,7 @@ function calibrate(
 end
 
 function calibrate(
-    ::Type{JuliaBackend},
+    ::JuliaBackend,
     ekp::EKP.EnsembleKalmanProcess,
     n_iterations,
     prior,
@@ -211,7 +211,7 @@ WorkerBackend uses Distributed.jl to run the forward model on workers.
 - Any keyword arguments for the EnsembleKalmanProcess constructor, such as `scheduler`
 """
 function calibrate(
-    b::Type{<:AbstractBackend},
+    b::AbstractBackend,
     ensemble_size,
     n_iterations,
     observations,
@@ -238,12 +238,12 @@ function calibrate(
     return calibrate(b, ekp, n_iterations, prior, output_dir; backend_kwargs...)
 end
 
-default_kwargs(::Type{JuliaBackend}) = (;)
+default_kwargs(::JuliaBackend) = (;)
 
-default_kwargs(::Type{WorkerBackend}) =
+default_kwargs(::WorkerBackend) =
     (; failure_rate = DEFAULT_FAILURE_RATE, worker_pool = default_worker_pool())
 
-default_kwargs(::Type{<:HPCBackend}) = (;
+default_kwargs(::HPCBackend) = (;
     hpc_kwargs = Dict(),
     verbose = false,
     experiment_dir = project_dir(),
@@ -254,7 +254,7 @@ default_kwargs(::Type{<:HPCBackend}) = (;
 
 # Filter `calibrate` kwargs for the given backend.
 # Removes unused kwargs and merges result with defaults.
-function filter_calibrate_kwargs(b::Type{<:AbstractBackend}, kwargs)
+function filter_calibrate_kwargs(b::AbstractBackend, kwargs)
     default_kws = default_kwargs(b)
     kwarg_keys = keys(default_kws)
     filtered_kwargs = filter(x -> first(x) in kwarg_keys, pairs(kwargs))
@@ -262,7 +262,7 @@ function filter_calibrate_kwargs(b::Type{<:AbstractBackend}, kwargs)
 end
 
 function calibrate(
-    b::Type{WorkerBackend},
+    b::WorkerBackend,
     ekp::EKP.EnsembleKalmanProcess,
     n_iterations,
     prior,
@@ -298,7 +298,7 @@ function calibrate(
 end
 
 function calibrate(
-    b::Type{<:HPCBackend},
+    b::HPCBackend,
     ekp::EKP.EnsembleKalmanProcess,
     n_iterations,
     prior,
@@ -342,7 +342,7 @@ function calibrate(
 end
 
 function run_hpc_iteration(
-    b::Type{<:HPCBackend},
+    b::HPCBackend,
     ekp::EKP.EnsembleKalmanProcess,
     iter,
     ensemble_size,
@@ -406,7 +406,7 @@ Arguments:
 - hpc_kwargs: Dictionary containing the resources for the job. Easily generated using [`kwargs`](@ref).
 """
 function model_run(
-    backend::Type,
+    backend::AbstractBackend,
     iter,
     member,
     output_dir,
