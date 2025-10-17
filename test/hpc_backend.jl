@@ -15,6 +15,7 @@ if backend == DerechoBackend
     hpc_kwargs[:queue] = "preempt"
     hpc_kwargs[:gpus_per_task] = 1
 end
+backend = backend()
 
 original_model_interface = model_interface
 interruption_model_interface, io = mktemp(@__DIR__)
@@ -85,7 +86,7 @@ test_sf_calibration_output(eki, prior, observation)
 rm(output_dir, recursive = true)
 # Pure Julia calibration, this should run anywhere
 julia_eki = calibrate(
-    JuliaBackend,
+    JuliaBackend(),
     ensemble_size,
     n_iterations,
     observation,
