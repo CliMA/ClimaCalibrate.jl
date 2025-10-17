@@ -224,6 +224,8 @@ end
     SVDplusDCovariance(sample_date_ranges;
                        model_error_scale = 0.0,
                        regularization = 0.0,
+                       use_latitude_weights = false,
+                       min_cosd_lat = 0.1)
 
 Create a `SVDplusDCovariance` which specifies how the covariance matrix should
 be formed. When used with `ObservationRecipe.observation` or

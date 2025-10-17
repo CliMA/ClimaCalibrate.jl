@@ -50,7 +50,7 @@ function CAL.analyze_iteration(ekp, g_ensemble, prior, output_dir, iteration)
 end
 
 ekp = CAL.calibrate(
-    CAL.JuliaBackend,
+    CAL.JuliaBackend(),
     ensemble_size,
     n_iterations,
     observations,

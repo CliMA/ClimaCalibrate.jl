@@ -25,9 +25,11 @@ ClimaCalibrate.foreach_remotecall_wait
 ```@docs
 ClimaCalibrate.calibrate
 ClimaCalibrate.JuliaBackend
+ClimaCalibrate.HPCBackend
 ClimaCalibrate.DerechoBackend
 ClimaCalibrate.CaltechHPCBackend
 ClimaCalibrate.ClimaGPUBackend
+ClimaCalibrate.GCPBackend
 ClimaCalibrate.get_backend
 ClimaCalibrate.model_run
 ClimaCalibrate.module_load_string
