@@ -15,6 +15,7 @@ if backend == DerechoBackend
     hpc_kwargs[:queue] = "preempt"
     hpc_kwargs[:gpus_per_task] = 1
 end
+backend = backend()
 
 original_model_interface = model_interface
 interruption_model_interface, io = mktemp(@__DIR__)
