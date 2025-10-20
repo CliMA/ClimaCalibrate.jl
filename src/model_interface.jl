@@ -28,7 +28,7 @@ end
 """
     analyze_iteration(ekp, g_ensemble, prior, output_dir, iteration)
 
-After each evaluation of the observation map and before updating the ensemble,
+After updating the ensemble and before starting the next iteration,
 `analyze_iteration` is evaluated.
 
 This function is optional to implement.
