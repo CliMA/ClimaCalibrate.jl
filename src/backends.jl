@@ -150,7 +150,7 @@ function calibrate(
 end
 
 function calibrate(
-    ::Type{JuliaBackend},
+    b::Type{JuliaBackend},
     ekp::EKP.EnsembleKalmanProcess,
     n_iterations,
     prior,
@@ -159,27 +159,9 @@ function calibrate(
     ekp = initialize(ekp, prior, output_dir)
     ensemble_size = EKP.get_N_ens(ekp)
 
-    on_error(e::InterruptException) = rethrow(e)
-    on_error(e) =
-        @error "Single ensemble member has errored. See stacktrace" exception =
-            (e, catch_backtrace())
-
     first_iter = last_completed_iteration(output_dir) + 1
     for iter in first_iter:(n_iterations - 1)
-        errors = 0
-        @info "Running iteration $iter"
-        foreach(1:ensemble_size) do m
-            try
-                forward_model(iter, m)
-                @info "Completed member $m"
-            catch e
-                errors += 1
-                on_error(e)
-            end
-        end
-        if errors == ensemble_size
-            error("Full ensemble has failed, aborting calibration.")
-        end
+        run_forward_models(b, iter, ensemble_size)
         ekp = load_ekp_struct(output_dir, iter)
         terminate = observation_map_and_update!(ekp, output_dir, iter, prior)
         !isnothing(terminate) && break
@@ -275,21 +257,14 @@ function calibrate(
 
     first_iter = last_completed_iteration(output_dir) + 1
     for iter in first_iter:(n_iterations - 1)
-        @info "Running Iteration $iter"
-        (; time) = @timed run_worker_iteration(
+        run_forward_models(
+            b,
             iter,
-            ensemble_size,
-            output_dir;
+            ensemble_size;
+            output_dir,
             worker_pool,
             failure_rate,
         )
-        formatted_time =
-            Dates.canonicalize(Dates.Millisecond(round(time * 1000)))
-        if isempty(Dates.periods(formatted_time))
-            @info "Iteration $iter time: 0 second"
-        else
-            @info "Iteration $iter time: $formatted_time"
-        end
         ekp = load_ekp_struct(output_dir, iter)
         terminate = observation_map_and_update!(ekp, output_dir, iter, prior)
         !isnothing(terminate) && break
@@ -314,25 +289,20 @@ function calibrate(
     ensemble_size = EKP.get_N_ens(ekp)
     @info "Initializing calibration" n_iterations ensemble_size output_dir
     ekp = initialize(ekp, prior, output_dir)
-    module_load_str = module_load_string(b)
     first_iter = last_completed_iteration(output_dir) + 1
 
     for iter in first_iter:(n_iterations - 1)
-        run_hpc_iteration(
+        run_forward_models(
             b,
-            ekp,
             iter,
-            ensemble_size,
+            ensemble_size;
             output_dir,
+            hpc_kwargs,
             experiment_dir,
             model_interface,
-            module_load_str,
-            prior;
-            hpc_kwargs = hpc_kwargs,
-            verbose = verbose,
+            verbose,
             exeflags,
         )
-        @info "Completed iteration $iter, updating ensemble"
         ekp = load_ekp_struct(output_dir, iter)
         terminate = observation_map_and_update!(ekp, output_dir, iter, prior)
         !isnothing(terminate) && break
@@ -343,14 +313,12 @@ end
 
 function run_hpc_iteration(
     b::Type{<:HPCBackend},
-    ekp::EKP.EnsembleKalmanProcess,
     iter,
     ensemble_size,
     output_dir,
     experiment_dir,
     model_interface,
-    module_load_str,
-    prior;
+    module_load_str;
     hpc_kwargs,
     verbose = false,
     exeflags = "",
@@ -460,3 +428,116 @@ backend_worker_kwargs(::Type{DerechoBackend}) = (; q = "main", A = "UCIT0011")
 backend_worker_kwargs(::Type{GCPBackend}) = (; partition = "a3")
 
 backend_worker_kwargs(::Type{<:AbstractBackend}) = (;)
+
+
+"""
+    run_forward_models(
+        b::Type{WorkerBackend},
+        iter,
+        ensemble_size;
+        output_dir
+        worker_pool,
+        failure_rate,
+    )
+
+Run the forward models for a single iteration for the `WorkerBackend`.
+"""
+function run_forward_models(
+    b::Type{WorkerBackend},
+    iter,
+    ensemble_size;
+    output_dir,
+    failure_rate = DEFAULT_FAILURE_RATE,
+    worker_pool = default_worker_pool(),
+)
+    @info "Running Iteration $iter"
+    (; time) = @timed run_worker_iteration(
+        iter,
+        ensemble_size,
+        output_dir;
+        worker_pool,
+        failure_rate,
+    )
+    formatted_time = Dates.canonicalize(Dates.Millisecond(round(time * 1000)))
+    if isempty(Dates.periods(formatted_time))
+        @info "Iteration $iter time: 0 second"
+    else
+        @info "Iteration $iter time: $formatted_time"
+    end
+    return nothing
+end
+
+"""
+    run_forward_models(b::Type{JuliaBackend}, iter, ensemble_size)
+
+Run the forward models for a single iteration for the `JuliaBackend`.
+"""
+# TODO: I don't understand why this doesn't require an output_dir
+function run_forward_models(b::Type{JuliaBackend}, iter, ensemble_size)
+    on_error(e::InterruptException) = rethrow(e)
+    on_error(e) =
+        @error "Single ensemble member has errored. See stacktrace" exception =
+            (e, catch_backtrace())
+    errors = 0
+    @info "Running iteration $iter"
+    foreach(1:ensemble_size) do m
+        try
+            forward_model(iter, m)
+            @info "Completed member $m"
+        catch e
+            errors += 1
+            on_error(e)
+        end
+    end
+    if errors == ensemble_size
+        error("Full ensemble has failed, aborting calibration.")
+    end
+    return nothing
+end
+
+"""
+    run_forward_models(
+        b::Type{<:HPCBackend},
+        iter,
+        ensemble_size;
+        output_dir,
+        experiment_dir,
+        model_interface,
+        module_load_str,
+        hpc_kwargs,
+        verbose,
+        exeflags,
+    )
+
+Run the forward models for a single iteration for the `HPCBackend`.
+"""
+function run_forward_models(
+    b::Type{<:HPCBackend},
+    iter,
+    ensemble_size;
+    output_dir,
+    hpc_kwargs,
+    experiment_dir = project_dir(),
+    model_interface = abspath(
+        joinpath(experiment_dir, "..", "..", "model_interface.jl"),
+    ),
+    verbose = false,
+    exeflags = "",
+)
+    module_load_str = module_load_string(b)
+    run_hpc_iteration(
+        b,
+        iter,
+        ensemble_size,
+        output_dir,
+        experiment_dir,
+        model_interface,
+        module_load_str;
+        hpc_kwargs = hpc_kwargs,
+        verbose = verbose,
+        exeflags = exeflags,
+    )
+
+    @info "Completed iteration $iter, updating ensemble"
+    return nothing
+end

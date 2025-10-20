@@ -8,7 +8,11 @@ import EnsembleKalmanProcesses.TOMLInterface as TI
 
 export get_prior, initialize, update_ensemble, save_G_ensemble
 export path_to_ensemble_member,
-    path_to_model_log, path_to_iteration, parameter_path, load_latest_ekp
+    path_to_model_log,
+    path_to_iteration,
+    parameter_path,
+    load_latest_ekp,
+    run_initial_ensemble
 
 """
     load_ekp_struct(output_dir, iteration)
@@ -306,6 +310,136 @@ function save_eki_and_parameters(eki, output_dir, iteration, prior)
         iteration,
     )
     JLD2.save_object(ekp_path(output_dir, iteration), eki)
+end
+
+"""
+    run_initial_ensemble(
+        backend::AbstractBackend,
+        process::EKP.Process,
+        prior::PD.ParameterDistribution,
+        output_dir;
+        ensemble_size = 0,
+        rng = MersenneTwister(1234),
+        run_forward_models_kwargs = (),
+    )
+
+Run the initial ensemble without needing the `EKP.EnsembleKalmanProcess`
+object and return the unconstrained parameters of the ensemble.
+
+This is useful if the observations depend on the grid resolution of the
+simulation data as the first ensemble can be ran, the observations can be
+generated, and the `EKP.EnsembleKalmanProcess` object can be created afterward.
+
+Depending on the `process`, the ensemble size will automatically be determined
+(e.g. `EKP.Unscented` or `EKP.TransformUnscented`).
+
+Any keyword arguments that need to be passed to run the forward models can be
+passed to `run_forward_models_kwargs`. These keyword arguments are the same as
+the keyword arguments passed to `ClimaCalibrate.calibrate`.
+
+!!! warning "Passing initial ensemble to EKP constructor"
+    If the process is `EKP.Unscented` or `EKP.TransformUnscented`, you should
+    not pass it to the `EnsembleKalmanProcess` constructor. Otherwise, you
+    should pass the initial ensemble to the `EnsembleKalmanProcess` constructor.
+    If you do not, the calibration results may be incorrect.
+"""
+function run_initial_ensemble( # TODO: Maybe move this to backends?
+    backend,
+    process::EKP.Process,
+    prior::PD.ParameterDistribution,
+    output_dir;
+    ensemble_size = 0,
+    rng = Random.MersenneTwister(1234),
+    run_forward_models_kwargs = (),
+)
+    # Cannot use last_completed_iteration because the JLD2 files storing the
+    # G ensemble object and the ekp objects will never exist when calling this
+    # function
+    iter0_path = joinpath(output_dir, "iteration_000")
+    if isdir(iter0_path)
+        @info "Detected first iteration. Not running the initial ensemble. If this is not the case, then delete the directory $iter0_path."
+    end
+
+    initial_ensemble = _construct_intial_unconstrained_ensemble(
+        process,
+        prior,
+        ensemble_size = ensemble_size,
+        rng = rng,
+    )
+
+    # The size of initial_ensemble is (number of parameters, ensemble members)
+    # For some processes, the ensemble_size is ignored
+    ensemble_size = last(size(initial_ensemble))
+
+    param_dict = get_param_dict(prior)
+    TI.save_parameter_ensemble(
+        initial_ensemble,
+        prior,
+        param_dict,
+        output_dir,
+        DEFAULT_PARAMETER_FILE,
+        0,
+    )
+
+    # Cannot save eki object because the goal of this function is to be able
+    # to run the first ensemble without the eki object
+    JLD2.save_object(
+        joinpath(path_to_iteration(output_dir, 0), "prior.jld2"),
+        prior,
+    )
+
+    run_forward_models(
+        backend,
+        0,
+        ensemble_size;
+        output_dir = output_dir,
+        run_forward_models_kwargs...,
+    )
+    return initial_ensemble
+end
+
+"""
+    _construct_intial_unconstrained_ensemble(
+        process::EKP.Process,
+        prior::PD.ParameterDistribution;
+        ensemble_size = 0,
+        rng = MersenneTwister(1234),
+    )
+
+Construct the initial ensemble of unconstrained parameters given the `process` and
+`prior`.
+
+For `EKP.Unscented` and `EKP.TransformUnscented`, the `ensemble_size` is
+determined by the `process` and `rng` is not used. These keyword arguments are
+needed when the `process` is not `EKP.Unscented` and `EKP.TransformUnscented`.
+"""
+function _construct_intial_unconstrained_ensemble(
+    process::Union{EKP.Unscented, EKP.TransformUnscented},
+    prior::PD.ParameterDistribution;
+    ensemble_size = 0,
+    rng = MersenneTwister(1234),
+)
+    ensemble_size > 0 &&
+        @info "$process automatically choose the ensemble size. Ignoring the argument $ensemble_size for the ensemble size"
+    return EKP.construct_initial_ensemble(prior, process, constrained = false)
+end
+
+function _construct_intial_unconstrained_ensemble(
+    process::EKP.Process,
+    prior::PD.ParameterDistribution;
+    ensemble_size = 0,
+    rng = MersenneTwister(1234),
+)
+    ensemble_size == 0 && error(
+        "Ensemble size is 0. Pass a positive value for ensemble_size as a keyword argument",
+    )
+    return EKP.construct_initial_ensemble(
+        rng,
+        prior,
+        N_ens,
+        constrained = false,
+    )
+
 end
 
 """
