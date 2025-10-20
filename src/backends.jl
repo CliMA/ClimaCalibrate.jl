@@ -31,7 +31,7 @@ this struct.
 """
 Base.@kwdef struct HPCConfig
     hpc_kwargs::Dict{Symbol, Any} = Dict{Symbol, Any}()
-    verbose::Bool = false
+    verbose::Bool = false # Not sure about this, since this is also a keyword argument for ekp...
     experiment_dir::String = project_dir()
     model_interface::String =
         abspath(joinpath(project_dir(), "..", "..", "model_interface.jl"))
@@ -190,8 +190,6 @@ function calibrate(
             noise,
             prior,
             output_dir;
-            model_interface,
-            hpc_kwargs,
             ekp_kwargs...,
         )
     else
