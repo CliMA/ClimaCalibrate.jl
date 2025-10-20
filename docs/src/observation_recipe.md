@@ -15,7 +15,7 @@ All functions assume that any data preprocessing is done with `ClimaAnalysis`.
 
 ### Covariance Estimators
 
-There are currently two covariance estimators, `ScalarCovariance`,
+There are currently three covariance estimators, `ScalarCovariance`,
 `SeasonalDiagonalCovariance`, and `SVDplusDCovariance`, which are subtypes of
 `AbstractCovarianceEstimator`. `ScalarCovariance` approximates the observation
 noise covariance as a scalar diagonal matrix. `SeasonalDiagonalCovariance`

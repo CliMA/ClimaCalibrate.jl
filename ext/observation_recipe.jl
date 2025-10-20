@@ -565,7 +565,7 @@ function ObservationRecipe.get_metadata_for_nth_iteration(obs_series, N)
 end
 
 """
-    ObservationRecipe.get_observations_for_nth_iteration(obs_series, N)
+    get_observations_for_nth_iteration(obs_series, N)
 
 For the `N`th iteration, get the observation(s) being processed.
 """
@@ -579,14 +579,10 @@ function ObservationRecipe.get_observations_for_nth_iteration(obs_series, N)
 end
 
 """
-    reconstruct_g_mean_final(ekp::EKP.EnsembleKalmanProcess,
-                             observation::EKP.Observation)
+    reconstruct_g_mean_final(ekp::EKP.EnsembleKalmanProcess)
 
 Reconstruct the mean forward model evaluation at the last iteration as a
 vector of `OutputVar`s.
-
-This function assumes `observation` contains the necessary metadata to reconstruct
-the `OutputVar`s. Note that the metadata comes from the observations.
 """
 function ObservationRecipe.reconstruct_g_mean_final(
     ekp::EKP.EnsembleKalmanProcess,
