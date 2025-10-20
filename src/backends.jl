@@ -9,6 +9,39 @@ export JuliaBackend, WorkerBackend
 export HPCBackend,
     ClimaGPUBackend, DerechoBackend, CaltechHPCBackend, GCPBackend
 
+export HPCConfig
+
+"""
+    HPCConfig
+
+A struct holding all necessary configuration for running calibration jobs on HPC
+clusters, including job scheduler arguments, file paths, and runtime settings.
+
+## Fields
+- `hpc_kwargs::Dict{Symbol, String}`: Dictionary of arguments passed to the job
+  scheduler (e.g., Slurm or PBS).
+- `verbose::Bool`: Enable verbose logging output. The default is `false`.
+- `experiment_dir::String`: Directory containing the experiment's Project.toml
+  file. The default is the current project directory.
+- `model_interface::String`: Absolute path to the model interface file that
+  defines how to run the forward model.
+
+There is no error handling for what arguments are passed to the HPC cluster for
+this struct.
+"""
+Base.@kwdef struct HPCConfig
+    hpc_kwargs::Dict{Symbol, Any} = Dict{Symbol, Any}()
+    verbose::Bool = false
+    experiment_dir::String = project_dir()
+    model_interface::String =
+        abspath(joinpath(project_dir(), "..", "..", "model_interface.jl"))
+end
+
+function get_hpc_kwargs(config::HPCConfig)
+    (; hpc_kwargs, verbose, experiment_dir, model_interface) = config
+    return (; hpc_kwargs, verbose, experiment_dir, model_interface)
+end
+
 abstract type AbstractBackend end
 
 """
@@ -26,23 +59,31 @@ abstract type SlurmBackend <: HPCBackend end
 
 Used for Caltech's [high-performance computing cluster](https://www.hpc.caltech.edu/).
 """
-struct CaltechHPCBackend <: SlurmBackend end
+Base.@kwdef struct CaltechHPCBackend <: SlurmBackend
+    hpc_config::HPCConfig = HPCConfig()
+end
 
 """
     ClimaGPUBackend
 
 Used for CliMA's private GPU server.
 """
-struct ClimaGPUBackend <: SlurmBackend end
+Base.@kwdef struct ClimaGPUBackend <: SlurmBackend
+    hpc_config::HPCConfig = HPCConfig()
+end
 
-struct GCPBackend <: SlurmBackend end
+Base.@kwdef struct GCPBackend <: SlurmBackend
+    hpc_config::HPCConfig = HPCConfig()
+end
 
 """
     DerechoBackend
 
 Used for NSF NCAR's [Derecho supercomputing system](https://ncar-hpc-docs.readthedocs.io/en/latest/compute-systems/derecho/).
 """
-struct DerechoBackend <: HPCBackend end
+Base.@kwdef struct DerechoBackend <: HPCBackend
+    hpc_config::HPCConfig = HPCConfig()
+end
 
 """
     WorkerBackend
@@ -50,7 +91,23 @@ struct DerechoBackend <: HPCBackend end
 Used to run calibrations on Distributed.jl's workers.
 For use on a Slurm cluster, see [`SlurmManager`](@ref).
 """
-struct WorkerBackend <: AbstractBackend end
+Base.@kwdef struct WorkerBackend{WORKERPOOL <: WorkerPool} <: AbstractBackend
+    failure_rate::Float64 = DEFAULT_FAILURE_RATE
+    worker_pool::WORKERPOOL = default_worker_pool()
+end
+
+function get_backend_kwargs(b::HPCBackend)
+    return get_hpc_kwargs(b.hpc_config)
+end
+
+function get_backend_kwargs(::JuliaBackend)
+    return (;)
+end
+
+function get_backend_kwargs(b::WorkerBackend)
+    (; failure_rate, worker_pool) = b
+    return (; failure_rate, worker_pool)
+end
 
 """
     get_backend()
@@ -77,6 +134,7 @@ function get_backend()
     return JuliaBackend
 end
 
+# TODO: Not sure if module_load_string should be in the struct or not
 """
     module_load_string(backend)
 
@@ -116,14 +174,16 @@ function calibrate(
     noise,
     prior,
     output_dir;
-    model_interface = nothing,
+    model_interface = nothing, # TODO: Pass these keyword arguments to the constructor
     hpc_kwargs = Dict(),
     ekp_kwargs...,
 )
     backend = get_backend()
+    # TODO: Make backend with HPCConfig, not sure about experiment_dir and model_interface
     if backend <: HPCBackend
+        hpc_config = HPCConfig(; hpc_kwargs, model_interface)
         calibrate(
-            backend(),
+            backend(; hpc_config),
             ensemble_size,
             n_iterations,
             observations,
@@ -218,14 +278,8 @@ function calibrate(
     noise,
     prior,
     output_dir;
-    kwargs...,
+    ekp_kwargs...,
 )
-    backend_kwargs = filter_calibrate_kwargs(b, kwargs)
-    backend_kwarg_keys = keys(backend_kwargs)
-
-    # Filter EKP-specific kwargs from backend kwargs
-    ekp_kwargs = filter(x -> !(first(x) in backend_kwarg_keys), pairs(kwargs))
-
     ekp = ekp_constructor(
         ensemble_size,
         prior,
@@ -235,30 +289,7 @@ function calibrate(
     )
 
     # Dispatch on backend
-    return calibrate(b, ekp, n_iterations, prior, output_dir; backend_kwargs...)
-end
-
-default_kwargs(::JuliaBackend) = (;)
-
-default_kwargs(::WorkerBackend) =
-    (; failure_rate = DEFAULT_FAILURE_RATE, worker_pool = default_worker_pool())
-
-default_kwargs(::HPCBackend) = (;
-    hpc_kwargs = Dict(),
-    verbose = false,
-    experiment_dir = project_dir(),
-    model_interface = abspath(
-        joinpath(project_dir(), "..", "..", "model_interface.jl"),
-    ),
-)
-
-# Filter `calibrate` kwargs for the given backend.
-# Removes unused kwargs and merges result with defaults.
-function filter_calibrate_kwargs(b::AbstractBackend, kwargs)
-    default_kws = default_kwargs(b)
-    kwarg_keys = keys(default_kws)
-    filtered_kwargs = filter(x -> first(x) in kwarg_keys, pairs(kwargs))
-    return merge(default_kws, filtered_kwargs)
+    return calibrate(b, ekp, n_iterations, prior, output_dir)
 end
 
 function calibrate(
@@ -266,10 +297,9 @@ function calibrate(
     ekp::EKP.EnsembleKalmanProcess,
     n_iterations,
     prior,
-    output_dir;
-    failure_rate = DEFAULT_FAILURE_RATE,
-    worker_pool = default_worker_pool(),
+    output_dir,
 )
+    (; failure_rate, worker_pool) = get_backend_kwargs(b)
     ekp = initialize(ekp, prior, output_dir)
     ensemble_size = EKP.get_N_ens(ekp)
 
@@ -303,12 +333,6 @@ function calibrate(
     n_iterations,
     prior,
     output_dir;
-    experiment_dir = project_dir(),
-    model_interface = abspath(
-        joinpath(experiment_dir, "..", "..", "model_interface.jl"),
-    ),
-    verbose = false,
-    hpc_kwargs,
     exeflags = "",
 )
     ensemble_size = EKP.get_N_ens(ekp)
@@ -324,12 +348,7 @@ function calibrate(
             iter,
             ensemble_size,
             output_dir,
-            experiment_dir,
-            model_interface,
-            module_load_str,
-            prior;
-            hpc_kwargs = hpc_kwargs,
-            verbose = verbose,
+            module_load_str;
             exeflags,
         )
         @info "Completed iteration $iter, updating ensemble"
@@ -347,14 +366,11 @@ function run_hpc_iteration(
     iter,
     ensemble_size,
     output_dir,
-    experiment_dir,
-    model_interface,
-    module_load_str,
-    prior;
-    hpc_kwargs,
-    verbose = false,
+    module_load_str;
     exeflags = "",
 )
+    (; hpc_kwargs, verbose, experiment_dir, model_interface) =
+        get_backend_kwargs(b)
     @info "Iteration $iter"
     job_ids = map(1:ensemble_size) do member
         model_run(
@@ -406,14 +422,14 @@ Arguments:
 - hpc_kwargs: Dictionary containing the resources for the job. Easily generated using [`kwargs`](@ref).
 """
 function model_run(
-    backend::AbstractBackend,
+    backend::AbstractBackend, # isn't this only HPCBackend?????
     iter,
     member,
     output_dir,
     project_dir,
     model_interface,
     module_load_str;
-    hpc_kwargs = Dict(),
+    hpc_kwargs = Dict(), # TODO: This should be removed since backend should know everything about this
     exeflags = "",
 )
     if model_completed(output_dir, iter, member)
@@ -428,7 +444,7 @@ function model_run(
     write_model_started(output_dir, iter, member)
 
     job_id = if backend isa SlurmBackend
-        slurm_model_run(
+        slurm_model_run( # TODO: Can use dispatch for this probably
             iter,
             member,
             output_dir,

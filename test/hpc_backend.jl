@@ -15,7 +15,6 @@ if backend == DerechoBackend
     hpc_kwargs[:queue] = "preempt"
     hpc_kwargs[:gpus_per_task] = 1
 end
-backend = backend()
 
 original_model_interface = model_interface
 interruption_model_interface, io = mktemp(@__DIR__)
@@ -36,17 +35,19 @@ eki = EKP.EnsembleKalmanProcess(
 
 ClimaCalibrate.initialize(eki, prior, output_dir)
 
+hpc_config = HPCConfig(;
+    hpc_kwargs = hpc_kwargs,
+    experiment_dir = experiment_dir,
+    model_interface = interruption_model_interface,
+)
+backend = backend(; hpc_config)
 ClimaCalibrate.run_hpc_iteration(
     backend,
     eki,
     0,
     ensemble_size,
     output_dir,
-    experiment_dir,
-    interruption_model_interface,
     ClimaCalibrate.module_load_string(backend),
-    prior;
-    hpc_kwargs,
 )
 
 @testset "Test model checkpoints with interruptions" begin
