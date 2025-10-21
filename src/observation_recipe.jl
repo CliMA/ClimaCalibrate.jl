@@ -11,7 +11,8 @@ export ScalarCovariance,
     get_observations_for_nth_iteration,
     get_metadata_for_nth_iteration,
     reconstruct_g_mean_final,
-    reconstruct_diag_cov
+    reconstruct_diag_cov,
+    reconstruct_vars
 
 import Dates
 
@@ -315,6 +316,8 @@ function change_data_type end
 function reconstruct_g_mean_final end
 
 function reconstruct_diag_cov end
+
+function reconstruct_vars end
 
 function get_observations_for_nth_iteration end
 
