@@ -651,6 +651,30 @@ function ObservationRecipe.reconstruct_diag_cov(obs::EKP.Observation)
 end
 
 """
+    reconstruct_vars(obs::EKP.Observation)
+
+Reconstruct the `OutputVar`s from the `samples` in `obs`.
+"""
+function ObservationRecipe.reconstruct_vars(obs::EKP.Observation)
+    all_metadata = EKP.get_metadata(obs)
+    samples = EKP.get_samples(obs)
+    stacked_sample = reduce(vcat, samples)
+
+    start_index = 1
+    vars = OutputVar[]
+    for metadata in all_metadata
+        data_size = ClimaAnalysis.flattened_length(metadata)
+        var = ClimaAnalysis.unflatten(
+            metadata,
+            view(stacked_sample, start_index:(start_index + data_size - 1)),
+        )
+        push!(vars, var)
+        start_index += data_size
+    end
+    return vars
+end
+
+"""
     _get_minibatch_indices_for_nth_iteration(ekp::EKP.EnsembleKalmanProcess, N)
 
 Get the indices that correspond to each metadata for the minibatch of the `N`th
