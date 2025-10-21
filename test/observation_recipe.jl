@@ -1531,7 +1531,7 @@ end
     end
 end
 
-@testset "Reconstruct diagonal of covariance" begin
+@testset "Reconstruct diagonal of covariance and OutputVars from observations" begin
     time =
         ClimaAnalysis.Utils.date_to_time.(
             Dates.DateTime(2007, 12),
@@ -1589,6 +1589,38 @@ end
     @test isequal(time_var_from_covs1.data, time_var_from_covs2.data)
     @test isequal(lat_var_from_covs2.data, lat_var_from_covs3.data)
 
+    # Reconstruct OutputVars from observations
+    vars1 = ObservationRecipe.reconstruct_vars(obs1)
+    vars2 = ObservationRecipe.reconstruct_vars(obs2)
+    vars3 = ObservationRecipe.reconstruct_vars(obs3)
+
+    @test length(vars1) == 2
+    @test length(vars2) == 1
+    @test length(vars3) == 1
+
+    # Check dimensions
+    @test vars1[1].dims["time"] == time[1:8]
+    @test vars1[2].dims["lon"] == lon
+    @test vars1[2].dims["time"] == time[1:8]
+    @test vars2[1].dims["time"] == time[1:8]
+    @test vars3[1].dims["time"] == time[1:8]
+    @test vars3[1].dims["lon"] == lon
+
+    # Check attributes and dimension attributes
+    for (reconstructed_var, original_var) in zip(
+        (vars1[1], vars1[2], vars2[1], vars3[1]),
+        (time_var, lon_var, time_var, lon_var),
+    )
+        @test reconstructed_var.attributes == original_var.attributes
+        @test reconstructed_var.dim_attributes == original_var.dim_attributes
+    end
+
+    # Check data
+    @test vars1[1].data == time_var.data[1:8]
+    @test vars1[2].data == lon_var.data[:, 1:8]
+    @test vars2[1].data == time_var.data[1:8]
+    @test vars3[1].data == permutedims(lon_var.data[:, 1:8], (2, 1))
+
     var3d =
         TemplateVar() |>
         add_dim("time", time, units = "s") |>
@@ -1622,4 +1654,14 @@ end
     @test !isequal(var_from_covs4.data[:, 1, :], var_from_covs4.data[:, 2, :])
     @test !isequal(var_from_covs4.data[:, 2, :], var_from_covs4.data[:, 3, :])
     @test !isequal(var_from_covs4.data[:, 1, :], var_from_covs4.data[:, 3, :])
+
+    # Test reconstruction of obs4
+    vars4 = ObservationRecipe.reconstruct_vars(obs4)
+    @test length(vars4) == 1
+    @test vars4[1].attributes == var3d.attributes
+    @test vars4[1].dim_attributes == var3d.dim_attributes
+    @test vars4[1].dims["time"] == [0.0]
+    @test vars4[1].dims["lat"] == var3d.dims["lat"]
+    @test vars4[1].dims["lon"] == var3d.dims["lon"]
+    @test vars4[1].data == var3d.data[[1], :, :]
 end
