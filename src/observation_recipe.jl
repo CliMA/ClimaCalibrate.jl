@@ -10,7 +10,8 @@ export ScalarCovariance,
     change_data_type,
     get_observations_for_nth_iteration,
     get_metadata_for_nth_iteration,
-    reconstruct_g_mean_final
+    reconstruct_g_mean_final,
+    reconstruct_diag_cov
 
 import Dates
 
