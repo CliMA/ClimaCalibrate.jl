@@ -145,7 +145,10 @@ when debugging whether the G ensemble matrix is formed correctly or not.
 [`ClimaAnalysis.flatten`](https://clima.github.io/ClimaAnalysis.jl/dev/flat/#Flatten)
 in the ClimaAnalysis documentation for more information. The order of the
 variables in the observation is the same as the order of the `OutputVar`s when
-creating the `EKP.Observation` using `ObservationRecipe.observation`.
+creating the `EKP.Observation` using `ObservationRecipe.observation`. If you are
+using `ObservationRecipe`, it is recommended that you also use
+[`GEnsembleBuilder`](ensemble_builder.md) which simplifies building the
+G ensemble matrix.
 
 **Q: How do I handle `NaN`s in the `OutputVar`s so that there are no `NaN`s in the sample and covariance matrix?**
 
