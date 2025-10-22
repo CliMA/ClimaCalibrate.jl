@@ -108,9 +108,33 @@ can be used with `ClimaAnalysis.unflatten` to reconstruct the original
 [documentation](https://clima.github.io/ClimaAnalysis.jl/dev/api/#FlatVar) about
 `ClimaAnalysis.FlatVar` for more information.
 
-`ObservationRecipe` provides a helper function for reconstructing the mean
-forward map evaluation with [`ObservationRecipe.reconstruct_g_mean_final`](@ref
-ClimaCalibrate.ObservationRecipe.reconstruct_g_mean_final).
+## Debugging observational and simulation data
+
+When setting up a calibration, it may be helpful to visualize the
+`EKP.Observation`s or inspect the observational data and metadata together. To
+help with this, `ObservationRecipe` provides the functions
+[`ObservationRecipe.reconstruct_diag_cov`](@ref
+ClimaCalibrate.ObservationRecipe.reconstruct_diag_cov) and
+[`ObservationRecipe.reconstruct_vars`](@ref
+ClimaCalibrate.ObservationRecipe.reconstruct_vars). The function
+`reconstruct_diag_cov` reconstructs the diagonal of the covariance matrix as a
+vector of `OutputVar`s, and the function `reconstruct_vars` reconstructs the
+samples of the `EKP.Observation` as a vector of `OutputVar`s. To visualize the
+data in the `OutputVar`s, see the [visualize
+section](https://clima.github.io/ClimaAnalysis.jl/dev/visualize/) in
+ClimaAnalysis.
+
+```julia
+ObservationRecipe.reconstruct_vars(obs)
+# Reconstructing the diagnonal of a covariance matrix as a OutputVar is only
+# supported for diagonal covariance matrices
+ObservationRecipe.reconstruct_diag_cov(obs)
+```
+
+Finally, `ObservationRecipe` provides a helper function for reconstructing the
+mean forward map evaluation with [`ObservationRecipe.reconstruct_g_mean_final`](@ref
+ClimaCalibrate.ObservationRecipe.reconstruct_g_mean_final). This can be helpful
+when debugging whether the G ensemble matrix is formed correctly or not.
 
 ## Frequently asked questions
 
