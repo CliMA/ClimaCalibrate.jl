@@ -264,7 +264,8 @@ function Checker.check(
     # This is inaccurate, because not all the values in var.data will end up in
     # the G ensemble matrix. See _match_dates for one case. However, the mean
     # should not change that much with additional times.
-    sim_pos_proportion = nanmean(var.data .> 0)
+    valid = @. !isnan(var.data)
+    sim_pos_proportion = sum(valid .& (var.data .> 0)) / sum(valid)
 
     same_sign = abs(obs_pos_proportion - sim_pos_proportion) < checker.threshold
     !same_sign &&
