@@ -35,17 +35,18 @@ eki = EKP.EnsembleKalmanProcess(
 
 ClimaCalibrate.initialize(eki, prior, output_dir)
 
+backend = backend(
+    hpc_kwargs = hpc_kwargs,
+    experiment_dir = experiment_dir,
+    model_interface = interruption_model_interface,
+)
 ClimaCalibrate.run_hpc_iteration(
     backend,
     eki,
     0,
     ensemble_size,
     output_dir,
-    experiment_dir,
-    interruption_model_interface,
     ClimaCalibrate.module_load_string(backend),
-    prior;
-    hpc_kwargs,
 )
 
 @testset "Test model checkpoints with interruptions" begin
@@ -85,7 +86,7 @@ test_sf_calibration_output(eki, prior, observation)
 rm(output_dir, recursive = true)
 # Pure Julia calibration, this should run anywhere
 julia_eki = calibrate(
-    JuliaBackend,
+    JuliaBackend(),
     ensemble_size,
     n_iterations,
     observation,
