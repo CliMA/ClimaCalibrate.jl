@@ -9,38 +9,17 @@ export JuliaBackend, WorkerBackend
 export HPCBackend,
     ClimaGPUBackend, DerechoBackend, CaltechHPCBackend, GCPBackend
 
-export HPCConfig
-
 """
     HPCConfig
 
 A struct holding all necessary configuration for running calibration jobs on HPC
 clusters, including job scheduler arguments, file paths, and runtime settings.
 
-## Fields
-- `hpc_kwargs::Dict{Symbol, String}`: Dictionary of arguments passed to the job
-  scheduler (e.g., Slurm or PBS).
-- `verbose::Bool`: Enable verbose logging output. The default is `false`.
-- `experiment_dir::String`: Directory containing the experiment's Project.toml
-  file. The default is the current project directory.
-- `model_interface::String`: Absolute path to the model interface file that
-  defines how to run the forward model.
+
 
 There is no error handling for what arguments are passed to the HPC cluster for
 this struct.
 """
-Base.@kwdef struct HPCConfig
-    hpc_kwargs::Dict{Symbol, Any} = Dict{Symbol, Any}()
-    verbose::Bool = false # Not sure about this, since this is also a keyword argument for ekp...
-    experiment_dir::String = project_dir()
-    model_interface::String =
-        abspath(joinpath(project_dir(), "..", "..", "model_interface.jl"))
-end
-
-function get_hpc_kwargs(config::HPCConfig)
-    (; hpc_kwargs, verbose, experiment_dir, model_interface) = config
-    return (; hpc_kwargs, verbose, experiment_dir, model_interface)
-end
 
 abstract type AbstractBackend end
 
@@ -51,6 +30,22 @@ The simplest backend, used to run a calibration in Julia without any paralleliza
 """
 struct JuliaBackend <: AbstractBackend end
 
+"""
+    HPCBackend <: AbstractBackend
+
+
+All concrete types of `HPCBackend` share the same keyword arguments for the
+constructors.
+
+## Keyword Arguments for HPC backends
+- `hpc_kwargs::Dict{Symbol, String}`: Dictionary of arguments passed to the job
+  scheduler (e.g., Slurm or PBS).
+- `verbose::Bool`: Enable verbose logging output. The default is `false`.
+- `experiment_dir::String`: Directory containing the experiment's Project.toml
+  file. The default is the current project directory.
+- `model_interface::String`: Absolute path to the model interface file that
+  defines how to run the forward model.
+"""
 abstract type HPCBackend <: AbstractBackend end
 abstract type SlurmBackend <: HPCBackend end
 
@@ -58,9 +53,15 @@ abstract type SlurmBackend <: HPCBackend end
     CaltechHPCBackend
 
 Used for Caltech's [high-performance computing cluster](https://www.hpc.caltech.edu/).
+
+
 """
 Base.@kwdef struct CaltechHPCBackend <: SlurmBackend
-    hpc_config::HPCConfig = HPCConfig()
+    experiment_dir::String = project_dir()
+    model_interface::String =
+        abspath(joinpath(project_dir(), "..", "..", "model_interface.jl"))
+    hpc_kwargs::Dict{Symbol, Any} = Dict{Symbol, Any}()
+    verbose::Bool = false
 end
 
 """
@@ -69,11 +70,19 @@ end
 Used for CliMA's private GPU server.
 """
 Base.@kwdef struct ClimaGPUBackend <: SlurmBackend
-    hpc_config::HPCConfig = HPCConfig()
+    experiment_dir::String = project_dir()
+    model_interface::String =
+        abspath(joinpath(project_dir(), "..", "..", "model_interface.jl"))
+    hpc_kwargs::Dict{Symbol, Any} = Dict{Symbol, Any}()
+    verbose::Bool = false
 end
 
 Base.@kwdef struct GCPBackend <: SlurmBackend
-    hpc_config::HPCConfig = HPCConfig()
+    experiment_dir::String = project_dir()
+    model_interface::String =
+        abspath(joinpath(project_dir(), "..", "..", "model_interface.jl"))
+    hpc_kwargs::Dict{Symbol, Any} = Dict{Symbol, Any}()
+    verbose::Bool = false
 end
 
 """
@@ -82,7 +91,11 @@ end
 Used for NSF NCAR's [Derecho supercomputing system](https://ncar-hpc-docs.readthedocs.io/en/latest/compute-systems/derecho/).
 """
 Base.@kwdef struct DerechoBackend <: HPCBackend
-    hpc_config::HPCConfig = HPCConfig()
+    experiment_dir::String = project_dir()
+    model_interface::String =
+        abspath(joinpath(project_dir(), "..", "..", "model_interface.jl"))
+    hpc_kwargs::Dict{Symbol, Any} = Dict{Symbol, Any}()
+    verbose::Bool = false
 end
 
 """
@@ -97,7 +110,8 @@ Base.@kwdef struct WorkerBackend{WORKERPOOL <: WorkerPool} <: AbstractBackend
 end
 
 function get_backend_kwargs(b::HPCBackend)
-    return get_hpc_kwargs(b.hpc_config)
+    (; experiment_dir, model_interface, hpc_kwargs, verbose) = b
+    return (; experiment_dir, model_interface, hpc_kwargs, verbose)
 end
 
 function get_backend_kwargs(::JuliaBackend)
@@ -134,7 +148,6 @@ function get_backend()
     return JuliaBackend
 end
 
-# TODO: Not sure if module_load_string should be in the struct or not
 """
     module_load_string(backend)
 
@@ -181,9 +194,8 @@ function calibrate(
     backend = get_backend()
     # TODO: Make backend with HPCConfig, not sure about experiment_dir and model_interface
     if backend <: HPCBackend
-        hpc_config = HPCConfig(; hpc_kwargs, model_interface)
         calibrate(
-            backend(; hpc_config),
+            backend(; hpc_kwargs, model_interface),
             ensemble_size,
             n_iterations,
             observations,
@@ -263,7 +275,7 @@ Derecho, ClimaGPU, and CaltechHPC backends are designed to run on a specific hig
 WorkerBackend uses Distributed.jl to run the forward model on workers.
 
 ## Keyword Arguments for HPC backends
-- `model_interface: Path to the model interface file.
+- `model_interface`: Path to the model interface file.
 - `hpc_kwargs`: Dictionary of resource arguments for HPC clusters, passed to the job scheduler.
 - `verbose::Bool`: Enable verbose logging.
 - Any keyword arguments for the EnsembleKalmanProcess constructor, such as `scheduler`
@@ -331,7 +343,7 @@ function calibrate(
     n_iterations,
     prior,
     output_dir;
-    exeflags = "",
+    exeflags = "", # This should go into the struct
 )
     ensemble_size = EKP.get_N_ens(ekp)
     @info "Initializing calibration" n_iterations ensemble_size output_dir
@@ -360,7 +372,7 @@ end
 
 function run_hpc_iteration(
     b::HPCBackend,
-    ekp::EKP.EnsembleKalmanProcess,
+    ekp::EKP.EnsembleKalmanProcess, # TODO: Remove this
     iter,
     ensemble_size,
     output_dir,
@@ -420,7 +432,7 @@ Arguments:
 - hpc_kwargs: Dictionary containing the resources for the job. Easily generated using [`kwargs`](@ref).
 """
 function model_run(
-    backend::AbstractBackend, # isn't this only HPCBackend?????
+    backend::AbstractBackend, # TODO: isn't this only HPCBackend????? Yes, this is HPCBackend
     iter,
     member,
     output_dir,

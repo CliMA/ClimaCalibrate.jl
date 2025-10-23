@@ -35,12 +35,11 @@ eki = EKP.EnsembleKalmanProcess(
 
 ClimaCalibrate.initialize(eki, prior, output_dir)
 
-hpc_config = HPCConfig(;
+backend = backend(
     hpc_kwargs = hpc_kwargs,
     experiment_dir = experiment_dir,
     model_interface = interruption_model_interface,
 )
-backend = backend(; hpc_config)
 ClimaCalibrate.run_hpc_iteration(
     backend,
     eki,
