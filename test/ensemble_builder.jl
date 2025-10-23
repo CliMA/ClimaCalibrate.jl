@@ -204,6 +204,17 @@ import ClimaAnalysis.Template:
         data = make_flat_data(neg_var),
     )
 
+    # Check case with NaN
+    nan_data = collect(Float64.(copy(var.data)))
+    nan_data[1] = NaN
+    nan_var = ClimaAnalysis.remake(var, data = nan_data)
+    @test Checker.check(
+        sign_checker,
+        nan_var,
+        make_metadata(var),
+        data = make_flat_data(var),
+    )
+
     @test_logs (:info, r"Proportion of positive values in the simulation data ") Checker.check(
         sign_checker,
         var,
