@@ -227,6 +227,10 @@ function Checker.check(
     sim_dates = ClimaAnalysis.dates(var)
     sim_indices_for_obs_dates = indexin(obs_dates, sim_dates)
 
+    length(sim_indices_for_obs_dates) == 1 && @warn(
+        "There is only one date in the metadata. SequentialIndicesChecker will always return true"
+    )
+
     # Do not need to check for nothing in sim_indices_for_obs_dates because
     # of DimValuesChecker
     for i in eachindex(sim_indices_for_obs_dates)[2:end]
