@@ -187,6 +187,18 @@ import ClimaAnalysis.Template:
         verbose = true,
     )
 
+    # Check warning from SequentialIndicesChecker
+    date_var5 =
+        TemplateVar() |>
+        add_dim("time", [0.0], units = "s") |>
+        add_attribs(start_date = "2010-12-01T00:00:42") |>
+        initialize
+    @test_logs (:warn, r"only one date in the metadata") Checker.check(
+        sequential_indices_checker,
+        date_var5,
+        make_metadata(date_var5),
+    )
+
     # Check sign of data
     sign_checker = Checker.SignChecker(0.05)
     neg_var = ClimaAnalysis.remake(var, data = -var.data)
