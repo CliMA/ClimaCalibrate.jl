@@ -43,7 +43,7 @@ expected_sbatch_contents = """
 #SBATCH --cpus-per-task=16
 #SBATCH --time=01:30:00
 
-export MODULEPATH="/groups/esm/modules:\$MODULEPATH"
+export MODULEPATH="/resnick/groups/esm/modules:\$MODULEPATH"
 module purge
 module load climacommon/2024_10_09
 export CLIMACOMMS_DEVICE="CUDA"

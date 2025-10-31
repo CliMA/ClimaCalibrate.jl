@@ -83,7 +83,7 @@ end
 Return a string that loads the correct modules for a given backend when executed via bash.
 """
 function module_load_string(::Type{CaltechHPCBackend})
-    return """export MODULEPATH="/groups/esm/modules:\$MODULEPATH"
+    return """export MODULEPATH="/resnick/groups/esm/modules:\$MODULEPATH"
     module purge
     module load climacommon/2024_10_09"""
 end
