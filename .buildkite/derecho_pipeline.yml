@@ -23,9 +23,6 @@ steps:
 
   - label: "SurfaceFluxes perfect model calibration"
     command: 
-    - echo "--- WorkerBackend Calibration" 
-    - julia --project=experiments/surface_fluxes_perfect_model test/worker_backend.jl
-    - rm -rf output/surface_fluxes_perfect_model/*
     - echo "--- HPCBackend Calibration" 
     - julia --project=experiments/surface_fluxes_perfect_model test/hpc_backend.jl
     artifact_paths: output/surface_fluxes_perfect_model/*
