@@ -212,8 +212,7 @@ function generate_sbatch_script(
     climacomms_device = gpus_per_task > 0 ? "CUDA" : "CPU"
     # TODO: Remove this exception for GCP
     mpiexec_string =
-        get_backend() == GCPBackend ?
-        "/sw/openmpi-5.0.5/bin/mpiexec -n $ntasks" :
+        get_backend() == GCPBackend ? "mpiexec -n $ntasks" :
         "srun --output=$member_log --open-mode=append"
     sbatch_contents = """
     #!/bin/bash
