@@ -174,7 +174,7 @@ end
 
 function module_load_string(::ClimaGPUBackend)
     return """module purge
-    module load julia/1.11.0 cuda/julia-pref openmpi/4.1.5-mpitrampoline"""
+    module load climacommon/2025_05_15"""
 end
 
 function module_load_string(::DerechoBackend)
