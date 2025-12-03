@@ -186,10 +186,36 @@ function module_load_string(::DerechoBackend)
 end
 
 function module_load_string(::GCPBackend)
-    return """export OPAL_PREFIX="/sw/openmpi-5.0.5"
-    export PATH="/sw/openmpi-5.0.5/bin:\$PATH"
-    export LD_LIBRARY_PATH="/sw/openmpi-5.0.5/lib:\$LD_LIBRARY_PATH"
-    export UCX_MEMTYPE_CACHE=y  # UCX Memory optimization which toggles whether UCX library intercepts cu*alloc* calls
+    return """
+    unset CUDA_ROOT
+    unset NVHPC_CUDA_HOME
+    unset CUDA_INC_DIR
+    unset CPATH
+    unset NVHPC_ROOT 
+
+    # NVHPC and HPC-X paths
+    export NVHPC="/sw/nvhpc/Linux_x86_64/24.5"
+    export HPCX_PATH="\${NVHPC}/comm_libs/12.4/hpcx/hpcx-2.19"
+
+    # CUDA environment
+    export CUDA_HOME="\${NVHPC}/cuda/12.4"
+    export CUDA_PATH="\${CUDA_HOME}"
+    export CUDA_ROOT="\${CUDA_HOME}"
+
+    # MPI via MPIwrapper
+    export MPITRAMPOLINE_LIB="/sw/mpiwrapper/lib/libmpiwrapper.so"
+    export OPAL_PREFIX="\${HPCX_PATH}/ompi"
+
+    # Library paths - CUDA first, then HPC-X
+    export LD_LIBRARY_PATH="\${CUDA_HOME}/lib64:\${HPCX_PATH}/ompi/lib\${LD_LIBRARY_PATH:+:\${LD_LIBRARY_PATH}}"
+
+    # Executable paths
+    export PATH="/sw/mpiwrapper/bin:\${CUDA_HOME}/bin:\${PATH}"
+    export PATH="\${NVHPC}/profilers/Nsight_Systems/target-linux-x64:\${PATH}"
+
+    # Julia
+    export PATH="/sw/julia/julia-1.11.5/bin:\${PATH}"
+    export JULIA_MPI_HAS_CUDA="true"
     """
 end
 
