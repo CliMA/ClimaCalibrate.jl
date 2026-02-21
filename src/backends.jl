@@ -150,8 +150,10 @@ function get_backend()
         (r"^hpc-(\d\d)-(\d\d).cm.cluster$", CaltechHPCBackend),
         (r"^hpc\d+-slurm-login-\d+$", GCPBackend),
         (r"^hpc\d+-a\d+nodeset-\d+$", GCPBackend),
+        (r"^cron$", DerechoBackend),  # Buildkite job launcher on Derecho
         (r"derecho([1-8])$", DerechoBackend),
-        (r"deg(\d\d\d\d)$", DerechoBackend), # This should be more specific
+        (r"dec\d+$", DerechoBackend),  # CPU nodes
+        (r"deg(\d\d\d\d)$", DerechoBackend), # GPU nodes
     ]
 
     for (pattern, backend) in HOSTNAMES
@@ -180,9 +182,7 @@ end
 function module_load_string(::DerechoBackend)
     return """export MODULEPATH="/glade/campaign/univ/ucit0011/ClimaModules-Derecho:\$MODULEPATH" 
     module purge
-    module load climacommon
-    module list
-    """
+    module load climacommon/2025_02_25"""
 end
 
 function module_load_string(::GCPBackend)

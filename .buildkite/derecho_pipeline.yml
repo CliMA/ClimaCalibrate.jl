@@ -1,8 +1,8 @@
 agents:
   queue: derecho
-  modules: climacommon
+  modules: climacommon/2025_02_25
   pbs_q: main
-  pbs_l_select: "1:ngpus=1:ncpus=1" # We are out of CPU-only hours...
+  pbs_l_select: "1:ncpus=1"
 
 env:
   OPENBLAS_NUM_THREADS: 1

@@ -263,6 +263,12 @@ function slurm_model_run(
     @assert isdir(experiment_dir) "Experiment directory does not exist: $experiment_dir"
     @assert isfile(model_interface) "Model interface file does not exist: $model_interface"
 
+    # Use absolute paths in the script so compute nodes write checkpoints where the
+    # main process (e.g. on the login node) expects them, regardless of job cwd.
+    output_dir = abspath(output_dir)
+    experiment_dir = abspath(experiment_dir)
+    model_interface = abspath(model_interface)
+
     # Range checks
     @assert iter >= 0 "Iteration number must be non-negative"
     @assert member > 0 "Member number must be positive"

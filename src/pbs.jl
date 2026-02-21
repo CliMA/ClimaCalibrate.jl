@@ -31,6 +31,7 @@ function generate_pbs_script(
     num_nodes = get(hpc_kwargs, :ntasks, 1)
     cpus_per_node = get(hpc_kwargs, :cpus_per_task, 1)
     gpus_per_node = get(hpc_kwargs, :gpus_per_task, 0)
+    job_priority = get(hpc_kwargs, :job_priority, "regular")
 
     if gpus_per_node > 0
         ranks_per_node = gpus_per_node
@@ -54,6 +55,7 @@ function generate_pbs_script(
     #PBS -A UCIT0011
     #PBS -q $queue
     #PBS -o $member_log
+    #PBS -l job_priority=$job_priority
     #PBS -l walltime=$walltime
     #PBS -l select=$num_nodes:ncpus=$cpus_per_node:ngpus=$gpus_per_node:mpiprocs=$ranks_per_node
 

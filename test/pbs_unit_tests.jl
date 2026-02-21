@@ -43,14 +43,13 @@ expected_pbs_contents = """
 #PBS -A UCIT0011
 #PBS -q main
 #PBS -o test/iteration_001/member_001/model_log.txt
+#PBS -l job_priority=regular
 #PBS -l walltime=01:30:00
 #PBS -l select=2:ncpus=16:ngpus=2:mpiprocs=2
 
 export MODULEPATH="/glade/campaign/univ/ucit0011/ClimaModules-Derecho:\$MODULEPATH" 
 module purge
-module load climacommon
-module list
-
+module load climacommon/2025_02_25
 
 export JULIA_MPI_HAS_CUDA=true
 export CLIMACOMMS_DEVICE="CUDA"
@@ -80,8 +79,7 @@ test_cmd = """
 #PBS -A UCIT0011
 #PBS -q preempt
 #PBS -l walltime=00:01:00
-#PBS -l select=1:ncpus=1:ngpus=1
-# The GPU isn't needed, but we are currently overspent on the CPU queue
+#PBS -l select=1:ncpus=1
 
 sleep 10
 """
@@ -100,19 +98,3 @@ sleep(180)  # Ensure job finishes. To debug, lower sleep time or comment out the
 # Test job cancellation
 jobid = submit_cmd_helper(test_cmd)
 CAL.kill_job(jobid)
-
-# These tests now fail because we assume an empty job status is running
-# sleep(1)
-# @test CAL.job_status(jobid) == :FAILED
-# @test CAL.job_completed(CAL.job_status(jobid)) &&
-#       CAL.job_failed(CAL.job_status(jobid))
-
-# # Test batch cancellation
-# jobids = ntuple(x -> submit_cmd_helper(test_cmd), 5)
-
-# CAL.kill_job.(jobids)
-# sleep(10)
-# for jobid in jobids
-#     @test CAL.job_completed(jobid)
-#     @test CAL.job_failed(jobid)
-# end
