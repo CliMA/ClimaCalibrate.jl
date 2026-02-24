@@ -48,7 +48,7 @@ jobs:
           max_attempts: 2
           timeout_minutes: 10
           command: |
-            julia -e 'using Pkg; Pkg.add("Conda"); using Conda; Conda.add("scipy=1.14.1"); Conda.add("scikit-learn=1.5.1")'
+            julia -e 'using Pkg; Pkg.add("Conda"); using Conda; Conda.add("python=3.12"); Conda.add("scipy=1.14.1"); Conda.add("scikit-learn=1.5.1")'
         env: 
           PYTHON: ""
       - uses: julia-actions/julia-buildpkg@v1

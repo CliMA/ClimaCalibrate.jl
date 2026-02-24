@@ -13,7 +13,6 @@ backend = get_backend()
 hpc_kwargs = kwargs(time = 5, ntasks = 1, cpus_per_task = 1)
 if backend == DerechoBackend
     hpc_kwargs[:queue] = "preempt"
-    hpc_kwargs[:gpus_per_task] = 1
 end
 
 original_model_interface = model_interface
