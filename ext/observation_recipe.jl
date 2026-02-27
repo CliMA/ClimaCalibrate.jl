@@ -2,6 +2,7 @@ import ClimaCalibrate.ObservationRecipe
 import ClimaCalibrate.ObservationRecipe: AbstractCovarianceEstimator
 import ClimaCalibrate.ObservationRecipe:
     ScalarCovariance, SeasonalDiagonalCovariance, SVDplusDCovariance
+import ClimaCalibrate.ObservationRecipe: QuantileRegularization
 
 """
     covariance(
@@ -244,9 +245,87 @@ function ObservationRecipe.covariance(
     model_error_scale = Diagonal(vec(model_error_scale))
 
     # Add regularization
-    regularization = covar_estimator.regularization * I
+    regularization = create_regularization(
+        covar_estimator.regularization,
+        covar_estimator,
+        vars,
+        sample_date_ranges,
+        model_error_scale,
+    )
 
     return EKP.SVDplusD(gamma_low_rank, model_error_scale + regularization)
+end
+
+"""
+    create_regularization(regularization::AbstractFloat, _, _, _, _)
+
+Create the regularization matrix of the form `regularization * I`.
+"""
+function create_regularization(regularization::AbstractFloat, _, _, _, _)
+    return regularization * I
+end
+
+"""
+    create_regularization(
+        regularization::QuantileRegularization,
+        covar_estimator::SVDplusDCovariance,
+        vars,
+        sample_date_ranges,
+        model_error_scale,
+    )
+
+Create the regularization matrix where each variable gets its own regularization
+value based on the `regularization.qtl` quantile of its model error scale
+vector.
+
+For each variable, the `qtl` quantile of the model error scale diagonal entries
+corresponding to that variable is computed and used as a constant regularization
+term for all entries belonging to that variable.
+"""
+function create_regularization(
+    regularization::QuantileRegularization,
+    covar_estimator::SVDplusDCovariance,
+    vars,
+    sample_date_ranges,
+    model_error_scale,
+)
+    metadata = _metadata_for_stacked_sample(vars, sample_date_ranges)
+    index = 1
+    indices_vec = []
+    for md in metadata
+        data_size = ClimaAnalysis.flattened_length(md)
+        start_idx = index
+        index += data_size
+        push!(indices_vec, start_idx:(start_idx + data_size - 1))
+    end
+
+    (; qtl) = regularization
+
+    model_error_scale_vec = model_error_scale.diag
+
+    regularization_vals_vec = []
+    for (i, indices) in enumerate(indices_vec)
+        var_model_error_scale_vec = view(model_error_scale_vec, indices)
+        # Check that there is a sufficient number of samples (e.g. if qtl =
+        # 0.05, there should be at least 20 samples for a meaningful
+        # quantile computation)
+        length(var_model_error_scale_vec) < 1 / qtl &&
+            error("Insufficient samples for computing quantile")
+        qtl_for_var = Statistics.quantile(var_model_error_scale_vec, qtl)
+        qtl_for_var ≈ 0.0 && error(
+            "Zero found for the quantile ($qtl) of the model error scale for the variable ($(ClimaAnalysis.short_name(metadata[i]))). The model error scale ($(covar_estimator.model_error_scale)) might be too small",
+        )
+        push!(regularization_vals_vec, qtl_for_var)
+    end
+
+    return Diagonal(
+        vcat(
+            [
+                fill(reg, length(indices)) for
+                (reg, indices) in zip(regularization_vals_vec, indices_vec)
+            ]...,
+        ),
+    )
 end
 
 """
@@ -467,6 +546,32 @@ function _stacked_samples(vars, sample_date_ranges)
             )...,
         )
     end
+end
+
+"""
+    _metadata_for_stacked_sample(vars, sample_date_ranges)
+
+Get metadata for a single stacked sample.
+
+Since this is metadata from only a single stacked sample, you cannot use the
+metadata for time information as the time information differs for each sample.
+"""
+function _metadata_for_stacked_sample(vars, sample_date_ranges)
+    sample_start_date, sample_end_date = first(sample_date_ranges)
+    metadata = []
+    for var in vars
+        md =
+            ClimaAnalysis.flatten(
+                ClimaAnalysis.window(
+                    var,
+                    "time",
+                    left = sample_start_date,
+                    right = sample_end_date,
+                ),
+            ).metadata
+        push!(metadata, md)
+    end
+    return metadata
 end
 
 """

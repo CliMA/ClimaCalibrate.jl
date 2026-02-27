@@ -3,6 +3,7 @@ module ObservationRecipe
 export ScalarCovariance,
     SeasonalDiagonalCovariance,
     SVDplusDCovariance,
+    QuantileRegularization,
     covariance,
     observation,
     short_names,
@@ -194,6 +195,34 @@ function SeasonalDiagonalCovariance(;
 end
 
 """
+    QuantileRegularization
+
+Regularization using the quantile of the model error scale for each
+`OutputVar`.
+
+The same quantile is used for each `OutputVar` when making the observation.
+
+This is used for the `SVDplusDCovariance` matrix.
+
+Examples
+========
+
+In the example below, a regularization using the 0.05 quantile of the model
+error scale for each variable is initialized.
+
+```julia
+qtl_regularization = QuantileRegularization(0.05)
+```
+"""
+struct QuantileRegularization{FT <: AbstractFloat}
+    qtl::FT
+    function QuantileRegularization(qtl::AbstractFloat)
+        (qtl <= 0 || qtl > 1) && error("Quantile must be in (0, 1], got $qtl")
+        new{typeof(qtl)}(qtl)
+    end
+end
+
+"""
     SVDplusDCovariance <: AbstractCovarianceEstimator
 
 Contain the necessary information to construct a `EKP.SVDplusD` covariance
@@ -201,7 +230,7 @@ matrix from `ClimaAnalysis.OutputVar`s.
 """
 struct SVDplusDCovariance{
     FT1 <: AbstractFloat,
-    FT2 <: AbstractFloat,
+    FT2 <: Union{AbstractFloat, QuantileRegularization},
     DATE <: Dates.AbstractDateTime,
     FT3 <: AbstractFloat,
     R <: Union{Integer, Nothing},
@@ -267,8 +296,9 @@ Keyword arguments
   matrix. This is `(model_error_scale * mean(samples, dims = 2)).^2`, where
   `mean(samples, dims = 2)` is the mean of the samples.
 
-- `regularization`: A diagonal matrix of the form `regularization * I` is added
-  to the covariance matrix.
+- `regularization`: If a scalar is used, a diagonal matrix of the form
+  `regularization * I` is added to the covariance matrix. See
+  [`QuantileRegularization`](@ref) for another option for regularization.
 
 - `use_latitude_weights`: If `true`, then latitude weighting is applied to the
   covariance matrix. Latitude weighting is multiplying the columns of the matrix
@@ -293,8 +323,10 @@ function SVDplusDCovariance(
 )
     model_error_scale < zero(model_error_scale) &&
         error("Model_error_scale ($model_error_scale) should not be negative")
-    regularization < zero(regularization) &&
-        error("Regularization ($regularization) should not be negative")
+    if regularization isa AbstractFloat
+        regularization < zero(regularization) &&
+            error("Regularization ($regularization) should not be negative")
+    end
 
     sample_date_ranges = [
         (Dates.DateTime(date_pair[1]), Dates.DateTime(date_pair[2])) for

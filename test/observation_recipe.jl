@@ -877,6 +877,180 @@ end
     )
 end
 
+@testset "Quantile regularization" begin
+    # Test constructor
+    q_reg = ObservationRecipe.QuantileRegularization(0.05)
+    @test q_reg.qtl == 0.05
+
+    @test_throws ErrorException ObservationRecipe.QuantileRegularization(0.0)
+    @test_throws ErrorException ObservationRecipe.QuantileRegularization(-0.05)
+    @test_throws ErrorException ObservationRecipe.QuantileRegularization(1.1)
+
+    function compute_model_error_scale_vec(
+        vars,
+        sample_date_ranges,
+        model_error_scale,
+    )
+        return vec(
+            model_error_scale .* mean(
+                hcat(ext._stacked_samples(vars, sample_date_ranges)...),
+                dims = 2,
+            ),
+        ) .^ 2
+    end
+
+    # Computing with quantile regularization and no regularization and
+    # extracting the quantile value
+    # Single OutputVar
+    lat = [-90.0, -30.0, 30.0, 90.0]
+    lon = [-60.0, -30.0, 0.0, 30.0, 60.0]
+    time =
+        ClimaAnalysis.Utils.date_to_time.(
+            Dates.DateTime(2007, 12),
+            [Dates.DateTime(2007, 12) + Dates.Month(i) for i in 0:35],
+        )
+    var =
+        TemplateVar() |>
+        add_dim("time", time, units = "s") |>
+        add_dim("lon", lon, units = "degrees") |>
+        add_dim("lat", lat, units = "degrees") |>
+        add_attribs(
+            short_name = "hi",
+            long_name = "hello",
+            start_date = "2007-12-1",
+            blah = "blah2",
+        ) |>
+        one_to_n_data(collected = true) |>
+        initialize
+    var = ClimaAnalysis.average_season_across_time(var)
+
+    sample_date_ranges = [
+        (Dates.DateTime(i, 12, 1), Dates.DateTime(i + 1, 9, 1)) for
+        i in 2007:2009
+    ]
+
+    model_error_scale = 0.05
+    covar_estimator_with_q_reg = ObservationRecipe.SVDplusDCovariance(
+        sample_date_ranges;
+        regularization = q_reg,
+        model_error_scale,
+    )
+    covar_estimator_with_no_reg = ObservationRecipe.SVDplusDCovariance(
+        sample_date_ranges;
+        regularization = 0.0,
+        model_error_scale,
+    )
+
+    svd_plus_d_q_reg = ObservationRecipe.covariance(
+        covar_estimator_with_q_reg,
+        var,
+        Dates.DateTime(2007, 12),
+        Dates.DateTime(2008, 9),
+    )
+
+    svd_plus_d_no_reg = ObservationRecipe.covariance(
+        covar_estimator_with_no_reg,
+        var,
+        Dates.DateTime(2007, 12),
+        Dates.DateTime(2008, 9),
+    )
+
+    q_reg_of_model_error_scale_vec =
+        svd_plus_d_q_reg.diag_cov.diag .- svd_plus_d_no_reg.diag_cov.diag
+
+    model_error_scale_vec = compute_model_error_scale_vec(
+        (var,),
+        sample_date_ranges,
+        model_error_scale,
+    )
+    five_percentile =
+        first(Statistics.quantile(model_error_scale_vec, [q_reg.qtl]))
+
+    @test all(q_reg_of_model_error_scale_vec .≈ five_percentile)
+
+    # Multiple OutputVars
+    var2 =
+        TemplateVar() |>
+        add_dim("time", time, units = "s") |>
+        add_dim("lon", lon, units = "degrees") |>
+        add_dim("lat", [0.0, 1.0, 10.0], units = "degrees") |>
+        add_attribs(
+            short_name = "hi",
+            long_name = "hello",
+            start_date = "2007-12-1",
+            blah = "blah2",
+        ) |>
+        one_to_n_data(collected = true) |>
+        initialize
+    var2 = ClimaAnalysis.average_season_across_time(var2)
+    # Want the quantile to be different
+    @. var2.data = sin(var2.data)
+
+    svd_plus_d_q_reg = ObservationRecipe.covariance(
+        covar_estimator_with_q_reg,
+        (var, var2),
+        Dates.DateTime(2007, 12),
+        Dates.DateTime(2008, 9),
+    )
+
+    svd_plus_d_no_reg = ObservationRecipe.covariance(
+        covar_estimator_with_no_reg,
+        (var, var2),
+        Dates.DateTime(2007, 12),
+        Dates.DateTime(2008, 9),
+    )
+
+    q_reg_of_model_error_scale_vec =
+        svd_plus_d_q_reg.diag_cov.diag .- svd_plus_d_no_reg.diag_cov.diag
+
+    i = 0
+    for v in (var, var2)
+        model_error_scale_vec = compute_model_error_scale_vec(
+            (v,),
+            sample_date_ranges,
+            model_error_scale,
+        )
+        five_percentile =
+            first(Statistics.quantile(model_error_scale_vec, [q_reg.qtl]))
+        n = length(model_error_scale_vec)
+        @test all(
+            q_reg_of_model_error_scale_vec[(i + 1):(i + n)] .≈ five_percentile,
+        )
+        i += n
+    end
+
+    # Error handling
+    small_var =
+        TemplateVar() |>
+        add_dim("time", time, units = "s") |>
+        add_attribs(
+            short_name = "hi",
+            long_name = "hello",
+            start_date = "2007-12-1",
+            blah = "blah2",
+        ) |>
+        one_to_n_data(collected = true) |>
+        initialize
+    small_var = ClimaAnalysis.average_season_across_time(small_var)
+    @test_throws r"Insufficient samples for computing quantile" ObservationRecipe.covariance(
+        covar_estimator_with_q_reg,
+        small_var,
+        Dates.DateTime(2007, 12),
+        Dates.DateTime(2008, 9),
+    )
+    covar_estimator_no_model_error_scale = ObservationRecipe.SVDplusDCovariance(
+        sample_date_ranges;
+        regularization = q_reg,
+        model_error_scale = 0.0,
+    )
+    @test_throws r"Zero found for the quantile" ObservationRecipe.covariance(
+        covar_estimator_no_model_error_scale,
+        var,
+        Dates.DateTime(2007, 12),
+        Dates.DateTime(2008, 9),
+    )
+end
+
 @testset "Seasonal diagonal covariance" begin
     time =
         ClimaAnalysis.Utils.date_to_time.(
