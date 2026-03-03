@@ -646,16 +646,11 @@ function ObservationRecipe.reconstruct_diag_cov(obs::EKP.Observation)
     # the indexing a bit more difficult
     cov_diags = mapreduce(cov -> view(cov, diagind(cov)), vcat, covs)
 
-    start_index = 1
     vars = OutputVar[]
-    for metadata in all_metadata
-        data_size = ClimaAnalysis.flattened_length(metadata)
-        var = ClimaAnalysis.unflatten(
-            metadata,
-            view(cov_diags, start_index:(start_index + data_size - 1)),
-        )
+    all_indices = _get_indices_of_metadata(all_metadata)
+    for (metadata, indices) in zip(all_metadata, all_indices)
+        var = ClimaAnalysis.unflatten(metadata, view(cov_diags, indices))
         push!(vars, var)
-        start_index += data_size
     end
     return vars
 end
@@ -670,16 +665,11 @@ function ObservationRecipe.reconstruct_vars(obs::EKP.Observation)
     samples = EKP.get_samples(obs)
     stacked_sample = reduce(vcat, samples)
 
-    start_index = 1
     vars = OutputVar[]
-    for metadata in all_metadata
-        data_size = ClimaAnalysis.flattened_length(metadata)
-        var = ClimaAnalysis.unflatten(
-            metadata,
-            view(stacked_sample, start_index:(start_index + data_size - 1)),
-        )
+    all_indices = _get_indices_of_metadata(all_metadata)
+    for (metadata, indices) in zip(all_metadata, all_indices)
+        var = ClimaAnalysis.unflatten(metadata, view(stacked_sample, indices))
         push!(vars, var)
-        start_index += data_size
     end
     return vars
 end
@@ -695,14 +685,31 @@ multiple `OutputVar`s are flattened and concatenated together as a single
 vector.
 """
 function _get_minibatch_indices_for_nth_iteration(obs_series, N)
-    metadatas = ObservationRecipe.get_metadata_for_nth_iteration(obs_series, N)
-    minibatch_indices = UnitRange{Int}[]
+    all_metadata =
+        ObservationRecipe.get_metadata_for_nth_iteration(obs_series, N)
+    minibatch_indices = _get_indices_of_metadata(all_metadata)
+    return minibatch_indices
+end
+
+"""
+    _get_indices_of_metadata(metadata::Iterable{ClimaAnalysis.Var.Metadata})
+
+For a vector of `ClimaAnalysis.Var.Metadata`, return a list of ranges for
+indexing.
+
+This is useful when you have a vector created from the concatenation of
+multiple flattened `OutputVar`s. The returned ranges let you extract the slice
+that belongs to each metadata entry and pass it to `ClimaAnalysis.unflatten` to
+reconstruct the original `OutputVar`.
+"""
+function _get_indices_of_metadata(metadata)
+    ranges = UnitRange{Int}[]
     index = 1
-    for metadata in metadatas
-        data_size = ClimaAnalysis.flattened_length(metadata)
+    for md in metadata
+        data_size = ClimaAnalysis.flattened_length(md)
         start_idx = index
         index += data_size
-        push!(minibatch_indices, start_idx:(start_idx + data_size - 1))
+        push!(ranges, start_idx:(start_idx + data_size - 1))
     end
-    return minibatch_indices
+    return ranges
 end
