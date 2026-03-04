@@ -298,8 +298,14 @@ function calibrate(
 end
 
 """
-    calibrate(backend, ekp::EnsembleKalmanProcess, ensemble_size, n_iterations, prior, output_dir)
-    calibrate(backend, ensemble_size, n_iterations, observations, noise, prior, output_dir; ekp_kwargs...)
+    calibrate(
+        backend, ekp::EnsembleKalmanProcess, ensemble_size, n_iterations,
+        prior, output_dir
+    )
+    calibrate(
+        backend, ensemble_size, n_iterations, observations, noise, prior,
+        output_dir; ekp_kwargs...
+    )
 
 Run a full calibration on the given backend.
 
@@ -447,7 +453,13 @@ end
 # Dispatch on backend type to unify `calibrate` for all HPCBackends
 # This keeps the scheduler interface independent from the backends
 """
-    model_run(backend, iter, member, output_dir, project_dir, module_load_str; exeflags)
+    model_run(
+        backend,
+        iter, member,
+        output_dir, project_dir,
+        module_load_str;
+        exeflags = "",
+    )
 
 Construct and execute a command to run a single forward model on a given job scheduler.
 

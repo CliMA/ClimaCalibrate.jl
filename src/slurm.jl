@@ -11,7 +11,14 @@ Create a dictionary from keyword arguments.
 kwargs(; kwargs...) = Dict{Symbol, Any}(kwargs...)
 
 """
-    wait_for_jobs(jobids, output_dir, iter, experiment_dir, model_interface, module_load_str, model_run_func; verbose, hpc_kwargs, reruns=1)
+    wait_for_jobs(
+        jobids,
+        output_dir, iter,
+        experiment_dir, model_interface, module_load_str, model_run_func;
+        verbose,
+        hpc_kwargs,
+        reruns = 1
+    )
 
 Wait for a set of jobs to complete. If a job fails, it will be rerun up to `reruns` times.
 
@@ -139,7 +146,15 @@ end
 
 Submit a job to the Slurm scheduler using sbatch, removing unwanted environment variables.
 
-Unset variables: "SLURM_MEM_PER_CPU", "SLURM_MEM_PER_GPU", "SLURM_MEM_PER_NODE"
+Unset variables:
+- "SLURM\\_MEM\\_PER\\_CPU",
+- "SLURM\\_MEM\\_PER\\_GPU",
+- "SLURM\\_MEM\\_PER\\_NODE",
+- "SLURM\\_CPUS\\_PER\\_TASK",
+- "SLURM\\_NTASKS",
+- "SLURM\\_JOB\\_NAME",
+- "SLURM\\_SUBMIT\\_DIR",
+- "SLURM\\_JOB\\_ID",
 """
 function submit_slurm_job(sbatch_filepath; env = ENV)
     clean_env = deepcopy(env)
@@ -189,7 +204,14 @@ function generate_sbatch_directives(hpc_kwargs)
     return join(slurm_directives, "\n")
 end
 """
-    generate_sbatch_script(iter, member, output_dir, experiment_dir, model_interface; module_load_str, hpc_kwargs, exeflags="")
+    generate_sbatch_script(
+        iter::Int, member::Int,
+        output_dir, experiment_dir,
+        model_interface, module_load_str,
+        hpc_kwargs,
+        exeflags = "",
+    )
+
 Generate a string containing an sbatch script to run the forward model.
 `hpc_kwargs` is turned into a series of sbatch directives using [`generate_sbatch_directives`](@ref).
 `module_load_str` is used to load the necessary modules and can be obtained via [`module_load_string`](@ref).
@@ -239,7 +261,17 @@ function generate_sbatch_script(
 end
 
 """
-    slurm_model_run(iter, member, output_dir, experiment_dir, model_interface, module_load_str; hpc_kwargs)
+    slurm_model_run(
+        iter, member,
+        output_dir, experiment_dir, model_interface,
+        module_load_str;
+        hpc_kwargs = Dict{Symbol, Any}(
+            :time => 45,
+            :ntasks => 1,
+            :cpus_per_task => 1,
+        ),
+        exeflags = "",
+    )
 
 Construct and execute a command to run a single forward model on Slurm.
 Helper function for [`model_run`](@ref).

@@ -121,11 +121,13 @@ function EnsembleBuilder.GEnsembleBuilder(
 end
 
 """
-    EnsembleBuilder.fill_g_ens_col!(g_ens_builder::GEnsembleBuilder,
-                                    col_idx,
-                                    var::OutputVar;
-                                    checkers = (),
-                                    verbose = false)
+    EnsembleBuilder.fill_g_ens_col!(
+        g_ens_builder::GEnsembleBuilder,
+        col_idx,
+        var::OutputVar;
+        checkers = (),
+        verbose = false
+    )
 
 Fill the `col_idx`th of the G ensemble matrix from the `OutputVar` `var` and
 `ekp`. If it was successful, return `true`, otherwise, return `false`.
@@ -182,9 +184,11 @@ function EnsembleBuilder.fill_g_ens_col!(
 end
 
 """
-    EnsembleBuilder.fill_g_ens_col!(g_ens_builder::GEnsembleBuilder,
-                                    col_idx,
-                                    val::AbstractFloat)
+    EnsembleBuilder.fill_g_ens_col!(
+        g_ens_builder::GEnsembleBuilder,
+        col_idx,
+        val::AbstractFloat
+    )
 
 Fill the `col_idx`th column of the G ensemble matrix with `val`.
 
@@ -204,10 +208,12 @@ function EnsembleBuilder.fill_g_ens_col!(
 end
 
 """
-    _try_fill_g_ens_col_with_var!(g_ens_builder::GEnsembleBuilder,
-                                  col_idx,
-                                  var::OutputVar,
-                                  metadata_info::MetadataInfo)
+    _try_fill_g_ens_col_with_var!(
+        g_ens_builder::GEnsembleBuilder,
+        col_idx,
+        var::OutputVar,
+        metadata_info::MetadataInfo
+    )
 
 Try to fill the `col_idx`th of the G ensemble matrix using `metadata_info` and
 `var`. Return `true` if sucessful and `false` if not.

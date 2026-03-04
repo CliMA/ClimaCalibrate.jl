@@ -5,7 +5,7 @@
 
 !!! note "Prerequisites"
     This module assumes that you are using `ObservationRecipe` to make your
-    observations and `ClimaAnalysis` to preprocess your simulation data. If this
+    observations and `ClimaAnalysis` to preprocess your simulation data. If that
     is not the case, this module is not for you.
 
 !!! note "Version of ClimaAnalysis"
@@ -163,8 +163,9 @@ of the metadata. For example, the short names are checked between the
   0.05).
 
 By default, `GEnsembleBuilder` uses the first five checkers to validate
-compatibility between . You can also provide additional checkers using the `checkers`
-keyword argument in `fill_g_ens_col!`:
+compatibility between observational data and simulation data. You can also
+provide additional checkers using the `checkers` keyword argument in
+`fill_g_ens_col!`:
 
 ```julia
 # Use additional checker for sequential indices
