@@ -778,6 +778,27 @@ end
         ),
     )
 
+    # Test rank
+    covar_estimator_rank0 =
+        ObservationRecipe.SVDplusDCovariance(sample_date_ranges; rank = 0)
+    svd_plus_d_covar_rank0 = ObservationRecipe.covariance(
+        covar_estimator_rank0,
+        var,
+        Dates.DateTime(2007, 12),
+        Dates.DateTime(2008, 9),
+    )
+    # It is silly to use a rank of 0 for SVD, but it simplifies testing
+    # There are no eigenvalues for a rank 0 SVD
+    @test isempty(svd_plus_d_covar_rank0.svd_cov.S)
+
+    covar_estimator_rank10 =
+        ObservationRecipe.SVDplusDCovariance(sample_date_ranges; rank = 10)
+    @test_logs (:warn, r"rank") ObservationRecipe.covariance(
+        covar_estimator_rank10,
+        var,
+        Dates.DateTime(2007, 12),
+        Dates.DateTime(2008, 9),
+    )
 
     # Test float type
     covar_estimator = ObservationRecipe.SVDplusDCovariance(
@@ -848,6 +869,11 @@ end
         var,
         Dates.DateTime(2007, 12),
         Dates.DateTime(2008, 3),
+    )
+
+    @test_throws ErrorException ObservationRecipe.SVDplusDCovariance(
+        sample_date_ranges;
+        rank = -1,
     )
 end
 
