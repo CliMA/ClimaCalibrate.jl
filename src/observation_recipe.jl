@@ -202,6 +202,7 @@ struct SVDplusDCovariance{
     FT2 <: AbstractFloat,
     DATE <: Dates.AbstractDateTime,
     FT3 <: AbstractFloat,
+    R <: Union{Integer, Nothing},
 } <: AbstractCovarianceEstimator
     """A model error scale term added to the diagonal of the covariance
     matrix"""
@@ -218,6 +219,9 @@ struct SVDplusDCovariance{
 
     """The minimum cosine weight when using latitude weighting"""
     min_cosd_lat::FT3
+
+    """Rank of the singular value decomposition (SVD)"""
+    rank::R
 end
 
 """
@@ -225,7 +229,8 @@ end
                        model_error_scale = 0.0,
                        regularization = 0.0,
                        use_latitude_weights = false,
-                       min_cosd_lat = 0.1)
+                       min_cosd_lat = 0.1,
+                       rank = nothing)
 
 Create a `SVDplusDCovariance` which specifies how the covariance matrix should
 be formed. When used with `ObservationRecipe.observation` or
@@ -270,6 +275,9 @@ Keyword arguments
   `use_latitude_weights` is `true`. The value for `min_cosd_lat` must be greater
   than zero as values close to zero along the diagonal of the covariance matrix
   can lead to issues when taking the inverse of the covariance matrix.
+
+- `rank`: Rank of the singlar value decomposition (SVD). If `nothing` is passed
+  in, then the rank is automatically inferred from the data.
 """
 function SVDplusDCovariance(
     sample_date_ranges;
@@ -277,6 +285,7 @@ function SVDplusDCovariance(
     regularization = 0.0,
     use_latitude_weights = false,
     min_cosd_lat = 0.1,
+    rank = nothing,
 )
     model_error_scale < zero(model_error_scale) &&
         error("Model_error_scale ($model_error_scale) should not be negative")
@@ -296,12 +305,17 @@ function SVDplusDCovariance(
             "The value for min_cosd_lat ($min_cosd_lat) should be greater than zero",
         )
     end
+    isnothing(rank) ||
+        rank >= 0 ||
+        error("Rank ($rank) should be nothing or non-negative")
+
     return SVDplusDCovariance(
         model_error_scale,
         regularization,
         sample_date_ranges,
         use_latitude_weights,
         min_cosd_lat,
+        rank,
     )
 end
 

@@ -213,7 +213,17 @@ function ObservationRecipe.covariance(
         min_cosd_lat = covar_estimator.min_cosd_lat,
     )
 
-    gamma_low_rank = EKP.tsvd_cov_from_samples(stacked_sample_matrix)
+    (; rank) = covar_estimator
+    gamma_low_rank = if isnothing(rank)
+        EKP.tsvd_cov_from_samples(stacked_sample_matrix)
+    else
+        EKP.tsvd_cov_from_samples(stacked_sample_matrix, rank)
+    end
+
+    rank_of_svd = length(gamma_low_rank.S)
+    !isnothing(rank) &&
+        rank_of_svd != rank &&
+        @warn "Rank of SVD is $rank_of_svd but requested rank is $rank"
 
     # Add model error scale. This may not make sense if the samples do not
     # represent a single year. For example, if the stacked samples are seasonal
