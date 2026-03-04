@@ -851,6 +851,20 @@ end
     )
 end
 
+@testset "quantile regularization" begin
+    # Test constructor
+    q_reg = ObservationRecipe.QuantileRegularization(0.05)
+    @test q_reg.qtl == 0.05
+
+    @test_throws ErrorException ObservationRecipe.QuantileRegularization(0.0)
+    @test_throws ErrorException ObservationRecipe.QuantileRegularization(-0.05)
+
+    # Test values by computing it and getting rid of the offset and seeing if
+    # the quantile is correct
+
+    # Important: Test it with at least two different OutputVars
+end
+
 @testset "Seasonal diagonal covariance" begin
     time =
         ClimaAnalysis.Utils.date_to_time.(

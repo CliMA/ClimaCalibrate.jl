@@ -3,6 +3,7 @@ module ObservationRecipe
 export ScalarCovariance,
     SeasonalDiagonalCovariance,
     SVDplusDCovariance,
+    QuantileRegularization,
     covariance,
     observation,
     short_names,
@@ -192,6 +193,26 @@ function SeasonalDiagonalCovariance(;
 end
 
 """
+    QuantileRegularization
+
+Regularization using the quantile of the model error scale for each
+`OutputVar`.
+
+The same quantile is used for each `OutputVar` when making the observation.
+
+This is used for the `SVDplusDCovariance` matrix.
+"""
+struct QuantileRegularization{FT <: AbstractFloat}
+    qtl::FT
+    function QuantileRegularization(qtl::AbstractFloat)
+        if qtl <= 0
+            error("quantile ($qtl) must be positive")
+        end
+        new{typeof(qtl)}(qtl)
+    end
+end
+
+"""
     SVDplusDCovariance <: AbstractCovarianceEstimator
 
 Contain the necessary information to construct a `EKP.SVDplusD` covariance
@@ -199,7 +220,7 @@ matrix from `ClimaAnalysis.OutputVar`s.
 """
 struct SVDplusDCovariance{
     FT1 <: AbstractFloat,
-    FT2 <: AbstractFloat,
+    FT2 <: Union{AbstractFloat, QuantileRegularization},
     DATE <: Dates.AbstractDateTime,
     FT3 <: AbstractFloat,
 } <: AbstractCovarianceEstimator
@@ -280,8 +301,10 @@ function SVDplusDCovariance(
 )
     model_error_scale < zero(model_error_scale) &&
         error("Model_error_scale ($model_error_scale) should not be negative")
-    regularization < zero(regularization) &&
-        error("Regularization ($regularization) should not be negative")
+    if regularization isa AbstractFloat
+        regularization < zero(regularization) &&
+            error("Regularization ($regularization) should not be negative")
+    end
 
     sample_date_ranges = [
         (Dates.DateTime(date_pair[1]), Dates.DateTime(date_pair[2])) for
