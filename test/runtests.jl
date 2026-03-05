@@ -9,6 +9,7 @@ using SafeTestsets
 @safetestset "Aqua" begin include("aqua.jl") end
 @safetestset "Observation recipe" begin include("observation_recipe.jl") end
 @safetestset "Ensemble builder" begin include("ensemble_builder.jl") end
+@safetestset "SVD analysis" begin include("svd_analysis.jl") end
 #! format: on
 
 nothing
