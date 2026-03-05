@@ -93,6 +93,15 @@ ClimaCalibrate.ObservationRecipe.seasonally_aligned_yearly_sample_date_ranges
 ClimaCalibrate.ObservationRecipe.change_data_type
 ```
 
+## SVD Residual Analysis
+
+```@docs
+ClimaCalibrate.analyze_residual
+ClimaCalibrate.compute_structured_energy
+ClimaCalibrate.compute_structured_energy_by_variable
+ClimaCalibrate.compute_normalized_projections
+```
+
 ## Ensemble Builder Interface
 
 ```@docs
