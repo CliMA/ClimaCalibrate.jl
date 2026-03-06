@@ -14,5 +14,6 @@ include("emulate_sample.jl")
 include("observation_recipe.jl")
 include("ensemble_builder.jl")
 include("checkers.jl")
+include("svd_analysis.jl")
 
 end # module ClimaCalibrate
