@@ -77,7 +77,14 @@ function generate_pbs_script(
 end
 
 """
-    pbs_model_run(iter, member, output_dir, experiment_dir, model_interface, module_load_str; hpc_kwargs)
+    pbs_model_run(
+        iter, member,
+        output_dir, experiment_dir, model_interface,
+        module_load_str;
+        hpc_kwargs,
+        debug = false,
+        exeflags = "",
+    )
 
 Construct and execute a command to run a single forward model on PBS Pro.
 Helper function for [`model_run`](@ref).
@@ -137,9 +144,15 @@ end
 
 Submit a job to the PBS Pro scheduler using qsub, removing unwanted environment variables.
 
-Unset variables: "PBS_MEM_PER_CPU", "PBS_MEM_PER_GPU", "PBS_MEM_PER_NODE", "PYTHONHOME", "PYTHONPATH", "PYTHONUSERBASE"
+Unset variables:
+- "PBS\\_MEM\\_PER\\_CPU",
+- "PBS\\_MEM\\_PER\\_GPU",
+- "PBS\\_MEM\\_PER\\_NODE",
+- "PYTHONHOME",
+- "PYTHONPATH",
+- "PYTHONUSERBASE"
 """
-function submit_pbs_job(filepath; debug = false, env = deepcopy(ENV))
+function submit_pbs_job(filepath; env = deepcopy(ENV))
     # Clean env to avoid user overrides breaking system PBS utilities (e.g., python wrappers)
     unset_env_vars = (
         "PBS_MEM_PER_CPU",

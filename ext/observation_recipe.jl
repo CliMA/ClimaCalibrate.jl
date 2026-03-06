@@ -4,10 +4,12 @@ import ClimaCalibrate.ObservationRecipe:
     ScalarCovariance, SeasonalDiagonalCovariance, SVDplusDCovariance
 
 """
-    covariance(covar_estimator::ScalarCovariance,
-               vars::Union{OutputVar, Iterable{OutputVar}},
-               start_date,
-               end_date)
+    covariance(
+        covar_estimator::ScalarCovariance,
+        vars::Union{OutputVar, Iterable{OutputVar}},
+        start_date,
+        end_date
+    )
 
 Compute the scalar covariance matrix.
 
@@ -56,10 +58,12 @@ function ObservationRecipe.covariance(
 end
 
 """
-    covariance(covar_estimator::SeasonalDiagonalCovariance,
-               vars::Union{OutputVar, Iterable{OutputVar}},
-               start_date,
-               end_date)
+    covariance(
+        covar_estimator::SeasonalDiagonalCovariance,
+        vars::Union{OutputVar, Iterable{OutputVar}},
+        start_date,
+        end_date
+    )
 
 Compute the noise covariance matrix of seasonal quantities from `var` that is
 appropriate for a sample of seasonal quantities across time for seasons between
@@ -160,10 +164,12 @@ function ObservationRecipe.covariance(
 end
 
 """
-    covariance(covar_estimator::SVDplusDCovariance,
-               vars::Union{OutputVar, Iterable{OutputVar}},
-               start_date,
-               end_date)
+    covariance(
+        covar_estimator::SVDplusDCovariance,
+        vars::Union{OutputVar, Iterable{OutputVar}},
+        start_date,
+        end_date
+    )
 
 Compute the `EKP.SVDplusD` covariance matrix appropriate for a sample with times
 between `start_date` and `end_date`.
@@ -244,11 +250,13 @@ function ObservationRecipe.covariance(
 end
 
 """
-    _apply_lat_weights_to_samples!(stacked_sample_matrix,
-                                   vars::Iterable{OutputVar},
-                                   start_date,
-                                   end_date,
-                                   min_cosd_lat = 0.1)
+    _apply_lat_weights_to_samples!(
+        stacked_sample_matrix,
+        vars::Iterable{OutputVar},
+        start_date,
+        end_date,
+        min_cosd_lat = 0.1
+    )
 
 Apply latitude weights to the matrix of samples.
 
@@ -286,11 +294,13 @@ function _apply_lat_weights_to_samples!(
 end
 
 """
-    observation(covar_estimator::AbstractCovarianceEstimator,
-                vars,
-                start_date,
-                end_date;
-                name = nothing)
+    observation(
+        covar_estimator::AbstractCovarianceEstimator,
+        vars,
+        start_date,
+        end_date;
+        name = nothing
+    )
 
 Return an `EKP.Observation` with a sample between the dates `start_date` and
 `end_date`, a covariance matrix defined by `covar_estimator`, `name` determined
@@ -422,7 +432,7 @@ function ObservationRecipe.seasonally_aligned_yearly_sample_date_ranges(
 end
 
 """
-    ObservationRecipe.change_data_type(var::OutputVar, data_type)
+    change_data_type(var::OutputVar, data_type)
 
 Return a `OutputVar` with `data` of type `data_type`.
 
@@ -527,7 +537,7 @@ function group_and_reduce_by(var::OutputVar, dim_name, group_by, reduce_by)
 end
 
 """
-    lat_weights_var(var::OutputVar)
+    lat_weights_var(var::OutputVar; min_cosd_lat = 0.1)
 
 Return a `OutputVar` where each data value corresponds to `(1 / max(cosd(lat),
 min_cosd_lat))` if there is no `NaN` at its coordinate and `NaN` otherwise.
@@ -646,16 +656,11 @@ function ObservationRecipe.reconstruct_diag_cov(obs::EKP.Observation)
     # the indexing a bit more difficult
     cov_diags = mapreduce(cov -> view(cov, diagind(cov)), vcat, covs)
 
-    start_index = 1
     vars = OutputVar[]
-    for metadata in all_metadata
-        data_size = ClimaAnalysis.flattened_length(metadata)
-        var = ClimaAnalysis.unflatten(
-            metadata,
-            view(cov_diags, start_index:(start_index + data_size - 1)),
-        )
+    all_indices = _get_indices_of_metadata(all_metadata)
+    for (metadata, indices) in zip(all_metadata, all_indices)
+        var = ClimaAnalysis.unflatten(metadata, view(cov_diags, indices))
         push!(vars, var)
-        start_index += data_size
     end
     return vars
 end
@@ -670,16 +675,11 @@ function ObservationRecipe.reconstruct_vars(obs::EKP.Observation)
     samples = EKP.get_samples(obs)
     stacked_sample = reduce(vcat, samples)
 
-    start_index = 1
     vars = OutputVar[]
-    for metadata in all_metadata
-        data_size = ClimaAnalysis.flattened_length(metadata)
-        var = ClimaAnalysis.unflatten(
-            metadata,
-            view(stacked_sample, start_index:(start_index + data_size - 1)),
-        )
+    all_indices = _get_indices_of_metadata(all_metadata)
+    for (metadata, indices) in zip(all_metadata, all_indices)
+        var = ClimaAnalysis.unflatten(metadata, view(stacked_sample, indices))
         push!(vars, var)
-        start_index += data_size
     end
     return vars
 end
@@ -695,14 +695,31 @@ multiple `OutputVar`s are flattened and concatenated together as a single
 vector.
 """
 function _get_minibatch_indices_for_nth_iteration(obs_series, N)
-    metadatas = ObservationRecipe.get_metadata_for_nth_iteration(obs_series, N)
-    minibatch_indices = UnitRange{Int}[]
+    all_metadata =
+        ObservationRecipe.get_metadata_for_nth_iteration(obs_series, N)
+    minibatch_indices = _get_indices_of_metadata(all_metadata)
+    return minibatch_indices
+end
+
+"""
+    _get_indices_of_metadata(metadata::Iterable{ClimaAnalysis.Var.Metadata})
+
+For a vector of `ClimaAnalysis.Var.Metadata`, return a list of ranges for
+indexing.
+
+This is useful when you have a vector created from the concatenation of
+multiple flattened `OutputVar`s. The returned ranges let you extract the slice
+that belongs to each metadata entry and pass it to `ClimaAnalysis.unflatten` to
+reconstruct the original `OutputVar`.
+"""
+function _get_indices_of_metadata(metadata)
+    ranges = UnitRange{Int}[]
     index = 1
-    for metadata in metadatas
-        data_size = ClimaAnalysis.flattened_length(metadata)
+    for md in metadata
+        data_size = ClimaAnalysis.flattened_length(md)
         start_idx = index
         index += data_size
-        push!(minibatch_indices, start_idx:(start_idx + data_size - 1))
+        push!(ranges, start_idx:(start_idx + data_size - 1))
     end
-    return minibatch_indices
+    return ranges
 end
