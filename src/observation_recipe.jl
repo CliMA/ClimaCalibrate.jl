@@ -375,4 +375,6 @@ function get_observations_for_nth_iteration end
 
 function get_metadata_for_nth_iteration end
 
+function _get_minibatch_indices_for_nth_iteration end
+
 end
