@@ -176,7 +176,7 @@ end
 
 function module_load_string(::ClimaGPUBackend)
     return """module purge
-    module load climacommon/2025_05_15"""
+    module load climacommon/2026_02_18"""
 end
 
 function module_load_string(::DerechoBackend)
