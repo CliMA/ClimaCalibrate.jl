@@ -6,6 +6,8 @@ import EnsembleKalmanProcesses as EKP
 import EnsembleKalmanProcesses.ParameterDistributions as PD
 import EnsembleKalmanProcesses.TOMLInterface as TI
 
+import ClimaCalibrate.Context: CalibrationContext
+
 export get_prior, initialize, update_ensemble, save_G_ensemble
 export path_to_ensemble_member,
     path_to_model_log, path_to_iteration, parameter_path, load_latest_ekp
@@ -334,18 +336,18 @@ function update_ensemble!(ekp, G_ens, output_dir, iteration, prior)
 end
 
 """
-    observation_map_and_update!(ekp, output_dir, iteration, prior)
+    observation_map_and_update!(ctx::CalibrationContext)
 
 Compute the observation map and update the given EKP object.
 """
-function observation_map_and_update!(ekp, output_dir, iteration, prior)
-    g_ensemble = observation_map(iteration)
-    g_ensemble =
-        postprocess_g_ensemble(ekp, g_ensemble, prior, output_dir, iteration)
-    save_G_ensemble(output_dir, iteration, g_ensemble)
-    terminate = update_ensemble!(ekp, g_ensemble, output_dir, iteration, prior)
+function observation_map_and_update!(ctx::CalibrationContext)
+    g_ensemble = observation_map(ctx)
+    g_ensemble = postprocess_g_ensemble(ctx, g_ensemble)
+    (; output_dir, iter, ekp, prior) = ctx
+    save_G_ensemble(output_dir, iter, g_ensemble)
+    terminate = update_ensemble!(ekp, g_ensemble, output_dir, iter, prior)
     try
-        analyze_iteration(ekp, g_ensemble, prior, output_dir, iteration)
+        analyze_iteration(ctx, g_ensemble)
     catch ret_code
         @error "`analyze_iteration` crashed. See stacktrace" exception =
             (ret_code, catch_backtrace())

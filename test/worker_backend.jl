@@ -93,7 +93,8 @@ g_vs_iter_plot(eki)
         ensemble_size,
         output_dir,
     )
-    G_ensemble = observation_map(last_iter + 1)
+    dummy_context = (; iter = last_iter + 1, output_dir)
+    G_ensemble = observation_map(dummy_context)
     save_G_ensemble(output_dir, last_iter + 1, G_ensemble)
     update_ensemble(output_dir, last_iter + 1, prior)
 

@@ -280,7 +280,17 @@ function calibrate(
         @info "Running iteration $iter"
         foreach(1:ensemble_size) do m
             try
-                forward_model(iter, m)
+                # TODO: Pass user defined config here
+                ctx = CalibrationContext(
+                    iter,
+                    m,
+                    output_dir,
+                    ensemble_size,
+                    prior,
+                    ekp,
+                    nothing,
+                )
+                forward_model(ctx)
                 @info "Completed member $m"
             catch e
                 errors += 1
@@ -291,7 +301,17 @@ function calibrate(
             error("Full ensemble has failed, aborting calibration.")
         end
         ekp = load_ekp_struct(output_dir, iter)
-        terminate = observation_map_and_update!(ekp, output_dir, iter, prior)
+        # TODO: Pass user defined config here
+        ctx = CalibrationContext(
+            iter,
+            nothing,
+            output_dir,
+            ensemble_size,
+            prior,
+            ekp,
+            nothing,
+        )
+        terminate = observation_map_and_update!(ctx)
         !isnothing(terminate) && break
     end
     return ekp
@@ -372,7 +392,17 @@ function calibrate(
             @info "Iteration $iter time: $formatted_time"
         end
         ekp = load_ekp_struct(output_dir, iter)
-        terminate = observation_map_and_update!(ekp, output_dir, iter, prior)
+        # TODO: Pass user defined config here
+        ctx = CalibrationContext(
+            iter,
+            nothing,
+            output_dir,
+            ensemble_size,
+            prior,
+            ekp,
+            nothing,
+        )
+        terminate = observation_map_and_update!(ctx)
         !isnothing(terminate) && break
     end
     return ekp
@@ -403,7 +433,17 @@ function calibrate(
         )
         @info "Completed iteration $iter, updating ensemble"
         ekp = load_ekp_struct(output_dir, iter)
-        terminate = observation_map_and_update!(ekp, output_dir, iter, prior)
+        # TODO: Add user defined config
+        ctx = CalibrationContext(
+            iter,
+            nothing,
+            output_dir,
+            ensemble_size,
+            prior,
+            ekp,
+            nothing,
+        )
+        terminate = observation_map_and_update!(ctx)
         !isnothing(terminate) && break
     end
 

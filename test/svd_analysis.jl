@@ -117,7 +117,7 @@ end
     diff = randn(n_obs)
 
     # Mock metadata_vec using named tuples — only the `range` field is accessed
-    metadata_vec = [(range = 1:6,), (range = 7:10,)]
+    metadata_vec = [1:6, 7:10]
     proj = CAL.compute_normalized_projections(
         diff,
         eigvecs,

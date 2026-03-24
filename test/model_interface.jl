@@ -9,13 +9,21 @@ using Test
 # optional to implement.
 
 @testset "Model Interface stubs" begin
+    ctx = ClimaCalibrate.Context.CalibrationContext(
+        0,
+        nothing,
+        "idk",
+        10,
+        nothing,
+        nothing,
+        nothing,
+    )
     @test_throws ErrorException("forward_model not implemented") ClimaCalibrate.forward_model(
-        1,
-        1,
+        ctx,
     )
     @test_throws ErrorException("observation_map not implemented") ClimaCalibrate.observation_map(
-        1,
+        ctx,
     )
-    @test isnothing(ClimaCalibrate.analyze_iteration(1, 1, 1, 1, 1))
-    @test 2 == ClimaCalibrate.postprocess_g_ensemble(1, 2, 3, 4, 5)
+    @test isnothing(ClimaCalibrate.analyze_iteration(ctx, 2))
+    @test 2 == ClimaCalibrate.postprocess_g_ensemble(ctx, 2)
 end

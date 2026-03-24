@@ -6,6 +6,7 @@ using EnsembleKalmanProcesses.TOMLInterface
 import ClimaParams as CP
 
 import ClimaCalibrate as CAL
+import ClimaCalibrate.Context: CalibrationContext
 import JLD2
 
 # Experiment Info
@@ -18,9 +19,11 @@ noise = [0.01;;]
 output_dir = mktempdir()
 
 # Model interface
-# This "model" just samples parameters and returns them, we are checking that the 
-# results are reproducible.
-function CAL.forward_model(iteration, member)
+# This "model" just samples parameters and returns them, we are checking that
+# the results are reproducible.
+function CAL.forward_model(ctx::CalibrationContext)
+    (; iter, member) = ctx
+    iteration = iter
     member_path = CAL.path_to_ensemble_member(output_dir, iteration, member)
     param_path = CAL.parameter_path(output_dir, iteration, member)
     toml_dict = CP.create_toml_dict(Float64; override_file = param_path)
@@ -28,21 +31,22 @@ function CAL.forward_model(iteration, member)
     JLD2.save_object(joinpath(member_path, output_file), test_param)
 end
 
-function CAL.observation_map(iteration)
+function CAL.observation_map(ctx::CalibrationContext)
+    (; iter) = ctx
     dims = 1
     G_ensemble = Array{Float64}(undef, dims..., ensemble_size)
     for m in 1:ensemble_size
-        member_path =
-            TOMLInterface.path_to_ensemble_member(output_dir, iteration, m)
+        member_path = TOMLInterface.path_to_ensemble_member(output_dir, iter, m)
         output = JLD2.load_object(joinpath(member_path, output_file))
         G_ensemble[:, m] .= output
     end
     return G_ensemble
 end
 
-function CAL.analyze_iteration(ekp, g_ensemble, prior, output_dir, iteration)
+function CAL.analyze_iteration(ctx::CalibrationContext, g_ensemble)
+    (; ekp, prior, output_dir, iter) = ctx
     @info "Analyzing iteration"
-    @info "Iteration $iteration"
+    @info "Iteration $iter"
     @info "Current mean constrained parameter: $(EKP.get_ϕ_mean_final(prior, ekp))"
     @info "g_ensemble: $g_ensemble"
     @info "output_dir: $output_dir"
