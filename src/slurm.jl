@@ -205,8 +205,8 @@ function generate_sbatch_directives(hpc_kwargs)
 end
 """
     generate_sbatch_script(
-        iter::Int, member::Int,
-        output_dir, experiment_dir,
+        ctx::CalibrationContext,
+        experiment_dir,
         model_interface, module_load_str,
         hpc_kwargs,
         exeflags = "",
@@ -218,20 +218,25 @@ Generate a string containing an sbatch script to run the forward model.
 `exeflags` is a string of flags to pass to the Julia executable (defaults to empty string).
 """
 function generate_sbatch_script(
-    iter::Int,
-    member::Int,
-    output_dir,
+    ctx::CalibrationContext,
     experiment_dir,
     model_interface,
     module_load_str,
     hpc_kwargs,
     exeflags = "",
 )
+    (; iter, member, output_dir) = ctx
     member_log = path_to_model_log(output_dir, iter, member)
     slurm_directives = generate_sbatch_directives(hpc_kwargs)
     ntasks = get(hpc_kwargs, :ntasks, 1)
     gpus_per_task = get(hpc_kwargs, :gpus_per_task, 0)
     climacomms_device = gpus_per_task > 0 ? "CUDA" : "CPU"
+
+    # Save object to load in slurm script
+    iter_dir = path_to_iteration(output_dir, iter)
+    ctx_filepath = joinpath(iter_dir, "calibration_context_$member.jld2")
+    JLD2.save_object(ctx_filepath, ctx)
+
     # TODO: Remove this exception for GCP
     mpiexec_string =
         get_backend() == GCPBackend ? "mpiexec -n $ntasks" :
@@ -249,11 +254,12 @@ function generate_sbatch_script(
     $mpiexec_string julia $exeflags --project=$experiment_dir -e '
 
         import ClimaCalibrate as CAL
-        iteration = $iter; member = $member
         model_interface = "$model_interface"; include(model_interface)
-        experiment_dir = "$experiment_dir"
-        CAL.forward_model(iteration, member)
-        CAL.write_model_completed("$output_dir", iteration, member)
+        ctx = CAL.load_object($ctx_filepath)
+        CAL.forward_model(ctx)
+        (; iter, member, output_dir) = ctx
+        CAL.write_model_completed(output_dir, iter, member)
+
     '
     exit 0
     """
@@ -305,10 +311,20 @@ function slurm_model_run(
     @assert iter >= 0 "Iteration number must be non-negative"
     @assert member > 0 "Member number must be positive"
 
-    sbatch_contents = generate_sbatch_script(
+    # TODO: Add user defined config
+    # TODO: Still need ensemble_size, prior, ekp
+    ctx = CalibrationContext(
         iter,
         member,
         output_dir,
+        ensemble_size,
+        prior,
+        ekp,
+        nothing,
+    )
+
+    sbatch_contents = generate_sbatch_script(
+        ctx,
         experiment_dir,
         model_interface,
         module_load_str,

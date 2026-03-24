@@ -48,6 +48,11 @@ function generate_pbs_script(
     member_path = path_to_ensemble_member(output_dir, iter, member)
     julia_filepath = joinpath(member_path, "model_run.jl")
 
+    # Save object to load in slurm script
+    iter_dir = path_to_iteration(output_dir, iter)
+    ctx_filepath = joinpath(iter_dir, "calibration_context_$member.jld2")
+    JLD2.save_object(ctx_filepath, ctx)
+
     pbs_script = """\
     #!/bin/bash
     #PBS -N run_$(iter)_$member
@@ -70,7 +75,9 @@ function generate_pbs_script(
     julia_script = """\
     import ClimaCalibrate as CAL
     include("$(abspath(model_interface))")
-    CAL.forward_model($iter, $member)
+    ctx = CAL.load_object($ctx_filepath)
+    CAL.forward_model(ctx)
+    (; iter, member) = ctx
     CAL.write_model_completed("$output_dir", $iter, $member)
     """
     return pbs_script, julia_script

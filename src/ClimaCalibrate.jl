@@ -4,6 +4,9 @@ export project_dir
 
 project_dir() = dirname(Base.active_project())
 
+include("context.jl")
+include("config.jl")
+
 include("ekp_interface.jl")
 include("model_interface.jl")
 include("slurm.jl")

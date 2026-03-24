@@ -24,6 +24,17 @@ const hpc_kwargs = CAL.kwargs(
 @test CAL.format_slurm_time(60) == "01:00:00"
 @test CAL.format_slurm_time(1440) == "1-00:00:00"
 
+ctx = CAL.Context.CalibrationContext(
+    ITER,
+    MEMBER,
+    OUTPUT_DIR,
+    10,
+    nothing,
+    nothing,
+    nothing,
+)
+
+
 # Generate and validate sbatch file contents
 sbatch_file = CAL.generate_sbatch_script(
     ITER,

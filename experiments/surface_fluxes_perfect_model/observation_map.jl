@@ -15,13 +15,14 @@ experiment_dir = joinpath(
 Returns the observation map (from the raw model output to the observable y),
 as specified by process_member_data, for the given iteration.
 """
-function observation_map(iteration)
+function observation_map(ctx)
+    (; iter, output_dir) = ctx
     model_output = "model_ustar_array.jld2"
 
     dims = 1
     G_ensemble = Array{Float64}(undef, dims..., ensemble_size)
     for m in 1:ensemble_size
-        member_path = path_to_ensemble_member(output_dir, iteration, m)
+        member_path = path_to_ensemble_member(output_dir, iter, m)
 
         try
             ustar = JLD2.load_object(joinpath(member_path, model_output))
