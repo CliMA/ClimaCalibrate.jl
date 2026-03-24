@@ -140,38 +140,6 @@ function save_G_ensemble(output_dir::AbstractString, iteration, G_ensemble)
     return G_ensemble
 end
 
-function env_experiment_dir(env = ENV)
-    key = "CALIBRATION_EXPERIMENT_DIR"
-    haskey(env, key) || error(
-        "Experiment dir not found in environment. Ensure that env variable \"CALIBRATION_EXPERIMENT_DIR\" is set.",
-    )
-    return string(env[key])
-end
-
-function env_model_interface(env = ENV)
-    key = "CALIBRATION_MODEL_INTERFACE"
-    haskey(env, key) || error(
-        "Model interface file not found in environment. Ensure that env variable \"CALIBRATION_MODEL_INTERFACE\" is set.",
-    )
-    return string(env[key])
-end
-
-function env_iteration(env = ENV)
-    key = "CALIBRATION_ITERATION"
-    haskey(env, key) || error(
-        "Iteration number not found in environment. Ensure that env variable \"CALIBRATION_ITERATION\" is set.",
-    )
-    return parse(Int, env[key])
-end
-
-function env_member_number(env = ENV)
-    key = "CALIBRATION_MEMBER_NUMBER"
-    haskey(env, key) || error(
-        "Member number not found in environment. Ensure that env variable \"CALIBRATION_MEMBER_NUMBER\" is set.",
-    )
-    return parse(Int, env[key])
-end
-
 write_model_completed(output_dir, iteration, member) =
     open(checkpoint_path(output_dir, iteration, member), "w") do io
         write(io, "completed")
