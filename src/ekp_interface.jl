@@ -140,38 +140,6 @@ function save_G_ensemble(output_dir::AbstractString, iteration, G_ensemble)
     return G_ensemble
 end
 
-function env_experiment_dir(env = ENV)
-    key = "CALIBRATION_EXPERIMENT_DIR"
-    haskey(env, key) || error(
-        "Experiment dir not found in environment. Ensure that env variable \"CALIBRATION_EXPERIMENT_DIR\" is set.",
-    )
-    return string(env[key])
-end
-
-function env_model_interface(env = ENV)
-    key = "CALIBRATION_MODEL_INTERFACE"
-    haskey(env, key) || error(
-        "Model interface file not found in environment. Ensure that env variable \"CALIBRATION_MODEL_INTERFACE\" is set.",
-    )
-    return string(env[key])
-end
-
-function env_iteration(env = ENV)
-    key = "CALIBRATION_ITERATION"
-    haskey(env, key) || error(
-        "Iteration number not found in environment. Ensure that env variable \"CALIBRATION_ITERATION\" is set.",
-    )
-    return parse(Int, env[key])
-end
-
-function env_member_number(env = ENV)
-    key = "CALIBRATION_MEMBER_NUMBER"
-    haskey(env, key) || error(
-        "Member number not found in environment. Ensure that env variable \"CALIBRATION_MEMBER_NUMBER\" is set.",
-    )
-    return parse(Int, env[key])
-end
-
 write_model_completed(output_dir, iteration, member) =
     open(checkpoint_path(output_dir, iteration, member), "w") do io
         write(io, "completed")
@@ -197,90 +165,11 @@ function model_started(output_dir, iteration, member)
 end
 
 """
-    ekp_constructor(ensemble_size, prior, observations, noise = nothing)
-
-Initialize the EnsembleKalmanProcess object and parameter files.
-
-Can take in an existing EnsembleKalmanProcess which will be used to generate the
- initial parameter ensemble.
-
-Noise is optional when the observation is an EKP.ObservationSeries.
-
-Additional kwargs may be passed through to the EnsembleKalmanProcess constructor.
-"""
-
-function ekp_constructor(
-    ensemble_size,
-    prior,
-    observations,
-    noise = nothing;
-    rng_seed = 1234,
-    ekp_kwargs...,
-)
-
-    Random.seed!(rng_seed)
-    rng_ekp = Random.MersenneTwister(rng_seed)
-    initial_ensemble =
-        EKP.construct_initial_ensemble(rng_ekp, prior, ensemble_size)
-
-    # EKP 2.0 and later require the `default_options_dict`
-    eki_constr = if hasproperty(EKP, :default_options_dict)
-        ekp_kwargs = Dict([string(k) => v for (k, v) in ekp_kwargs])
-        (args...) -> EKP.EnsembleKalmanProcess(
-            args...,
-            merge(EKP.default_options_dict(EKP.Inversion()), ekp_kwargs);
-            rng = rng_ekp,
-        )
-    else
-        (args...) -> EKP.EnsembleKalmanProcess(
-            args...;
-            rng = rng_ekp,
-            failure_handler_method = EKP.SampleSuccGauss(),
-            ekp_kwargs...,
-        )
-    end
-
-    eki = if isnothing(noise)
-        eki_constr(initial_ensemble, observations, EKP.Inversion())
-    else
-        eki_constr(initial_ensemble, observations, noise, EKP.Inversion())
-    end
-    return eki
-end
-
-"""
     initialize(eki::EKP.EnsembleKalmanProcess, prior, output_dir)
-    initialize(ensemble_size, observations, noise, prior, output_dir)
 
-Initialize a calibration, saving the initial parameter ensemble to a folder within `output_dir`.
-
-If no EKP struct is given, construct an EKP struct and return it.
+Initialize a calibration, saving the initial parameter ensemble to a folder
+within `output_dir`.
 """
-function initialize(
-    ensemble_size,
-    observations,
-    noise,
-    prior,
-    output_dir;
-    rng_seed = 1234,
-    ekp_kwargs...,
-)
-    eki = ekp_constructor(
-        ensemble_size,
-        prior,
-        observations,
-        noise;
-        rng_seed,
-        ekp_kwargs...,
-    )
-    save_eki_and_parameters(eki, output_dir, 0, prior)
-    JLD2.save_object(
-        joinpath(path_to_iteration(output_dir, 0), "prior.jld2"),
-        prior,
-    )
-    return eki
-end
-
 function initialize(eki::EKP.EnsembleKalmanProcess, prior, output_dir)
     save_eki_and_parameters(eki, output_dir, 0, prior)
     JLD2.save_object(

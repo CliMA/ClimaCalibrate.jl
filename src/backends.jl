@@ -302,10 +302,6 @@ end
         backend, ekp::EnsembleKalmanProcess, ensemble_size, n_iterations,
         prior, output_dir
     )
-    calibrate(
-        backend, ensemble_size, n_iterations, observations, noise, prior,
-        output_dir; ekp_kwargs...
-    )
 
 Run a full calibration on the given backend.
 
@@ -321,28 +317,6 @@ Derecho, ClimaGPU, and CaltechHPC backends are designed to run on a specific
 high-performance computing cluster. WorkerBackend uses Distributed.jl to run the
 forward model on workers.
 """
-function calibrate(
-    b::AbstractBackend,
-    ensemble_size,
-    n_iterations,
-    observations,
-    noise,
-    prior,
-    output_dir;
-    ekp_kwargs...,
-)
-    ekp = ekp_constructor(
-        ensemble_size,
-        prior,
-        observations,
-        noise;
-        ekp_kwargs...,
-    )
-
-    # Dispatch on backend
-    return calibrate(b, ekp, n_iterations, prior, output_dir)
-end
-
 function calibrate(
     b::WorkerBackend,
     ekp::EKP.EnsembleKalmanProcess,
