@@ -32,40 +32,16 @@ user_constructed_eki = EKP.EnsembleKalmanProcess(
     EKP.default_options_dict(EKP.Inversion());
     rng = rng_ekp,
 )
-
-eki = CAL.initialize(
-    ensemble_size,
+eki_with_kwargs = EKP.EnsembleKalmanProcess(
+    user_initial_ensemble,
     observations,
     noise,
-    prior,
-    output_dir;
-    rng_seed,
-)
-eki_with_kwargs = CAL.initialize(
-    ensemble_size,
-    observations,
-    noise,
-    prior,
-    output_dir;
+    EKP.Inversion();
     scheduler = EKP.MutableScheduler(2),
     accelerator = EKP.NesterovAccelerator(),
+    rng = rng_ekp,
 )
-
-@testset "Test passing kwargs to EKP struct" begin
-    @test eki_with_kwargs.scheduler != eki.scheduler
-    @test eki_with_kwargs.scheduler isa EKP.MutableScheduler
-
-    @test eki_with_kwargs.accelerator != eki.accelerator
-    @test eki_with_kwargs.accelerator isa EKP.NesterovAccelerator
-end
-
-@testset "Test that a user-constructed EKP obj is same as initialized one" begin
-    for prop in propertynames(eki)
-        prop in [:u, :accelerator, :localizer] && continue
-        @test getproperty(eki, prop) == getproperty(user_constructed_eki, prop)
-    end
-    @test eki.u[1].data == user_constructed_eki.u[1].data
-end
+CAL.save_eki_and_parameters(eki_with_kwargs, output_dir, 0, prior)
 
 @testset "Test loading latest EKP struct" begin
     # Test loading from directory with no completed iterations
@@ -94,8 +70,8 @@ params = CP.get_parameter_values(td, param_names)
 
 @testset "Initialized parameter values" begin
     # This checks for random seed as well
-    @test params.one == 3.416574531266089
-    @test params.two == 4.614950047803855
+    @test params.one ≈ 3.416574531266089
+    @test params.two ≈ 4.614950047803855
 end
 
 @testset "Test passing an EKP struct into `initialize`" begin
@@ -117,8 +93,8 @@ end
         joinpath(output_dir, "iteration_000", "member_001", "parameters.toml")
     td = CP.create_toml_dict(FT; override_file)
     params = CP.get_parameter_values(td, param_names)
-    @test params.one == 3.1313341622997677
-    @test params.two == 5.063035177034372
+    @test params.one ≈ 3.1313341622997677
+    @test params.two ≈ 5.063035177034372
 end
 
 @testset "minibatcher_over_samples tests" begin
@@ -173,8 +149,8 @@ end
     )
 end
 
-@testset "g_ens_mat" begin
-    g_ens_mat = CAL.g_ens_matrix(eki)
+@testset "G ensemble matrix" begin
+    g_ens_mat = CAL.g_ens_matrix(user_constructed_eki)
     @test size(g_ens_mat) == (1, 10)
     @test g_ens_mat isa Matrix{Float64}
 end

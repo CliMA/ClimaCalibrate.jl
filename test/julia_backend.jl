@@ -4,6 +4,7 @@ import EnsembleKalmanProcesses as EKP
 using EnsembleKalmanProcesses.ParameterDistributions
 using EnsembleKalmanProcesses.TOMLInterface
 import ClimaParams as CP
+import Random
 
 import ClimaCalibrate as CAL
 import JLD2
@@ -18,8 +19,8 @@ noise = [0.01;;]
 output_dir = mktempdir()
 
 # Model interface
-# This "model" just samples parameters and returns them, we are checking that the 
-# results are reproducible.
+# This "model" just samples parameters and returns them, we are checking that
+# the results are reproducible
 function CAL.forward_model(iteration, member)
     member_path = CAL.path_to_ensemble_member(output_dir, iteration, member)
     param_path = CAL.parameter_path(output_dir, iteration, member)
@@ -49,19 +50,19 @@ function CAL.analyze_iteration(ekp, g_ensemble, prior, output_dir, iteration)
     return nothing
 end
 
-ekp = CAL.calibrate(
-    CAL.JuliaBackend(),
-    ensemble_size,
-    n_iterations,
+rng = Random.MersenneTwister(1234)
+initial_ensemble = EKP.construct_initial_ensemble(rng, prior, ensemble_size)
+eki = EKP.EnsembleKalmanProcess(
+    initial_ensemble,
     observations,
     noise,
-    prior,
-    output_dir,
+    EKP.Inversion();
 )
+ekp = CAL.calibrate(CAL.JuliaBackend(), eki, n_iterations, prior, output_dir)
 
 @testset "Test end-to-end calibration" begin
     parameter_values =
         [EKP.get_ϕ_mean(prior, ekp, it) for it in 1:(n_iterations + 1)]
-    @test parameter_values[1][1] ≈ 8.507 rtol = 0.01
-    @test parameter_values[end][1] ≈ 11.852161842745355 rtol = 0.01
+    @test parameter_values[1][1] ≈ 8.506558331330828 rtol = 0.01
+    @test parameter_values[end][1] ≈ 11.89099672934779 rtol = 0.01
 end
