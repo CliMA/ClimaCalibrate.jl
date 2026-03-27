@@ -67,11 +67,11 @@ function EnsembleBuilder.GEnsembleBuilder(
 ) where {FT <: AbstractFloat}
     obs_series = EKP.get_observation_series(ekp)
     N = EKP.get_N_iterations(ekp) + 1
-    metadatas = ObservationRecipe.get_metadata_for_nth_iteration(obs_series, N)
+    metadatas = ClimaCalibrate.get_metadata_for_nth_iteration(obs_series, N)
 
     # It is a little wasteful to allocate the data here, but it is easier to
     # index if it is a single vector
-    obs = ObservationRecipe.get_observations_for_nth_iteration(obs_series, N)
+    obs = ClimaCalibrate.get_observations_for_nth_iteration(obs_series, N)
     stacked_obs = mapreduce(EKP.get_obs, vcat, obs)
 
     eltype(metadatas) <: ClimaAnalysis.Var.Metadata || error(

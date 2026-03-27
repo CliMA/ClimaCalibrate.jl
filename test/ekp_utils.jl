@@ -1,0 +1,108 @@
+using Test
+
+import ClimaCalibrate as CAL
+import EnsembleKalmanProcesses as EKP
+
+@testset "minibatcher_over_samples tests" begin
+    # Regular case
+    mb = CAL.minibatcher_over_samples(6, 2)
+    @test mb.minibatches == [[1, 2], [3, 4], [5, 6]]
+
+    # Non-divisible case: 7 samples with batch size 2 (should drop last sample)
+    mb_partial = CAL.minibatcher_over_samples(7, 2)
+    @test mb_partial.minibatches == [[1, 2], [3, 4], [5, 6]]  # 7th is dropped
+
+    # Edge: batch size larger than n_samples
+    mb_small = CAL.minibatcher_over_samples(3, 5)
+    @test mb_small.minibatches == []
+
+    # Edge: n_samples = 0
+    @test_throws ArgumentError CAL.minibatcher_over_samples(0, 2)
+
+    # Edge: batch_size = 0
+    @test_throws ArgumentError CAL.minibatcher_over_samples(2, 0)
+
+    # Using vector input
+    samples = [1, 2, 3, 4, 5, 6]
+    mb2 = CAL.minibatcher_over_samples(samples, 2)
+    @test mb2.minibatches == [[1, 2], [3, 4], [5, 6]]
+end
+
+@testset "observation_series_from_samples tests" begin
+    samples = [EKP.Observation([i], ones(1, 1), string(i)) for i in 1:6]
+    # Regular case
+    series = CAL.observation_series_from_samples(samples, 2)
+    @test series.observations == samples
+    @test series.minibatcher.minibatches == [[1, 2], [3, 4], [5, 6]]
+    @test series.names == ["1", "2", "3", "4", "5", "6"]
+
+    # fewer samples than batch size
+    series2 = CAL.observation_series_from_samples(samples, 7)
+    @test series2.minibatcher.minibatches == []  # No batches
+
+    # empty sample list
+    @test_throws ArgumentError CAL.observation_series_from_samples(
+        EKP.Observation[],
+        2,
+    )
+
+    # Test mismatched names
+    bad_names = ["a", "b", "c"]
+    @test_throws ArgumentError CAL.observation_series_from_samples(
+        samples,
+        2,
+        bad_names,
+    )
+end
+
+@testset "G ensemble matrix" begin
+    Γ = ones(1, 1)
+    y = [1.0]
+    prior_u1 = EKP.constrained_gaussian("amplitude", 2, 1, 0, Inf)
+    prior = EKP.combine_distributions([prior_u1])
+    N_ensemble = 10
+    initial_ensemble = EKP.construct_initial_ensemble(prior, N_ensemble)
+    ekp = EKP.EnsembleKalmanProcess(initial_ensemble, y, Γ, EKP.Inversion())
+    g_ens_mat = CAL.g_ens_matrix(ekp)
+    @test size(g_ens_mat) == (1, 10)
+    @test g_ens_mat isa Matrix{Float64}
+end
+
+@testset "Get information from nth iteration" begin
+    function make_obs(sample_num, metadata)
+        return EKP.Observation(
+            Dict(
+                "samples" => [sample_num],
+                "covariances" => [2],
+                "names" => "a name",
+                "metadata" => metadata,
+            ),
+        )
+    end
+
+    observations = [make_obs(i, "$i") for i in 1:10]
+
+    series1 = CAL.observation_series_from_samples(observations, 1)
+    series2 = CAL.observation_series_from_samples(observations, 2)
+    series3 = CAL.observation_series_from_samples(observations, 3)
+
+    for i in 1:10
+        @test CAL.get_observations_for_nth_iteration(series1, i) ==
+              [observations[i]]
+        @test CAL.get_metadata_for_nth_iteration(series1, i) == ["$i"]
+    end
+
+    for i in 1:5
+        @test CAL.get_observations_for_nth_iteration(series2, i) ==
+              observations[(2i - 1):(2i)]
+        @test CAL.get_metadata_for_nth_iteration(series2, i) ==
+              string.((2i - 1):(2i))
+    end
+
+    for i in 1:3
+        @test CAL.get_observations_for_nth_iteration(series3, i) ==
+              observations[(3i - 2):(3i)]
+        @test CAL.get_metadata_for_nth_iteration(series3, i) ==
+              string.((3i - 2):(3i))
+    end
+end

@@ -65,9 +65,17 @@ ClimaCalibrate.path_to_iteration
 ClimaCalibrate.path_to_ensemble_member
 ClimaCalibrate.path_to_model_log
 ClimaCalibrate.parameter_path
-ClimaCalibrate.minibatcher_over_samples
-ClimaCalibrate.observation_series_from_samples
 ClimaCalibrate.load_latest_ekp
+```
+
+## EKP Utilities
+
+```@docs
+ClimaCalibrate.EKPUtils.minibatcher_over_samples
+ClimaCalibrate.EKPUtils.observation_series_from_samples
+ClimaCalibrate.EKPUtils.get_observations_for_nth_iteration
+ClimaCalibrate.EKPUtils.get_metadata_for_nth_iteration
+ClimaCalibrate.EKPUtils.g_ens_matrix
 ```
 
 ## Observation Recipe Interface
@@ -84,8 +92,6 @@ ClimaCalibrate.ObservationRecipe.QuantileRegularization
 ClimaCalibrate.ObservationRecipe.covariance
 ClimaCalibrate.ObservationRecipe.observation
 ClimaCalibrate.ObservationRecipe.short_names
-ClimaCalibrate.ObservationRecipe.get_observations_for_nth_iteration
-ClimaCalibrate.ObservationRecipe.get_metadata_for_nth_iteration
 ClimaCalibrate.ObservationRecipe.reconstruct_g_mean_final
 ClimaCalibrate.ObservationRecipe.reconstruct_diag_cov
 ClimaCalibrate.ObservationRecipe.reconstruct_vars
