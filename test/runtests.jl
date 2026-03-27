@@ -2,6 +2,7 @@ using Test
 using SafeTestsets
 
 #! format: off
+@safetestset "EKP utils" begin include("ekp_utils.jl") end
 @safetestset "EKP interface" begin include("ekp_interface.jl") end
 @safetestset "Model interface" begin include("model_interface.jl") end
 @safetestset "Julia backend" begin include("julia_backend.jl") end
