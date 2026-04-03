@@ -4,8 +4,6 @@ import Distributed
 
 abstract type AbstractBackend end
 
-const DEFAULT_FAILURE_RATE = 0.5
-
 """
     JuliaBackend
 
@@ -16,10 +14,18 @@ This is a singleton type and is meant for use in dispatch.
 struct JuliaBackend <: AbstractBackend end
 
 """
+    DEFAULT_FAILURE_RATE
+
+The default failture rate used for the `WorkerBackend`.
+"""
+const DEFAULT_FAILURE_RATE = 0.5
+
+"""
     WorkerBackend
 
 Used to run calibrations on Distributed.jl's workers.
-For use on a Slurm cluster, see [`SlurmManager`](@ref).
+For use on a Slurm cluster, see [`SlurmManager`](@ref) and for use on a PBS
+cluster, see [`PBSManager`](@ref).
 
 ## Keyword Arguments for `WorkerBackend`
 - `failure_rate::Float64 `: The threshold for the percentage of workers that can
@@ -63,6 +69,11 @@ struct JobInfo # TODO: Come up with a better name for this
     job_script::String
 end
 
+"""
+    Base.show(io::IO, job::JobInfo)
+
+Pretty print the backend and job id of `job`.
+"""
 function Base.show(io::IO, job::JobInfo)
     labels = ("Backend", "Job ID")
     (; backend, id) = job
@@ -178,12 +189,16 @@ kill_job(job::JobInfo) = kill_job(job.backend, job)
     requeue_job(::SlurmBackend, job::JobInfo)
 
 Requeue `job` by killing the job and resubmitting it again.
+
+This function will requeue the job even if the `job` is completed.
 """
 function requeue_job(job::JobInfo)
-    # TODO: Invesigate using scontrol requeue for slurm jobs instead
+    # For slurm jobs, one option is to use scontrol requeue, but this would
+    # involve defining extra methods for requeue_job to dispatch on the backend
     (; id) = job
     try
-        # TODO: Check if kill_job is an no-op if the job is completed
+        # For both slurm (scancel) and PBS (qdel), kill_job is a no-op if the
+        # job is already completed
         kill_job(job)
         job_info = submit_job(job.backend, job.job_script)
         println("Requeuing slurm job $id")
@@ -232,8 +247,8 @@ iscompleted(job) = isfailed(job) || issuccess(job)
 """
     kill_jobs_at_exit(backend::HPCBackend)
 
-Register an exit hook to cancel all active jobs submitted by `backend` when the
-Julia process exits.
+Register an exit hook to cancel all jobs submitted by `backend` when the Julia
+process exits.
 """
 function kill_jobs_at_exit(backend::HPCBackend)
     cancel_backend_jobs = () -> begin

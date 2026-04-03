@@ -30,8 +30,8 @@ function make_job_script(
         backend isa GCPBackend ? "mpiexec -n $ntasks" :
         "srun --output=$log --open-mode=append"
 
-    # TODO: Make this in different parts like preamble, module string, and
-    # environment variables
+    # TODO: Make this in different parts like slurm directives, environment
+    # setup, and job body/steps
     slurm_script = """
     #!/bin/bash
     #SBATCH --job-name=$job_name

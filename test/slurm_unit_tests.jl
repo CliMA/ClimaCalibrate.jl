@@ -12,7 +12,7 @@ end
 @testset "Generate slurm script" begin
     backend_type = ClimaCalibrate.get_backend()
     # TODO: You can still generate a slurm script here even if you aren't using
-    # a slurm backend
+    # a slurm backend. It would be a good idea to move this to github CI
     if !(backend_type <: ClimaCalibrate.SlurmBackend)
         @info "Backend identified is $backend_type which is not a SlurmBackend. Skipping generating a slurm script"
         return
@@ -51,7 +51,6 @@ end
 
     module_str = ClimaCalibrate.BetterBackend.module_load_string(backend)
 
-    # TODO: climacommon version will fail depending on the backend!
     expected_sbatch_contents = """
     #!/bin/bash
     #SBATCH --job-name=$job_name

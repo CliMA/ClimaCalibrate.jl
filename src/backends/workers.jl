@@ -11,68 +11,6 @@ ENV["JULIA_WORKER_TIMEOUT"] = worker_timeout()
 
 default_worker_pool() = WorkerPool(workers())
 
-# TODO: Remove this function and move it to calibration
-# TODO: For now, do not try to unify the function and keep them separate to see
-# how it is
-function run_worker_iteration(
-    iter,
-    ensemble_size,
-    output_dir;
-    worker_pool = default_worker_pool(),
-    failure_rate = DEFAULT_FAILURE_RATE,
-)
-    nfailures = 0
-
-    # Note: Analogous to the job scripts
-    work_to_do = map(1:ensemble_size) do m
-        (w) -> begin
-            if model_completed(output_dir, iter, m)
-                @info "Skipping completed member $m (found checkpoint)"
-                return
-            elseif model_started(output_dir, iter, m)
-                @info "Resuming member $m on worker $w (incomplete run detected)"
-            else
-                @info "Running member $m on worker $w"
-            end
-            write_model_started(output_dir, iter, m)
-            remotecall_wait(forward_model, w, iter, m)
-            write_model_completed(output_dir, iter, m)
-        end
-    end
-    isempty(worker_pool.workers) && @info "No workers currently available"
-
-    # Note: Analogous to submitting a calibration job and waiting at the same
-    # time For HPCBackends, this is decoupled because jobs can always be
-    # submitted but this is not the case for workers
-    @sync while !isempty(work_to_do)
-        if !isempty(worker_pool.workers)
-            worker = take!(worker_pool)
-            run_fwd_model = pop!(work_to_do)
-            @async try
-                run_fwd_model(worker)
-            catch e
-                @warn "Error running on worker $worker" exception = e
-                nfailures += 1
-            finally
-                push!(worker_pool, worker)
-            end
-        else
-            @debug "no workers available"
-            sleep(10) # Wait for workers to become available
-        end
-    end
-
-    # TODO: This is not identical to what we are doing for the HPCBackends
-    iter_failure_rate = nfailures / ensemble_size
-    if iter_failure_rate > failure_rate
-        throw(
-            ErrorException(
-                "Execution halted: Iteration $iter had a $(round(iter_failure_rate * 100; digits=2))% failure rate, exceeding the maximum allowed threshold of $(failure_rate * 100)%.",
-            ),
-        )
-    end
-end
-
 worker_cookie() = begin
     Distributed.init_multi()
     cluster_cookie()

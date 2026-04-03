@@ -1,11 +1,9 @@
 module Calibration # TODO: Find better name
 
-# TODO: Import BetterBackend as a module here
 import ClimaCalibrate
 import ..ClimaCalibrate: BetterBackend
 import ClimaCalibrate.BetterBackend: HPCBackend, WorkerBackend, JuliaBackend
 
-# TODO: Can I avoid Distributed?
 import Distributed
 
 import EnsembleKalmanProcesses as EKP
@@ -19,7 +17,7 @@ include("ekp_interface.jl")
 # TODO: I think this belongs in the developer documentation?
 # The calibration functions dispatch on the `HPCBackend`, `WorkerBackend`, and
 # `JuliaBackend`. The entry point to starting a calibration is `calibrate`.
-# For experiment_dir, this could automatically be determined from
+# TODO: For experiment_dir, this could automatically be determined from
 # Base.active_project
 """
     calibrate(

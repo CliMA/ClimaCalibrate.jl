@@ -90,7 +90,6 @@ function submit_job(
             if isnothing(job_id)
                 error("Failed to parse job ID from output: $output")
             end
-            # TODO: I don't know if job_id is a string or not :(
             job_info = JobInfo(backend, job_id, job_script)
             push!(backend.job_records, job_info)
             return job_info
@@ -105,7 +104,8 @@ const QBS_CODE_TO_JOB_STATUS =
 
 function job_status(::DerechoBackend, job::JobInfo)
     (; id) = job
-    # Call qstat with a sanitized environment to avoid user Python interfering with PBS wrappers
+    # Call qstat with a sanitized environment to avoid user Python interfering
+    # with PBS wrappers
     clean_env = deepcopy(ENV)
     for k in ("PYTHONHOME", "PYTHONPATH", "PYTHONUSERBASE")
         haskey(clean_env, k) && delete!(clean_env, k)
