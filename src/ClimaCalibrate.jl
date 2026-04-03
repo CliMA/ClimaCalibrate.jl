@@ -78,9 +78,35 @@ export SlurmBackend,
 include("Calibration.jl")
 
 using .Calibration:
-    calibrate
+    calibrate,
+    get_prior,
+    save_eki_and_parameters,
+    load_latest_ekp,
+    initialize,
+    path_to_ensemble_member,
+    parameter_path,
+    model_started,
+    model_completed,
+    last_completed_iteration,
+    save_G_ensemble,
+    update_G_ensemble,
+    checkpoint_path,
+    update_ensemble
 
-export calibrate
+export calibrate,
+    get_prior,
+    save_eki_and_parameters,
+    load_latest_ekp,
+    initialize,
+    path_to_ensemble_member,
+    parameter_path,
+    model_started,
+    model_completed,
+    last_completed_iteration,
+    save_G_ensemble,
+    update_G_ensemble,
+    checkpoint_path,
+    update_ensemble
 
 include("model_interface.jl")
 include("observation_recipe.jl")

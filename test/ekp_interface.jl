@@ -79,7 +79,7 @@ end
     ensemble_size = 5
     N_iterations = 5
     Γ = 20.0 * EKP.I
-    output_dir = joinpath("test", "custom_ekp")
+    output_dir = mktempdir(cleanup = true)
     initial_ensemble =
         EKP.construct_initial_ensemble(rng_ekp, prior, ensemble_size)
     ensemble_kalman_process = EKP.EnsembleKalmanProcess(
