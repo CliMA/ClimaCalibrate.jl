@@ -58,7 +58,13 @@ eki = EKP.EnsembleKalmanProcess(
     noise,
     EKP.Inversion();
 )
-ekp = CAL.calibrate(CAL.JuliaBackend(), eki, n_iterations, prior, output_dir)
+ekp = CAL.Calibration.calibrate(
+    CAL.JuliaBackend(),
+    eki,
+    n_iterations,
+    prior,
+    output_dir,
+)
 
 @testset "Test end-to-end calibration" begin
     parameter_values =

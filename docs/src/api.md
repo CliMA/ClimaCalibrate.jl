@@ -9,46 +9,49 @@ ClimaCalibrate.analyze_iteration
 ClimaCalibrate.postprocess_g_ensemble
 ```
 
-## Worker Interface
+## Calibration Interface
+
 ```@docs
-ClimaCalibrate.add_workers
-ClimaCalibrate.WorkerBackend
-ClimaCalibrate.SlurmManager
-ClimaCalibrate.PBSManager
-ClimaCalibrate.set_worker_loggers
-ClimaCalibrate.map_remotecall_fetch
-ClimaCalibrate.foreach_remotecall_wait
+ClimaCalibrate.calibrate
 ```
 
 ## Backend Interface
 
 ```@docs
-ClimaCalibrate.calibrate
 ClimaCalibrate.JuliaBackend
 ClimaCalibrate.HPCBackend
 ClimaCalibrate.DerechoBackend
 ClimaCalibrate.CaltechHPCBackend
 ClimaCalibrate.ClimaGPUBackend
 ClimaCalibrate.GCPBackend
+ClimaCalibrate.WorkerBackend
 ClimaCalibrate.get_backend
-ClimaCalibrate.model_run
-ClimaCalibrate.module_load_string
 ```
 
-## Job Scheduler
+## Worker Interface
 ```@docs
-ClimaCalibrate.wait_for_jobs
-ClimaCalibrate.log_member_error
-ClimaCalibrate.kill_job
+ClimaCalibrate.SlurmManager
+ClimaCalibrate.PBSManager
+ClimaCalibrate.add_workers
+ClimaCalibrate.set_worker_loggers
+ClimaCalibrate.map_remotecall_fetch
+ClimaCalibrate.foreach_remotecall_wait
+```
+
+## Cluster Management Interface
+
+```@docs
+ClimaCalibrate.JobInfo
 ClimaCalibrate.job_status
-ClimaCalibrate.kwargs
-ClimaCalibrate.slurm_model_run
-ClimaCalibrate.generate_sbatch_script
-ClimaCalibrate.generate_sbatch_directives
-ClimaCalibrate.submit_slurm_job
-ClimaCalibrate.pbs_model_run
-ClimaCalibrate.generate_pbs_script
-ClimaCalibrate.submit_pbs_job
+ClimaCalibrate.ispending
+ClimaCalibrate.isrunning
+ClimaCalibrate.issuccess
+ClimaCalibrate.isfailed
+ClimaCalibrate.iscompleted
+ClimaCalibrate.submit_job
+ClimaCalibrate.requeue_job
+ClimaCalibrate.cancel_job
+ClimaCalibrate.make_job_script
 ```
 
 ## EnsembleKalmanProcesses Interface
