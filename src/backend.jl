@@ -240,6 +240,24 @@ Return `true` if `job` has finished, either successfully or with a failure.
 iscompleted(job) = isfailed(job) || issuccess(job)
 
 """
+    cancel_jobs_at_exit(backend::HPCBackend)
+
+Register an exit hook to cancel all jobs submitted by `backend` when the Julia
+process exits.
+"""
+function cancel_jobs_at_exit(backend::HPCBackend)
+    cancel_backend_jobs = () -> begin
+        for job in job_records(backend)
+            # For PBS jobs, checking if the job is completed can take a while,
+            # so we call cancel_job on every job even if the job is completed
+            cancel_job(job)
+        end
+    end
+    atexit(cancel_backend_jobs)
+    return nothing
+end
+
+"""
     get_backend()
 
 Get the ideal backend for running work and jobs.
