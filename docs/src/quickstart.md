@@ -2,23 +2,26 @@
 
 Every calibration requires
 - a forward model, which uses input parameters to return diagnostic output
-- observational data, which can be a Vector or an [`EnsembleKalmanProcess.Observation`](https://clima.github.io/EnsembleKalmanProcesses.jl/dev/API/Observations/#EnsembleKalmanProcesses.Observation)
-- a prior parameter distribution. The easiest way to construct a distribution is with the [`EnsembleKalmanProcess.constrained_gaussian`](https://clima.github.io/EnsembleKalmanProcesses.jl/dev/API/ParameterDistributions/#EnsembleKalmanProcesses.ParameterDistributions.constrained_gaussian) function.
+- observational data, which can be a Vector or an
+  [`EnsembleKalmanProcess.Observation`](https://clima.github.io/EnsembleKalmanProcesses.jl/dev/API/Observations/#EnsembleKalmanProcesses.Observation)
+- a prior parameter distribution. The easiest way to construct a distribution is
+  with the [`EnsembleKalmanProcess.constrained_gaussian`](https://clima.github.io/EnsembleKalmanProcesses.jl/dev/API/ParameterDistributions/#EnsembleKalmanProcesses.ParameterDistributions.constrained_gaussian)
+  function.
 
 ## Implementing your experiment
 
 ### Forward Model
 
-Your forward model must implement the [`forward_model(iteration, member)`](@ref) 
+Your forward model must implement the [`forward_model(iteration, member)`](@ref)
 function stub.
 
-Since this function only takes in the iteration and member numbers, there are some 
+Since this function only takes in the iteration and member numbers, there are some
 hooks to obtain parameters and the output directory:
 
-- [`path_to_ensemble_member`](@ref) returns the ensemble member's output directory, 
+- [`ClimaCalibrate.Calibration.path_to_ensemble_member`](@ref) returns the ensemble member's output directory,
 
 which can be used to set the forward model's output directory.
-- [`parameter_path`](@ref) returns the ensemble member's parameter file, which can 
+- [`ClimaCalibrate.Calibration.parameter_path`](@ref) returns the ensemble member's parameter file, which can
 be loaded in via TOML or passed to ClimaParams.
 
 ### Observational data
@@ -26,8 +29,8 @@ be loaded in via TOML or passed to ClimaParams.
 Observational data generally consists of a vector of observations with length `d`
  and the covariance matrix of the observational noise with size `d × d`.
 
-If you need to stack or sample from observations, EnsembleKalmanProcesses.jl's 
-[Observation](https://clima.github.io/EnsembleKalmanProcesses.jl/dev/API/Observations/#Observation) 
+If you need to stack or sample from observations, EnsembleKalmanProcesses.jl's
+[Observation](https://clima.github.io/EnsembleKalmanProcesses.jl/dev/API/Observations/#Observation)
 or [ObservationSeries](https://clima.github.io/EnsembleKalmanProcesses.jl/dev/API/Observations/#ObservationSeries) are fully-featured.
 
 An **observation map** to process model output and return the full ensemble's observations is also required.

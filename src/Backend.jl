@@ -41,8 +41,7 @@ constructors.
 
 ## Keyword Arguments for HPC backends
 - `hpc_kwargs::Dict{Symbol, String}`: Dictionary of arguments passed to the job
-  scheduler (e.g., Slurm or PBS). You may find the function [`kwargs`](@ref)
-  helpful to construct `hpc_kwargs`.
+  scheduler (e.g., Slurm or PBS).
 - `verbose::Bool`: Enable verbose logging output. The default is `false`.
 """
 abstract type HPCBackend <: AbstractBackend end
