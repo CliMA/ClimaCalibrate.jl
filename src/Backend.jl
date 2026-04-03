@@ -231,6 +231,24 @@ Return `true` if `job` has finished, either successfully or with a failure.
 iscompleted(job) = isfailed(job) || issuccess(job)
 
 """
+    kill_jobs_at_exit(backend::HPCBackend)
+
+Register an exit hook to cancel all active jobs submitted by `backend` when the
+Julia process exits.
+"""
+function kill_jobs_at_exit(backend::HPCBackend)
+    cancel_backend_jobs = () -> begin
+        for job in job_records(backend)
+            # TODO: Investigate whether iscompleted is needed
+            # Might be okay to call kill_job on completed jobs
+            iscompleted(job) || kill_job(job)
+        end
+    end
+    atexit(cancel_backend_jobs)
+    return nothing
+end
+
+"""
     get_backend()
 
 Get the ideal backend for running work and jobs.
