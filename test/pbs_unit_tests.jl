@@ -1,100 +1,142 @@
+# Unit tests for PBS job control functionality
 using Test
-import ClimaCalibrate as CAL
+import ClimaCalibrate
 
-const OUTPUT_DIR = "test"
-const ITER = 1
-const MEMBER = 1
-const TIME_LIMIT = 90
-const NTASKS = 2
-const CPUS_PER_TASK = 16
-const GPUS_PER_TASK = 2
-const EXPERIMENT_DIR = "exp/dir"
-const MODEL_INTERFACE = "model_interface.jl"
-const MODULE_LOAD_STR = CAL.module_load_string(CAL.DerechoBackend())
-const hpc_kwargs = CAL.kwargs(
-    time = TIME_LIMIT,
-    ntasks = NTASKS,
-    cpus_per_task = CPUS_PER_TASK,
-    gpus_per_task = GPUS_PER_TASK,
-)
+@testset "Format PBS time" begin
+    @test ClimaCalibrate.BetterBackend.format_pbs_time(1) == "00:01:00"
+    @test ClimaCalibrate.BetterBackend.format_pbs_time(60) == "01:00:00"
+    @test ClimaCalibrate.BetterBackend.format_pbs_time(90) == "01:30:00"
+    @test ClimaCalibrate.BetterBackend.format_pbs_time(1440) == "24:00:00"
+    @test ClimaCalibrate.BetterBackend.format_pbs_time(2880) == "48:00:00"
+end
 
-# Time formatting tests
-@test CAL.format_pbs_time(TIME_LIMIT) == "01:30:00"
-@test CAL.format_pbs_time(1) == "00:01:00"
-@test CAL.format_pbs_time(60) == "01:00:00"
-@test CAL.format_pbs_time(1440) == "24:00:00"
-@test CAL.format_pbs_time(2880) == "48:00:00"
+@testset "Generate PBS script" begin
+    time_limit = 1
+    cpus_per_task = 16
+    gpus_per_task = 1
+    ntasks = 2
+    hpc_kwargs = Dict(
+        :time => time_limit,
+        :ntasks => ntasks,
+        :cpus_per_task => cpus_per_task,
+        :gpus_per_task => gpus_per_task,
+    )
+    backend = ClimaCalibrate.DerechoBackend(; hpc_kwargs)
 
-# Generate and validate pbs file contents
-pbs_file, julia_file = CAL.generate_pbs_script(
-    ITER,
-    MEMBER,
-    OUTPUT_DIR,
-    EXPERIMENT_DIR,
-    MODEL_INTERFACE,
-    MODULE_LOAD_STR;
-    hpc_kwargs,
-)
+    script = """
+    sleep(30)
+    """
 
-expected_pbs_contents = """
+    experiment_dir = ClimaCalibrate.project_dir()
+    job_body = """
+    julia --project=$experiment_dir -e '$script'
+    """
+
+    job_name = "pbs_job"
+    output = "output.txt"
+    pbs_string = ClimaCalibrate.BetterBackend.make_job_script(
+        backend,
+        job_body;
+        job_name,
+        output,
+    )
+
+    # TODO: climacommon version will fail depending on the backend!
+    expected_pbs_contents = """
 #!/bin/bash
-#PBS -N run_1_1
+#PBS -N $job_name
 #PBS -j oe
 #PBS -A UCIT0011
 #PBS -q main
-#PBS -o test/iteration_001/member_001/model_log.txt
+#PBS -o $output
 #PBS -l job_priority=regular
-#PBS -l walltime=01:30:00
-#PBS -l select=2:ncpus=16:ngpus=2:mpiprocs=2
+#PBS -l walltime=$(ClimaCalibrate.BetterBackend.format_pbs_time(time_limit))
+#PBS -l select=$ntasks:ncpus=$cpus_per_task:ngpus=$gpus_per_task:mpiprocs=1
 
-export MODULEPATH="/glade/campaign/univ/ucit0011/ClimaModules-Derecho:\$MODULEPATH" 
+export MODULEPATH="/glade/campaign/univ/ucit0011/ClimaModules-Derecho:\$MODULEPATH"
 module purge
-module load climacommon/2025_02_25
+module load climacommon
 
 export JULIA_MPI_HAS_CUDA=true
 export CLIMACOMMS_DEVICE="CUDA"
 export CLIMACOMMS_CONTEXT="MPI"
-\$MPITRAMPOLINE_MPIEXEC -n 4 -ppn 2 set_gpu_rank julia  --project=exp/dir test/iteration_001/member_001/model_run.jl
-"""
+\$MPITRAMPOLINE_MPIEXEC -n 2 -ppn 1 set_gpu_rank julia --project=$experiment_dir -e 'sleep(30)
+'
 
-for (generated_str, test_str) in
-    zip(split(pbs_file, "\n"), split(expected_pbs_contents, "\n"))
-    @test generated_str == test_str
+
+    """
+
+    for (generated_str, test_str) in
+        zip(split(pbs_string, "\n"), split(expected_pbs_contents, "\n"))
+        # Test one line at a time to see discrepancies
+        @test generated_str == test_str
+    end
 end
 
-# Helper function for submitting commands and checking job status
-function submit_cmd_helper(cmd)
-    sbatch_filepath, io = mktemp()
-    write(io, cmd)
-    close(io)
-    jobid = CAL.submit_pbs_job(sbatch_filepath)
-    sleep(1)  # Allow time for the job to start
-    return jobid
+@testset "Submit PBS job" begin
+    backend_type = ClimaCalibrate.get_backend()
+    if !(backend_type <: ClimaCalibrate.DerechoBackend)
+        @info "Backend identified is $backend_type which is not a DerechoBackend. Skipping submitting a PBS job"
+        return
+    end
+
+    # Need the backend to submit the job
+    backend = backend_type()
+
+    job_script = """
+    #!/bin/bash
+    #PBS -j oe
+    #PBS -A UCIT0011
+    #PBS -q preempt
+    #PBS -l walltime=00:01:00
+    #PBS -l select=1:ncpus=1
+
+    sleep 10
+    """
+
+    job = ClimaCalibrate.BetterBackend.submit_job(backend, job_script)
+
+    # Test for job status and completion
+    @test ClimaCalibrate.BetterBackend.isrunning(job) ||
+          ClimaCalibrate.BetterBackend.ispending(job)
+
+    # Helper function to wait for a job to complete
+    function wait_for(job, t)
+        curr_time = time()
+        while time() - curr_time < t
+            ClimaCalibrate.BetterBackend.job_status(job) == :COMPLETED && break
+            sleep(3)
+        end
+        return nothing
+    end
+
+    @testset "Submit a single PBS job and wait for completion" begin
+        wait_for(job, 180)
+        @test ClimaCalibrate.BetterBackend.job_status(job) == :COMPLETED
+        @test ClimaCalibrate.BetterBackend.iscompleted(job)
+        @test ClimaCalibrate.BetterBackend.issuccess(job)
+    end
+
+    @testset "Submit a PBS job and cancel it" begin
+        job = ClimaCalibrate.BetterBackend.submit_job(backend, job_script)
+        ClimaCalibrate.BetterBackend.kill_job(job)
+        # Derecho can be slow when updating their database when querying with qstat,
+        # so we need to wait longer
+        # If the test is flaky, increase the time to wait for
+        wait_for(job, 180)
+        @test ClimaCalibrate.BetterBackend.job_status(job) == :COMPLETED
+        @test ClimaCalibrate.BetterBackend.iscompleted(job)
+    end
+
+    @testset "Submit multiple PBS jobs and cancel them" begin
+        jobs = ntuple(
+            x -> ClimaCalibrate.BetterBackend.submit_job(backend, job_script),
+            3,
+        )
+        ClimaCalibrate.BetterBackend.kill_job.(jobs)
+        wait_for.(jobs, 180)
+        for job in jobs
+            @test ClimaCalibrate.BetterBackend.iscompleted(job)
+        end
+    end
 end
-
-# Test job lifecycle
-test_cmd = """
-#!/bin/bash
-#PBS -j oe
-#PBS -A UCIT0011
-#PBS -q preempt
-#PBS -l walltime=00:01:00
-#PBS -l select=1:ncpus=1
-
-sleep 10
-"""
-
-jobid = submit_cmd_helper(test_cmd)
-@test CAL.job_status(jobid) == :RUNNING
-@test CAL.job_running(CAL.job_status(jobid))
-@test CAL.job_running(CAL.job_status(jobid)) == CAL.job_running((jobid))
-
-sleep(180)  # Ensure job finishes. To debug, lower sleep time or comment out the code block
-@test CAL.job_completed(jobid)
-@test CAL.job_completed(CAL.job_status(jobid)) == CAL.job_completed(jobid)
-@test CAL.job_success(jobid)
-@test CAL.job_success(CAL.job_status(jobid)) == CAL.job_success(jobid)
-
-# Test job cancellation
-jobid = submit_cmd_helper(test_cmd)
-CAL.kill_job(jobid)

@@ -1,8 +1,9 @@
-using Test, ClimaCalibrate, Distributed, Logging
+using Test, Distributed, Logging
+import ClimaCalibrate
 
 @testset "PBSManager Unit Tests" begin
-    @test ClimaCalibrate.get_manager() == PBSManager(1)
-    p = add_workers(1; time = 5, device = :cpu)
+    @test ClimaCalibrate.get_manager() == ClimaCalibrate.PBSManager(1)
+    p = ClimaCalibrate.add_workers(1; time = 5, device = :cpu)
     @test nprocs() == length(p) + 1
     @test workers() == p
     @test remotecall_fetch(myid, 2) == 2
@@ -37,22 +38,29 @@ end
     p = workers()
     @test ClimaCalibrate.map_remotecall_fetch(myid) == p
 
-    # single argument 
+    # Single argument
     x = rand(5)
-    @test ClimaCalibrate.map_remotecall_fetch(identity, x) == fill(x, length(p))
+    @test ClimaCalibrate.BetterBackend.map_remotecall_fetch(identity, x) ==
+          fill(x, length(p))
 
     # multiple arguments
-    @test ClimaCalibrate.map_remotecall_fetch(+, 2, 3) == fill(5, length(p))
+    @test ClimaCalibrate.BetterBackend.map_remotecall_fetch(+, 2, 3) ==
+          fill(5, length(p))
 
     # Test specified workers list
-    @test length(ClimaCalibrate.map_remotecall_fetch(myid; workers = p[1:2])) ==
-          2
+    @test length(
+        ClimaCalibrate.BetterBackend.map_remotecall_fetch(
+            myid;
+            workers = p[1:2],
+        ),
+    ) == 2
 
     # Test with more complex data structure
     d = Dict("a" => 1, "b" => 2)
-    @test ClimaCalibrate.map_remotecall_fetch(identity, d) == fill(d, length(p))
+    @test ClimaCalibrate.BetterBackend.map_remotecall_fetch(identity, d) ==
+          fill(d, length(p))
 
-    loggers = ClimaCalibrate.set_worker_loggers()
+    loggers = ClimaCalibrate.BetterBackend.set_worker_loggers()
     @test length(loggers) == length(p)
     @test typeof(loggers) == Vector{Base.CoreLogging.SimpleLogger}
 

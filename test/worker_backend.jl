@@ -1,4 +1,5 @@
-using ClimaCalibrate, Distributed
+import ClimaCalibrate
+using Distributed
 import EnsembleKalmanProcesses as EKP
 
 include(
@@ -12,7 +13,7 @@ include(
 
 nprocs = 5
 if nworkers() == 1
-    if get_backend() == ClimaCalibrate.DerechoBackend
+    if ClimaCalibrate.get_backend() == ClimaCalibrate.DerechoBackend
         addprocs(
             PBSManager(nprocs),
             q = "main",
@@ -21,7 +22,7 @@ if nworkers() == 1
             l_walltime = "00:30:00",
         )
     else
-        addprocs(SlurmManager(nprocs))
+        addprocs(ClimaCalibrate.SlurmManager(nprocs))
     end
 end
 
@@ -38,7 +39,12 @@ eki = EKP.EnsembleKalmanProcess(
 
 ClimaCalibrate.initialize(eki, prior, output_dir)
 
-ClimaCalibrate.run_worker_iteration(0, ensemble_size, output_dir)
+ClimaCalibrate.Calibration.run_iteration(
+    ClimaCalibrate.WorkerBackend(),
+    0,
+    ensemble_size,
+    output_dir,
+)
 
 @testset "Test model checkpoints with interruptions" begin
     for m in 1:ensemble_size
@@ -67,8 +73,8 @@ ekp = EKP.EnsembleKalmanProcess(
     accelerator = EKP.DefaultAccelerator(),
     scheduler = EKP.DefaultScheduler(),
 )
-eki = ClimaCalibrate.calibrate(
-    WorkerBackend(),
+eki = ClimaCalibrate.Calibration.calibrate(
+    ClimaCalibrate.WorkerBackend(),
     ekp,
     n_iterations,
     prior,
@@ -94,14 +100,15 @@ g_vs_iter_plot(eki)
 @testset "Restarts" begin
     last_iter = ClimaCalibrate.last_completed_iteration(output_dir)
     @test last_iter == n_iterations - 1
-    ClimaCalibrate.run_worker_iteration(
+    ClimaCalibrate.Calibration.run_iteration(
+        ClimaCalibrate.WorkerBackend(),
         last_iter + 1,
         ensemble_size,
         output_dir,
     )
-    G_ensemble = observation_map(last_iter + 1)
-    save_G_ensemble(output_dir, last_iter + 1, G_ensemble)
-    update_ensemble(output_dir, last_iter + 1, prior)
+    G_ensemble = ClimaCalibrate.observation_map(last_iter + 1)
+    ClimaCalibrate.save_G_ensemble(output_dir, last_iter + 1, G_ensemble)
+    ClimaCalibrate.update_ensemble(output_dir, last_iter + 1, prior)
 
     @test ClimaCalibrate.last_completed_iteration(output_dir) == n_iterations
 end

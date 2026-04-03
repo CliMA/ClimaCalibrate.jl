@@ -1,4 +1,4 @@
-using ClimaCalibrate
+import ClimaCalibrate
 import Random
 
 include(
@@ -9,10 +9,10 @@ include(
         "utils.jl",
     ),
 )
-backend = get_backend()
-@assert backend <: HPCBackend
-hpc_kwargs = kwargs(time = 5, ntasks = 1, cpus_per_task = 1)
-if backend == DerechoBackend
+backend = ClimaCalibrate.get_backend()
+@assert backend <: ClimaCalibrate.HPCBackend
+hpc_kwargs = Dict(:time => 5, :ntasks => 1, :cpus_per_task => 1)
+if backend == ClimaCalibrate.DerechoBackend
     hpc_kwargs[:queue] = "preempt"
 end
 
@@ -70,23 +70,22 @@ eki = make_ekp(
 
 ClimaCalibrate.initialize(eki, prior, output_dir)
 
-backend = backend(
-    hpc_kwargs = hpc_kwargs,
-    experiment_dir = experiment_dir,
-    model_interface = interruption_model_interface,
-)
-ClimaCalibrate.run_hpc_iteration(
+backend = backend(hpc_kwargs = hpc_kwargs)
+experiment_dir = dirname(Base.active_project())
+ClimaCalibrate.Calibration.run_iteration(
     backend,
     0,
     ensemble_size,
     output_dir,
-    ClimaCalibrate.module_load_string(backend),
+    experiment_dir,
+    interruption_model_interface,
 )
 
 @testset "Test model checkpoints with interruptions" begin
     for m in 1:ensemble_size
         @test m == 1 ? ClimaCalibrate.model_started(output_dir, 0, m) :
               ClimaCalibrate.model_completed(output_dir, 0, m)
+        # TODO: Replace this with removing the directory instead
         rm(ClimaCalibrate.checkpoint_path(output_dir, 0, m))
     end
 end
@@ -102,12 +101,14 @@ ekp = make_ekp(
     scheduler = EKP.DefaultScheduler(),
 )
 backend = get_backend()
-eki = ClimaCalibrate.calibrate(
-    backend(; model_interface, hpc_kwargs),
+eki = ClimaCalibrate.Calibration.calibrate(
+    backend(; hpc_kwargs),
     ekp,
     n_iterations,
     prior,
     output_dir,
+    experiment_dir,
+    model_interface,
 )
 
 @test ClimaCalibrate.last_completed_iteration(output_dir) == n_iterations - 1
@@ -122,6 +123,7 @@ test_sf_calibration_output(eki, prior, observation)
 
 # Remove previous output - this is not necessary but safe for tests
 rm(output_dir, recursive = true)
+
 # Pure Julia calibration, this should run anywhere
 ekp = make_ekp(
     rng_seed,
@@ -133,7 +135,7 @@ ekp = make_ekp(
     accelerator = EKP.DefaultAccelerator(),
     scheduler = EKP.DefaultScheduler(),
 )
-julia_eki = ClimaCalibrate.calibrate(
+julia_eki = ClimaCalibrate.Calibration.calibrate(
     JuliaBackend(),
     ekp,
     n_iterations,
