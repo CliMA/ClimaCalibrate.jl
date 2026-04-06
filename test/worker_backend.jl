@@ -1,4 +1,5 @@
 using ClimaCalibrate, Distributed
+import EnsembleKalmanProcesses as EKP
 
 include(
     joinpath(
@@ -56,17 +57,22 @@ end
     ),
 )
 
-eki = calibrate(
-    WorkerBackend(),
-    ensemble_size,
-    n_iterations,
+user_initial_ensemble = EKP.construct_initial_ensemble(prior, ensemble_size)
+ekp = EKP.EnsembleKalmanProcess(
+    user_initial_ensemble,
     observation,
     variance,
-    prior,
-    output_dir;
+    EKP.Inversion();
     localization_method = EKP.Localizers.NoLocalization(),
     accelerator = EKP.DefaultAccelerator(),
     scheduler = EKP.DefaultScheduler(),
+)
+eki = ClimaCalibrate.calibrate(
+    WorkerBackend(),
+    ekp,
+    n_iterations,
+    prior,
+    output_dir,
 )
 
 @test ClimaCalibrate.last_completed_iteration(output_dir) == n_iterations - 1

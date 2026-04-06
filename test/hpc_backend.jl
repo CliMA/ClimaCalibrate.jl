@@ -1,4 +1,5 @@
 using ClimaCalibrate
+import Random
 
 include(
     joinpath(
@@ -24,11 +25,46 @@ ClimaCalibrate.forward_model(iter, member) = member == 1 && exit()
 write(io, model_interface_str)
 close(io)
 
-eki = EKP.EnsembleKalmanProcess(
-    EKP.construct_initial_ensemble(prior, ensemble_size),
+"""
+    make_ekp(
+    rng_seed,
+    prior,
+    ensemble_size,
     observation,
-    variance,
-    EKP.Inversion(),
+    variance;
+    ekp_kwargs...,
+)
+
+A convenience constructor for making a `EnsembleKalmanProcess` object.
+"""
+function make_ekp(
+    rng_seed,
+    prior,
+    ensemble_size,
+    observation,
+    variance;
+    ekp_kwargs...,
+)
+    Random.seed!(rng_seed)
+    rng_ekp = Random.MersenneTwister(rng_seed)
+    eki = EKP.EnsembleKalmanProcess(
+        EKP.construct_initial_ensemble(rng_ekp, prior, ensemble_size),
+        observation,
+        variance,
+        EKP.Inversion();
+        rng = rng_ekp,
+        ekp_kwargs...,
+    )
+    return eki
+end
+
+rng_seed = 1234
+eki = make_ekp(
+    rng_seed,
+    prior,
+    ensemble_size,
+    observation,
+    variance;
     verbose = true,
 )
 
@@ -55,18 +91,23 @@ ClimaCalibrate.run_hpc_iteration(
     end
 end
 
-eki = calibrate(
-    ensemble_size,
-    n_iterations,
-    observation,
-    variance,
+ekp = make_ekp(
+    rng_seed,
     prior,
-    output_dir;
-    backend_kwargs = (; model_interface, hpc_kwargs),
-    verbose = true,
+    ensemble_size,
+    observation,
+    variance;
     localization_method = EKP.Localizers.NoLocalization(),
     accelerator = EKP.DefaultAccelerator(),
     scheduler = EKP.DefaultScheduler(),
+)
+backend = get_backend()
+eki = ClimaCalibrate.calibrate(
+    backend(; model_interface, hpc_kwargs),
+    ekp,
+    n_iterations,
+    prior,
+    output_dir,
 )
 
 @test ClimaCalibrate.last_completed_iteration(output_dir) == n_iterations - 1
@@ -82,17 +123,22 @@ test_sf_calibration_output(eki, prior, observation)
 # Remove previous output - this is not necessary but safe for tests
 rm(output_dir, recursive = true)
 # Pure Julia calibration, this should run anywhere
-julia_eki = calibrate(
-    JuliaBackend(),
-    ensemble_size,
-    n_iterations,
-    observation,
-    variance,
+ekp = make_ekp(
+    rng_seed,
     prior,
-    output_dir;
+    ensemble_size,
+    observation,
+    variance;
     localization_method = EKP.Localizers.NoLocalization(),
     accelerator = EKP.DefaultAccelerator(),
     scheduler = EKP.DefaultScheduler(),
+)
+julia_eki = ClimaCalibrate.calibrate(
+    JuliaBackend(),
+    ekp,
+    n_iterations,
+    prior,
+    output_dir,
 )
 test_sf_calibration_output(julia_eki, prior, observation)
 

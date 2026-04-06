@@ -12,6 +12,7 @@ using Distributed
 import ClimaCalibrate as CAL
 import ClimaAnalysis: SimDir, get, slice, average_xy
 using ClimaUtilities.ClimaArtifacts
+import EnsembleKalmanProcesses as EKP
 import EnsembleKalmanProcesses: I, ParameterDistributions.constrained_gaussian
 
 # Next, we add workers. These are primarily added by 
@@ -166,12 +167,12 @@ observations .= process_member_data(SimDir(simulation.output_dir))
 # Other backends are available for forward models that can't use workers or need to be parallelized internally.
 # The simplest backend is the `JuliaBackend`, which runs all ensemble members sequentially and does not require `Distributed.jl`.
 # For more information, see the [`Backends`](https://clima.github.io/ClimaCalibrate.jl/dev/backends/) page.
-eki = CAL.calibrate(
-    CAL.WorkerBackend(),
-    ensemble_size,
-    n_iterations,
+user_initial_ensemble = EKP.construct_initial_ensemble(prior, ensemble_size)
+ekp = EKP.EnsembleKalmanProcess(
+    user_initial_ensemble,
     observations,
     noise,
-    prior,
-    output_dir,
+    EKP.Inversion(),
+    EKP.default_options_dict(EKP.Inversion()),
 )
+eki = CAL.calibrate(CAL.WorkerBackend(), ekp, n_iterations, prior, output_dir)
