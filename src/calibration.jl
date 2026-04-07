@@ -370,7 +370,7 @@ function run_iteration(backend::WorkerBackend, iter, ensemble_size, output_dir)
     end
 
     (; worker_pool) = backend
-    nfailures = 0
+    nfailures = Base.Threads.Atomic{Int}(0)
     @sync while !isempty(work_to_do)
         if !isempty(worker_pool.workers)
             worker = take!(worker_pool)
@@ -379,9 +379,9 @@ function run_iteration(backend::WorkerBackend, iter, ensemble_size, output_dir)
                 run_fwd_model(worker)
             catch e
                 @warn "Error running on worker $worker" exception = e
-                # TODO: Is this safe to do for multiple workers to try to
-                # modify nfailures?
-                nfailures += 1
+                # Use atomic add because nfailures is accessed by multiple
+                # workers
+                Base.Threads.atomic_add!(nfailures, 1)
             finally
                 push!(worker_pool, worker)
             end
@@ -391,6 +391,7 @@ function run_iteration(backend::WorkerBackend, iter, ensemble_size, output_dir)
         end
     end
 
+    nfailures = nfailures[]
     iter_failure_rate = nfailures / ensemble_size
     (; failure_rate) = backend
     if iter_failure_rate > failure_rate
