@@ -22,10 +22,7 @@ function make_job_script(
     ntasks = get(hpc_kwargs, :ntasks, 1)
     gpus_per_task = get(hpc_kwargs, :gpus_per_task, 0)
     climacomms_device = gpus_per_task > 0 ? "CUDA" : "CPU"
-    # TODO: Remove this exception for GCPBackend
-    mpiexec_string =
-        backend isa GCPBackend ? "mpiexec -n $ntasks" :
-        "srun --output=$output --open-mode=append"
+    mpiexec_string = _generate_mpiexec_string(backend, ntasks, output)
 
     slurm_script = """
     #!/bin/bash
@@ -179,6 +176,18 @@ function _generate_sbatch_directives(hpc_kwargs)
         "#SBATCH --$(replace(string(k), "_" => "-"))=$(replace(string(v), "_" => "-"))"
     end
     return join(slurm_directives, "\n")
+end
+
+"""
+    _generate_mpiexec_string(backend, ntasks, output)
+
+Modify the job body to log to `output` or run with MPI with `ntasks` depending
+on the `backend`.
+"""
+function _generate_mpiexec_string(backend, ntasks, output)
+    # TODO: Remove this exception for GCPBackend
+    return backend isa GCPBackend ? "mpiexec -n $ntasks" :
+           "srun --output=$output --open-mode=append"
 end
 
 """
