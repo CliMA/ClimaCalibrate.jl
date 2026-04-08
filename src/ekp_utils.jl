@@ -2,6 +2,12 @@ module EKPUtils
 
 import EnsembleKalmanProcesses as EKP
 
+export minibatcher_over_samples,
+    observation_series_from_samples,
+    g_ens_matrix,
+    get_metadata_for_nth_iteration,
+    get_observations_for_nth_iteration
+
 _fixed_minibatcher_indices(n_batches, batch_size) =
     [collect(((i - 1) * batch_size + 1):(i * batch_size)) for i in 1:n_batches]
 

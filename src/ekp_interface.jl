@@ -6,9 +6,24 @@ import EnsembleKalmanProcesses as EKP
 import EnsembleKalmanProcesses.ParameterDistributions as PD
 import EnsembleKalmanProcesses.TOMLInterface as TI
 
-export get_prior, initialize, update_ensemble, save_G_ensemble
-export path_to_ensemble_member,
-    path_to_model_log, path_to_iteration, parameter_path, load_latest_ekp
+export initialize,
+    last_completed_iteration,
+    save_G_ensemble,
+    update_ensemble,
+    update_ensemble!,
+    observation_map_and_update!,
+    get_prior,
+    get_param_dict,
+    path_to_iteration,
+    path_to_ensemble_member,
+    path_to_model_log,
+    parameter_path,
+    checkpoint_path,
+    load_latest_ekp,
+    save_eki_and_parameters,
+    model_started,
+    model_completed,
+    write_model_completed
 
 """
     load_ekp_struct(output_dir, iteration)

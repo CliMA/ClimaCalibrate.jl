@@ -2,6 +2,27 @@ module Backend
 
 import Distributed
 
+export HPCBackend,
+    SlurmBackend,
+    JuliaBackend,
+    WorkerBackend,
+    DerechoBackend,
+    GCPBackend,
+    ClimaGPUBackend,
+    CaltechHPCBackend,
+    get_backend,
+    JobInfo,
+    job_status,
+    ispending,
+    isrunning,
+    issuccess,
+    isfailed,
+    iscompleted,
+    submit_job,
+    requeue_job,
+    cancel_job,
+    make_job_script
+
 abstract type AbstractBackend end
 
 """

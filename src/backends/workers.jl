@@ -3,6 +3,16 @@ using Logging
 
 import ..ClimaCalibrate: project_dir
 
+export add_workers,
+    default_worker_pool,
+    set_worker_loggers,
+    set_worker_logger,
+    SlurmManager,
+    PBSManager,
+    get_manager,
+    map_remotecall_fetch,
+    foreach_remotecall_wait
+
 # Set the time limit for the Julia worker to be contacted by the main process, default = "60.0s"
 # https://docs.julialang.org/en/v1/manual/environment-variables/#JULIA_WORKER_TIMEOUT
 worker_timeout() = "300.0"

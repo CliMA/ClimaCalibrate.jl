@@ -33,6 +33,7 @@ ClimaCalibrate.get_backend
 ClimaCalibrate.SlurmManager
 ClimaCalibrate.PBSManager
 ClimaCalibrate.add_workers
+ClimaCalibrate.set_worker_logger
 ClimaCalibrate.set_worker_loggers
 ClimaCalibrate.map_remotecall_fetch
 ClimaCalibrate.foreach_remotecall_wait
@@ -58,6 +59,7 @@ ClimaCalibrate.make_job_script
 
 ```@docs
 ClimaCalibrate.initialize
+ClimaCalibrate.last_completed_iteration
 ClimaCalibrate.save_G_ensemble
 ClimaCalibrate.update_ensemble
 ClimaCalibrate.update_ensemble!
@@ -68,7 +70,9 @@ ClimaCalibrate.path_to_iteration
 ClimaCalibrate.path_to_ensemble_member
 ClimaCalibrate.path_to_model_log
 ClimaCalibrate.parameter_path
+ClimaCalibrate.checkpoint_path
 ClimaCalibrate.load_latest_ekp
+ClimaCalibrate.save_eki_and_parameters
 ```
 
 ## EKP Utilities

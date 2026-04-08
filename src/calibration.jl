@@ -9,6 +9,8 @@ import Distributed
 
 import EnsembleKalmanProcesses as EKP
 
+export calibrate
+
 include("ekp_interface.jl")
 
 """
