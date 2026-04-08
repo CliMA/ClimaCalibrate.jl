@@ -227,7 +227,7 @@ via bash.
 function module_load_string(::CaltechHPCBackend)
     return """export MODULEPATH="/resnick/groups/esm/modules:\$MODULEPATH"
     module purge
-    module load climacommon/2024_10_09"""
+    module load climacommon/2025_03_18"""
 end
 
 function module_load_string(::ClimaGPUBackend)
