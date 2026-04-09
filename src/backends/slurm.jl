@@ -105,11 +105,7 @@ const RUNNING_STATUSES =
 
 Return the status of `job`.
 
-This includes
-- `:RUNNING`,
-- `:COMPLETED`,
-- `:FAILED`,
-- `:PENDING`.
+See [`JobStatus`](@ref).
 """
 function job_status(::SlurmBackend, job::JobInfo)
     (; id) = job
@@ -128,22 +124,22 @@ function job_status(::SlurmBackend, job::JobInfo)
     @debug job_id status exit_code stderr
 
     if status == "" && exit_code == 0 && stderr == ""
-        return :COMPLETED
+        return COMPLETED
     end
     if exit_code != 0 && contains(stderr, invalid_job_err)
-        return :COMPLETED
+        return COMPLETED
     end
 
     if any(str -> contains(status, str), PENDING_STATUSES)
-        return :PENDING
+        return PENDING
     end
 
     if any(str -> contains(status, str), RUNNING_STATUSES)
-        return :RUNNING
+        return RUNNING
     end
 
     @warn "Job ID $job_id has unknown status `$status`. Marking as completed"
-    return :COMPLETED
+    return COMPLETED
 end
 
 """
