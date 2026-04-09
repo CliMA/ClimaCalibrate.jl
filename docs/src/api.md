@@ -43,6 +43,7 @@ ClimaCalibrate.foreach_remotecall_wait
 
 ```@docs
 ClimaCalibrate.JobInfo
+ClimaCalibrate.JobStatus
 ClimaCalibrate.job_status
 ClimaCalibrate.ispending
 ClimaCalibrate.isrunning

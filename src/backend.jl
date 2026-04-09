@@ -12,6 +12,7 @@ export HPCBackend,
     CaltechHPCBackend,
     get_backend,
     JobInfo,
+    JobStatus,
     job_status,
     ispending,
     isrunning,
@@ -24,6 +25,30 @@ export HPCBackend,
     make_job_script
 
 abstract type AbstractBackend end
+
+"""
+    JobStatus
+
+An enum representing the current status of a job.
+
+## Values
+- `PENDING`: The job is queued and waiting to be scheduled.
+- `RUNNING`: The job is currently executing.
+- `COMPLETED`: The job finished running.
+- `FAILED`: The job terminated with an error as reported by the scheduler.
+
+Use [`ispending`](@ref), [`isrunning`](@ref), [`issuccess`](@ref),
+[`isfailed`](@ref), and [`iscompleted`](@ref) to query the status of a
+[`JobInfo`](@ref).
+
+See also: [`job_status`](@ref).
+"""
+@enum JobStatus begin
+    PENDING
+    RUNNING
+    COMPLETED
+    FAILED
+end
 
 """
     JuliaBackend
@@ -191,6 +216,8 @@ end
     job_status(job::JobInfo)
 
 Return the current job status.
+
+See [`JobStatus`](@ref).
 """
 job_status(job::JobInfo) = job_status(job.backend, job)
 
@@ -230,28 +257,28 @@ end
 
 Return `true` if `job` is pending (i.e. waiting to be scheduled).
 """
-ispending(job) = job_status(job) == :PENDING
+ispending(job) = job_status(job) == PENDING
 
 """
     isrunning(job::JobInfo)
 
 Return `true` if `job` is currently running.
 """
-isrunning(job) = job_status(job) == :RUNNING
+isrunning(job) = job_status(job) == RUNNING
 
 """
     issuccess(job::JobInfo)
 
 Return `true` if `job` completed successfully.
 """
-issuccess(job) = job_status(job) == :COMPLETED
+issuccess(job) = job_status(job) == COMPLETED
 
 """
     isfailed(job::JobInfo)
 
 Return `true` if `job` failed.
 """
-isfailed(job) = job_status(job) == :FAILED
+isfailed(job) = job_status(job) == FAILED
 
 """
     iscompleted(job::JobInfo)

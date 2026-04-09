@@ -100,7 +100,7 @@ end
     function wait_for(job, t)
         curr_time = time()
         while time() - curr_time < t
-            ClimaCalibrate.Backend.job_status(job) == :COMPLETED && break
+            ClimaCalibrate.iscompleted(job) && break
             sleep(3)
         end
         return nothing
@@ -113,7 +113,7 @@ end
         # qstat, so we need to wait longer
         # If the test is flaky, increase the time to wait for
         wait_for(job, 180)
-        @test ClimaCalibrate.job_status(job) == :COMPLETED
+        @test ClimaCalibrate.job_status(job) == ClimaCalibrate.Backend.COMPLETED
         @test ClimaCalibrate.iscompleted(job)
     end
 
@@ -132,7 +132,7 @@ end
         # Test for job status and completion
         @test ClimaCalibrate.isrunning(job) || ClimaCalibrate.ispending(job)
         wait_for(job, 240)
-        @test ClimaCalibrate.job_status(job) == :COMPLETED
+        @test ClimaCalibrate.job_status(job) == ClimaCalibrate.Backend.COMPLETED
         @test ClimaCalibrate.iscompleted(job)
         @test ClimaCalibrate.issuccess(job)
     end

@@ -22,7 +22,7 @@ import ClimaCalibrate
     function wait_for(job, t)
         curr_time = time()
         while time() - curr_time < t
-            ClimaCalibrate.job_status(job) == :COMPLETED && break
+            ClimaCalibrate.iscompleted(job) && break
             sleep(3)
         end
         return nothing
@@ -34,7 +34,7 @@ import ClimaCalibrate
         # Cancelling is quicker than waiting for a job to complete so we wait
         # for only one minute
         wait_for(job, 60)
-        @test ClimaCalibrate.job_status(job) == :COMPLETED
+        @test ClimaCalibrate.job_status(job) == ClimaCalibrate.Backend.COMPLETED
         @test ClimaCalibrate.iscompleted(job)
     end
 
@@ -53,7 +53,7 @@ import ClimaCalibrate
         # Test for job status and completion
         @test ClimaCalibrate.isrunning(job) || ClimaCalibrate.ispending(job)
         wait_for(job, 480)
-        @test ClimaCalibrate.job_status(job) == :COMPLETED
+        @test ClimaCalibrate.job_status(job) == ClimaCalibrate.Backend.COMPLETED
         @test ClimaCalibrate.iscompleted(job)
         @test ClimaCalibrate.issuccess(job)
     end

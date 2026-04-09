@@ -111,18 +111,14 @@ function submit_job(backend::DerechoBackend, job_script::String)
 end
 
 const QBS_CODE_TO_JOB_STATUS =
-    Dict("Q" => :RUNNING, "R" => :RUNNING, "F" => :COMPLETED)
+    Dict("Q" => RUNNING, "R" => RUNNING, "F" => COMPLETED)
 
 """
     job_status(::DerechoBackend, job::JobInfo)
 
 Return the status of `job`.
 
-This includes
-- `:RUNNING`,
-- `:COMPLETED`,
-- `:FAILED`,
-- `:PENDING`.
+See [`JobStatus`](@ref).
 """
 function job_status(::DerechoBackend, job::JobInfo)
     (; id) = job
@@ -137,7 +133,7 @@ function job_status(::DerechoBackend, job::JobInfo)
     status_str = _qstat_output(id, clean_env)
     if isnothing(status_str)
         @warn "qstat failed for job $id; assuming job is running"
-        return :RUNNING
+        return RUNNING
     end
 
     # Support both dsv and plain formats
@@ -146,7 +142,7 @@ function job_status(::DerechoBackend, job::JobInfo)
 
     status_code = if isnothing(job_state_match)
         @warn "Job status for $id not found in qstat output. Assuming job is running"
-        return :RUNNING
+        return RUNNING
     else
         strip(first(job_state_match.captures))
     end
@@ -155,11 +151,11 @@ function job_status(::DerechoBackend, job::JobInfo)
         isnothing(substate_match) ? 0 :
         parse(Int, first(substate_match.captures))
 
-    # Map PBS states to our symbols; default to :RUNNING while job exists
-    status_symbol = get(QBS_CODE_TO_JOB_STATUS, status_code, :RUNNING)
+    # Map PBS states to our symbols; default to RUNNING while job exists
+    status_symbol = get(QBS_CODE_TO_JOB_STATUS, status_code, RUNNING)
 
-    if status_symbol == :COMPLETED && substate_number == 93
-        return :FAILED
+    if status_symbol == COMPLETED && substate_number == 93
+        return FAILED
     end
     return status_symbol
 end
