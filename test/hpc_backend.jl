@@ -74,7 +74,7 @@ backend = backend(hpc_kwargs = hpc_kwargs)
 experiment_dir = dirname(Base.active_project())
 ClimaCalibrate.Calibration.run_iteration(
     backend,
-    0,
+    1,
     ensemble_size,
     output_dir,
     interruption_model_interface,
@@ -84,9 +84,9 @@ ClimaCalibrate.Calibration.run_iteration(
 
 @testset "Test model checkpoints with interruptions" begin
     for m in 1:ensemble_size
-        @test m == 1 ? ClimaCalibrate.model_started(output_dir, 0, m) :
-              ClimaCalibrate.model_completed(output_dir, 0, m)
-        rm(ClimaCalibrate.checkpoint_path(output_dir, 0, m))
+        @test m == 1 ? ClimaCalibrate.model_started(output_dir, 1, m) :
+              ClimaCalibrate.model_completed(output_dir, 1, m)
+        rm(ClimaCalibrate.checkpoint_path(output_dir, 1, m))
     end
 end
 
@@ -111,11 +111,11 @@ eki = ClimaCalibrate.Calibration.calibrate(
     experiment_dir,
 )
 
-@test ClimaCalibrate.last_completed_iteration(output_dir) == n_iterations - 1
+@test ClimaCalibrate.last_completed_iteration(output_dir) == n_iterations
 
 @testset "Test model checkpoints for completion" begin
     for m in 1:ensemble_size
-        @test ClimaCalibrate.model_completed.(output_dir, 0, m)
+        @test ClimaCalibrate.model_completed.(output_dir, 1, m)
     end
 end
 

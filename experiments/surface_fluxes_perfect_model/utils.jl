@@ -112,11 +112,7 @@ function convergence_plot(
             xticks = 0:50,
             title = "Error for $param_name",
         )
-        Makie.lines!(
-            ax,
-            0.0:(length(EKP.get_error(eki)) - 1),
-            EKP.get_error(eki),
-        )
+        Makie.lines!(ax, 1.0:length(EKP.get_error(eki)), EKP.get_error(eki))
 
         ax = Makie.Axis(
             f[1, 2],
@@ -124,7 +120,7 @@ function convergence_plot(
             ylabel = "Spread",
             xticks = 0:50,
         )
-        Makie.lines!(ax, 0.0:(length(spread_vec) - 1), spread_vec)
+        Makie.lines!(ax, 1.0:length(spread_vec), spread_vec)
 
         ax = Makie.Axis(
             f[2, 1],
@@ -132,7 +128,7 @@ function convergence_plot(
             ylabel = "Unconstrained Parameters",
             xticks = 0:50,
         )
-        Makie.lines!.(ax, tuple(0.0:(length(u_series[1]) - 1)), u_series)
+        Makie.lines!.(ax, tuple(1.0:length(u_series[1])), u_series)
 
         ax = Makie.Axis(
             f[2, 2],
@@ -140,7 +136,7 @@ function convergence_plot(
             ylabel = "Constrained Parameters ($param_name)",
             xticks = 0:50,
         )
-        Makie.lines!.(ax, tuple(0.0:(length(phi_series[1]) - 1)), phi_series)
+        Makie.lines!.(ax, tuple(1.0:length(phi_series[1])), phi_series)
         Makie.hlines!(ax, [theta_star], color = :red, linestyle = :dash)
 
         Makie.save(joinpath(output_dir, "convergence_$param_name.png"), f)
@@ -171,7 +167,7 @@ function g_vs_iter_plot(eki)
     ustar_mod = 0
     model_config = Dict()
     model_config["output_dir"] = output_dir
-    for iter in 0:n_iterations
+    for iter in 1:(n_iterations + 1)
         for i in 1:ensemble_size
             model_config["toml"] = [
                 joinpath(
@@ -188,7 +184,7 @@ function g_vs_iter_plot(eki)
     end
     Makie.lines!(
         ax,
-        [0, n_iterations],
+        [1, n_iterations + 1],
         [nanmean(ustar_obs), nanmean(ustar_obs)],
         color = :red,
         linestyle = :dash,
@@ -198,7 +194,7 @@ function g_vs_iter_plot(eki)
         obtain_ustar(FT, x_inputs, model_config, return_ustar = true)
     Makie.lines!(
         ax,
-        [0, n_iterations],
+        [1, n_iterations + 1],
         [
             nanmean(ustar_mod_perfect_params[:]),
             nanmean(ustar_mod_perfect_params[:]),
