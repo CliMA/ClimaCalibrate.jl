@@ -61,7 +61,7 @@ function calibrate(
     @assert isfile(model_interface) "Model interface file does not exist: $model_interface"
 
     first_iter = last_completed_iteration(output_dir) + 1
-    for iter in first_iter:(n_iterations - 1)
+    for iter in first_iter:n_iterations
         @info "Iteration $iter"
         run_iteration(
             backend,
@@ -343,7 +343,7 @@ function calibrate(
     @assert isdir(output_dir) "Output directory does not exist: $output_dir"
 
     first_iter = last_completed_iteration(output_dir) + 1
-    for iter in first_iter:(n_iterations - 1)
+    for iter in first_iter:n_iterations
         @info "Iteration $iter"
         run_iteration(backend, iter, ensemble_size, output_dir)
         @info "Completed iteration $iter, updating ensemble"
@@ -466,7 +466,7 @@ function calibrate(
     @assert isdir(output_dir) "Output directory does not exist: $output_dir"
 
     first_iter = last_completed_iteration(output_dir) + 1
-    for iter in first_iter:(n_iterations - 1)
+    for iter in first_iter:n_iterations
         @info "Iteration $iter"
         run_iteration(backend, iter, ensemble_size, output_dir)
         @info "Completed iteration $iter, updating ensemble"

@@ -186,9 +186,9 @@ Initialize a calibration, saving the initial parameter ensemble to a folder
 within `output_dir`.
 """
 function initialize(eki::EKP.EnsembleKalmanProcess, prior, output_dir)
-    save_eki_and_parameters(eki, output_dir, 0, prior)
+    save_eki_and_parameters(eki, output_dir, 1, prior)
     JLD2.save_object(
-        joinpath(path_to_iteration(output_dir, 0), "prior.jld2"),
+        joinpath(path_to_iteration(output_dir, 1), "prior.jld2"),
         prior,
     )
     return eki
@@ -273,10 +273,10 @@ end
 
 Determines the last completed iteration given an `output_dir` containing a calibration run.
 
-If no iteration has been completed yet, return -1.
+If no iteration has been completed yet, return 0.
 """
 function last_completed_iteration(output_dir)
-    last_completed_iter = -1
+    last_completed_iter = 0
     while isfile(path_to_G_ensemble(output_dir, last_completed_iter + 1)) &&
         isfile(ekp_path(output_dir, last_completed_iter + 2))
         last_completed_iter += 1

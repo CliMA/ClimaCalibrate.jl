@@ -90,7 +90,7 @@ end
     )
     CAL.initialize(ensemble_kalman_process, prior, output_dir)
     override_file =
-        joinpath(output_dir, "iteration_000", "member_001", "parameters.toml")
+        joinpath(output_dir, "iteration_001", "member_001", "parameters.toml")
     td = CP.create_toml_dict(FT; override_file)
     params = CP.get_parameter_values(td, param_names)
     @test params.one ≈ 3.1313341622997677
