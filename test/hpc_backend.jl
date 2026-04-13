@@ -11,9 +11,30 @@ include(
 )
 backend = ClimaCalibrate.get_backend()
 @assert backend <: ClimaCalibrate.HPCBackend
-hpc_kwargs = Dict{Symbol, Any}(:time => 5, :ntasks => 1, :cpus_per_task => 1)
+directives = Dict{Symbol, Any}(:time => 5, :ntasks => 1, :cpus_per_task => 1)
 if backend == ClimaCalibrate.DerechoBackend
-    hpc_kwargs[:queue] = "preempt"
+    directives[:queue] = "preempt"
+end
+
+function get_climacommon_version()
+    climacommon_regex = r"^climacommon(?:/\d{4}_\d{2}_\d{2})?$"
+    loaded_modules = split(get(ENV, "LOADEDMODULES", ""), ":")
+    loaded_modules_idx =
+        findlast(m -> occursin(climacommon_regex, m), loaded_modules)
+    loaded_module_cc =
+        isnothing(loaded_modules_idx) ? nothing :
+        loaded_modules[loaded_modules_idx]
+    return loaded_module_cc
+end
+
+cc_module = get_climacommon_version()
+isnothing(cc_module) && error("No climacommon module is loaded")
+modules = [cc_module]
+
+if backend == ClimaCalibrate.DerechoBackend
+    hpc_config = ClimaCalibrate.Backend.PBSConfig(; directives, modules)
+else
+    hpc_config = ClimaCalibrate.Backend.SlurmConfig(; directives, modules)
 end
 
 original_model_interface = model_interface
@@ -70,7 +91,7 @@ eki = make_ekp(
 
 ClimaCalibrate.initialize(eki, prior, output_dir)
 
-backend = backend(hpc_kwargs = hpc_kwargs)
+backend = backend(hpc_config)
 experiment_dir = dirname(Base.active_project())
 ClimaCalibrate.Calibration.run_iteration(
     backend,
@@ -102,7 +123,7 @@ ekp = make_ekp(
 )
 backend = ClimaCalibrate.get_backend()
 eki = ClimaCalibrate.Calibration.calibrate(
-    backend(; hpc_kwargs),
+    backend(hpc_config),
     ekp,
     n_iterations,
     prior,

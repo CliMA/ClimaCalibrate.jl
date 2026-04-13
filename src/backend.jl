@@ -24,6 +24,8 @@ export HPCBackend,
     cancel_job,
     make_job_script
 
+include("backends/config.jl")
+
 abstract type AbstractBackend end
 
 """
@@ -141,9 +143,13 @@ Used for Caltech's
 See [`HPCBackend`](@ref) for the keyword arguments to construct a
 `CaltechHPCBackend`.
 """
-Base.@kwdef struct CaltechHPCBackend <: SlurmBackend
-    hpc_kwargs::Dict{Symbol, Any} = Dict{Symbol, Any}()
-    job_records::Vector{JobInfo} = []
+struct CaltechHPCBackend <: SlurmBackend
+    hpc_config::SlurmConfig
+    job_records::Vector{JobInfo}
+end
+
+function CaltechHPCBackend(config::SlurmConfig)
+    return CaltechHPCBackend(config, [])
 end
 
 """
@@ -154,9 +160,13 @@ Used for CliMA's private GPU server.
 See [`HPCBackend`](@ref) for the keyword arguments to construct a
 `ClimaGPUBackend`.
 """
-Base.@kwdef struct ClimaGPUBackend <: SlurmBackend
-    hpc_kwargs::Dict{Symbol, Any} = Dict{Symbol, Any}()
-    job_records::Vector{JobInfo} = []
+struct ClimaGPUBackend <: SlurmBackend
+    hpc_config::SlurmConfig
+    job_records::Vector{JobInfo}
+end
+
+function ClimaGPUBackend(config::SlurmConfig)
+    return ClimaGPUBackend(config, [])
 end
 
 """
@@ -167,9 +177,13 @@ Used for CliMA's private GCP server.
 See [`HPCBackend`](@ref) for the keyword arguments to construct a
 `GCPBackend`.
 """
-Base.@kwdef struct GCPBackend <: SlurmBackend
-    hpc_kwargs::Dict{Symbol, Any} = Dict{Symbol, Any}()
-    job_records::Vector{JobInfo} = []
+struct GCPBackend <: SlurmBackend
+    hpc_config::SlurmConfig
+    job_records::Vector{JobInfo}
+end
+
+function GCPBackend(config::SlurmConfig)
+    return GCPBackend(config, [])
 end
 
 """
@@ -181,9 +195,13 @@ Used for NSF NCAR's
 See [`HPCBackend`](@ref) for the keyword arguments to construct a
 `DerechoBackend`.
 """
-Base.@kwdef struct DerechoBackend <: HPCBackend
-    hpc_kwargs::Dict{Symbol, Any} = Dict{Symbol, Any}()
-    job_records::Vector{JobInfo} = []
+struct DerechoBackend <: HPCBackend
+    hpc_config::PBSConfig
+    job_records::Vector{JobInfo}
+end
+
+function DerechoBackend(config::PBSConfig)
+    return DerechoBackend(config, [])
 end
 
 """
