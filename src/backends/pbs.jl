@@ -35,6 +35,8 @@ function make_job_script(
     end
     total_ranks = num_nodes * ranks_per_node
 
+    # Change directory before starting the Julia process because PBS defaults to
+    # the home directory instead of the submission directory, unlike Slurm
     pbs_script = """
     #!/bin/bash
     #PBS -N $job_name
@@ -51,6 +53,8 @@ function make_job_script(
     export JULIA_MPI_HAS_CUDA=true
     export CLIMACOMMS_DEVICE="$climacomms_device"
     export CLIMACOMMS_CONTEXT="MPI"
+
+    cd \$PBS_O_WORKDIR
     \$MPITRAMPOLINE_MPIEXEC -n $total_ranks -ppn $ranks_per_node $set_gpu_rank $job_body
     """
     return pbs_script

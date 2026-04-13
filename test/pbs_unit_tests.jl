@@ -60,6 +60,8 @@ $module_str
 export JULIA_MPI_HAS_CUDA=true
 export CLIMACOMMS_DEVICE="CUDA"
 export CLIMACOMMS_CONTEXT="MPI"
+
+cd \$PBS_O_WORKDIR
 \$MPITRAMPOLINE_MPIEXEC -n 2 -ppn 1 set_gpu_rank julia --project=$experiment_dir -e 'sleep(30)
 '
 
