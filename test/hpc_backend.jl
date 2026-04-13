@@ -11,9 +11,24 @@ include(
 )
 backend = ClimaCalibrate.get_backend()
 @assert backend <: ClimaCalibrate.HPCBackend
-hpc_kwargs = Dict{Symbol, Any}(:time => 5, :ntasks => 1, :cpus_per_task => 1)
+directives = Dict{Symbol, Any}(:time => 5, :ntasks => 1, :cpus_per_task => 1)
 if backend == ClimaCalibrate.DerechoBackend
-    hpc_kwargs[:queue] = "preempt"
+    directives[:queue] = "preempt"
+end
+
+climacommon_dict = Dict(
+    ClimaCalibrate.DerechoBackend => "climacommon/2026_04_08",
+    ClimaCalibrate.ClimaGPUBackend => "climacommon/2026_02_18",
+    ClimaCalibrate.CaltechHPCBackend => "climacommon/2025_03_18",
+)
+
+cc_module = climacommon_dict[backend]
+modules = [cc_module]
+
+if backend == ClimaCalibrate.DerechoBackend
+    hpc_config = ClimaCalibrate.PBSConfig(; directives, modules)
+else
+    hpc_config = ClimaCalibrate.SlurmConfig(; directives, modules)
 end
 
 original_model_interface = model_interface
@@ -70,7 +85,7 @@ eki = make_ekp(
 
 ClimaCalibrate.initialize(eki, prior, output_dir)
 
-backend = backend(hpc_kwargs = hpc_kwargs)
+backend = backend(hpc_config)
 experiment_dir = dirname(Base.active_project())
 ClimaCalibrate.Calibration.run_iteration(
     backend,
@@ -102,7 +117,7 @@ ekp = make_ekp(
 )
 backend = ClimaCalibrate.get_backend()
 eki = ClimaCalibrate.Calibration.calibrate(
-    backend(; hpc_kwargs),
+    backend(hpc_config),
     ekp,
     n_iterations,
     prior,

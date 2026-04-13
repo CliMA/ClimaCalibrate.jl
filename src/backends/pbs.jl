@@ -16,22 +16,20 @@ function make_job_script(
     job_name = "pbs_job.txt",
     output = "output.txt",
 )
-    (; hpc_kwargs) = backend
-    queue = get(hpc_kwargs, :queue, "main")
-    walltime = format_pbs_time(get(hpc_kwargs, :time, 45))
-    num_nodes = get(hpc_kwargs, :ntasks, 1)
-    cpus_per_node = get(hpc_kwargs, :cpus_per_task, 1)
-    gpus_per_node = get(hpc_kwargs, :gpus_per_task, 0)
-    job_priority = get(hpc_kwargs, :job_priority, "regular")
+    (; hpc_config) = backend
+    (; directives) = hpc_config
+
+    directives = Dict(directives)
+    num_nodes = directives[:ntasks]
+    cpus_per_node = directives[:cpus_per_task]
+    gpus_per_node = directives[:gpus_per_task]
 
     if gpus_per_node > 0
         ranks_per_node = gpus_per_node
         set_gpu_rank = "set_gpu_rank"
-        climacomms_device = "CUDA"
     else
         ranks_per_node = cpus_per_node
         set_gpu_rank = ""
-        climacomms_device = "CPU"
     end
     total_ranks = num_nodes * ranks_per_node
 
@@ -39,20 +37,13 @@ function make_job_script(
     # the home directory instead of the submission directory, unlike Slurm
     pbs_script = """
     #!/bin/bash
+    $(generate_directives(hpc_config))
     #PBS -N $job_name
-    #PBS -j oe
-    #PBS -A UCIT0011
-    #PBS -q $queue
     #PBS -o $output
-    #PBS -l job_priority=$job_priority
-    #PBS -l walltime=$walltime
-    #PBS -l select=$num_nodes:ncpus=$cpus_per_node:ngpus=$gpus_per_node:mpiprocs=$ranks_per_node
 
     $(module_load_string(backend))
 
-    export JULIA_MPI_HAS_CUDA=true
-    export CLIMACOMMS_DEVICE="$climacomms_device"
-    export CLIMACOMMS_CONTEXT="MPI"
+    $(generate_env_vars(hpc_config))
 
     cd \$PBS_O_WORKDIR
     \$MPITRAMPOLINE_MPIEXEC -n $total_ranks -ppn $ranks_per_node $set_gpu_rank $job_body
@@ -198,32 +189,9 @@ function cancel_job(::DerechoBackend, job::JobInfo)
     end
 end
 
-function module_load_string(::DerechoBackend)
+function module_load_string(backend::DerechoBackend)
+    module_loads = generate_modules(backend.hpc_config)
     return """export MODULEPATH="/glade/campaign/univ/ucit0011/ClimaModules-Derecho:\$MODULEPATH"
     module purge
-    module load climacommon"""
+    $module_loads"""
 end
-
-"""
-    format_pbs_time(minutes::Int)
-
-Format `minutes` into a string (HH:MM:SS) accecpted by PBS.
-"""
-function format_pbs_time(minutes::Int)
-    hours, remaining_minutes = divrem(minutes, 60)
-    return string(
-        lpad(hours, 2, '0'),
-        ":",
-        lpad(remaining_minutes, 2, '0'),
-        ":00",
-    )
-end
-
-"""
-    format_pbs_time(str::AbstractString)
-
-Return `str`.
-
-This function does not validate whether `str` is correct or not.
-"""
-format_pbs_time(str::AbstractString) = str
