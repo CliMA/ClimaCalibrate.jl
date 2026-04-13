@@ -88,7 +88,9 @@ function submit_job(backend::DerechoBackend, job_script::String)
         clean_env["PYTHONNOUSERSITE"] = "1"
 
         try
-            cmd = `qsub $pbs_filepath`
+            # Pass all environment variables from the submitting process
+            # to the job using -V
+            cmd = `qsub -V $pbs_filepath`
             # readchomp return a substring
             job_id = String(readchomp(setenv(cmd, clean_env)))
             # Parse job ID, handling potential format issues
