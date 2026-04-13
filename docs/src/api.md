@@ -9,52 +9,57 @@ ClimaCalibrate.analyze_iteration
 ClimaCalibrate.postprocess_g_ensemble
 ```
 
-## Worker Interface
+## Calibration Interface
+
 ```@docs
-ClimaCalibrate.add_workers
-ClimaCalibrate.WorkerBackend
-ClimaCalibrate.SlurmManager
-ClimaCalibrate.PBSManager
-ClimaCalibrate.set_worker_loggers
-ClimaCalibrate.map_remotecall_fetch
-ClimaCalibrate.foreach_remotecall_wait
+ClimaCalibrate.calibrate
 ```
 
 ## Backend Interface
 
 ```@docs
-ClimaCalibrate.calibrate
 ClimaCalibrate.JuliaBackend
 ClimaCalibrate.HPCBackend
 ClimaCalibrate.DerechoBackend
 ClimaCalibrate.CaltechHPCBackend
 ClimaCalibrate.ClimaGPUBackend
 ClimaCalibrate.GCPBackend
+ClimaCalibrate.WorkerBackend
 ClimaCalibrate.get_backend
-ClimaCalibrate.model_run
-ClimaCalibrate.module_load_string
 ```
 
-## Job Scheduler
+## Worker Interface
 ```@docs
-ClimaCalibrate.wait_for_jobs
-ClimaCalibrate.log_member_error
-ClimaCalibrate.kill_job
+ClimaCalibrate.SlurmManager
+ClimaCalibrate.PBSManager
+ClimaCalibrate.add_workers
+ClimaCalibrate.set_worker_logger
+ClimaCalibrate.set_worker_loggers
+ClimaCalibrate.map_remotecall_fetch
+ClimaCalibrate.foreach_remotecall_wait
+```
+
+## Cluster Management Interface
+
+```@docs
+ClimaCalibrate.JobInfo
 ClimaCalibrate.job_status
-ClimaCalibrate.kwargs
-ClimaCalibrate.slurm_model_run
-ClimaCalibrate.generate_sbatch_script
-ClimaCalibrate.generate_sbatch_directives
-ClimaCalibrate.submit_slurm_job
-ClimaCalibrate.pbs_model_run
-ClimaCalibrate.generate_pbs_script
-ClimaCalibrate.submit_pbs_job
+ClimaCalibrate.ispending
+ClimaCalibrate.isrunning
+ClimaCalibrate.issuccess
+ClimaCalibrate.isfailed
+ClimaCalibrate.iscompleted
+ClimaCalibrate.submit_job
+ClimaCalibrate.requeue_job
+ClimaCalibrate.cancel_job
+ClimaCalibrate.make_job_script
 ```
 
 ## EnsembleKalmanProcesses Interface
 
 ```@docs
 ClimaCalibrate.initialize
+ClimaCalibrate.last_completed_iteration
 ClimaCalibrate.save_G_ensemble
 ClimaCalibrate.update_ensemble
 ClimaCalibrate.update_ensemble!
@@ -65,9 +70,19 @@ ClimaCalibrate.path_to_iteration
 ClimaCalibrate.path_to_ensemble_member
 ClimaCalibrate.path_to_model_log
 ClimaCalibrate.parameter_path
-ClimaCalibrate.minibatcher_over_samples
-ClimaCalibrate.observation_series_from_samples
+ClimaCalibrate.checkpoint_path
 ClimaCalibrate.load_latest_ekp
+ClimaCalibrate.save_eki_and_parameters
+```
+
+## EKP Utilities
+
+```@docs
+ClimaCalibrate.EKPUtils.minibatcher_over_samples
+ClimaCalibrate.EKPUtils.observation_series_from_samples
+ClimaCalibrate.EKPUtils.get_observations_for_nth_iteration
+ClimaCalibrate.EKPUtils.get_metadata_for_nth_iteration
+ClimaCalibrate.EKPUtils.g_ens_matrix
 ```
 
 ## Observation Recipe Interface
@@ -84,8 +99,6 @@ ClimaCalibrate.ObservationRecipe.QuantileRegularization
 ClimaCalibrate.ObservationRecipe.covariance
 ClimaCalibrate.ObservationRecipe.observation
 ClimaCalibrate.ObservationRecipe.short_names
-ClimaCalibrate.ObservationRecipe.get_observations_for_nth_iteration
-ClimaCalibrate.ObservationRecipe.get_metadata_for_nth_iteration
 ClimaCalibrate.ObservationRecipe.reconstruct_g_mean_final
 ClimaCalibrate.ObservationRecipe.reconstruct_diag_cov
 ClimaCalibrate.ObservationRecipe.reconstruct_vars

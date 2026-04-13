@@ -1,3 +1,4 @@
+import ClimaCalibrate
 import ClimaCalibrate.ObservationRecipe
 import ClimaCalibrate.ObservationRecipe: AbstractCovarianceEstimator
 import ClimaCalibrate.ObservationRecipe:
@@ -678,32 +679,6 @@ function _lat_weights_var(var::OutputVar; min_cosd_lat = 0.1)
 end
 
 """
-    get_metadata_for_nth_iteration(obs_series, N)
-
-For the `N`th iteration, get the metadata of the observation(s) being processed.
-"""
-function ObservationRecipe.get_metadata_for_nth_iteration(obs_series, N)
-    minibatch_obs =
-        ObservationRecipe.get_observations_for_nth_iteration(obs_series, N)
-    metadata_vec = map(obs -> EKP.get_metadata(obs), minibatch_obs)
-    return vcat(metadata_vec...)
-end
-
-"""
-    get_observations_for_nth_iteration(obs_series, N)
-
-For the `N`th iteration, get the observation(s) being processed.
-"""
-function ObservationRecipe.get_observations_for_nth_iteration(obs_series, N)
-    num_epoches = EKP.get_length_epoch(obs_series)
-    # EKP.get_minibatch fails with N > num_epoches, so we use mod1 to go back to
-    # the first epoch which seems consistent with what EKP does
-    minibatch_indices = EKP.get_minibatch(obs_series, mod1(N, num_epoches))
-    minibatch_obs = EKP.get_observations(obs_series)[minibatch_indices]
-    return minibatch_obs
-end
-
-"""
     reconstruct_g_mean_final(ekp::EKP.EnsembleKalmanProcess)
 
 Reconstruct the mean forward model evaluation at the last iteration as a
@@ -713,7 +688,7 @@ function ObservationRecipe.reconstruct_g_mean_final(
     ekp::EKP.EnsembleKalmanProcess,
 )
     obs_series = EKP.get_observation_series(ekp)
-    metadatas = ObservationRecipe.get_metadata_for_nth_iteration(
+    metadatas = ClimaCalibrate.get_metadata_for_nth_iteration(
         obs_series,
         EKP.get_N_iterations(ekp),
     )
@@ -800,8 +775,7 @@ multiple `OutputVar`s are flattened and concatenated together as a single
 vector.
 """
 function _get_minibatch_indices_for_nth_iteration(obs_series, N)
-    all_metadata =
-        ObservationRecipe.get_metadata_for_nth_iteration(obs_series, N)
+    all_metadata = ClimaCalibrate.get_metadata_for_nth_iteration(obs_series, N)
     minibatch_indices = _get_indices_of_metadata(all_metadata)
     return minibatch_indices
 end

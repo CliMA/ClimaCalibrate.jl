@@ -156,7 +156,7 @@ Set these environment variables in your submission script:
 ### Common Issues
 
 1. **Worker Timeout**: Increase `ENV["JULIA_WORKER_TIMEOUT"]` in your Julia session if workers are timing out
-2. **Memory Issues**: Monitor memory usage and adjust `--mem` or `-l mem` accordingly. 
+2. **Memory Issues**: Monitor memory usage and adjust `--mem` or `-l mem` accordingly.
 3. **GPU Allocation**: Ensure `--gpus-per-task` or `-l select` is set correctly
 4. **Module Conflicts**: Use `module purge` and ensure your MODULEPATH is set before loading required modules
 

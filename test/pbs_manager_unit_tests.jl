@@ -1,8 +1,9 @@
-using Test, ClimaCalibrate, Distributed, Logging
+using Test, Distributed, Logging
+import ClimaCalibrate
 
 @testset "PBSManager Unit Tests" begin
-    @test ClimaCalibrate.get_manager() == PBSManager(1)
-    p = add_workers(1; time = 5, device = :cpu)
+    @test ClimaCalibrate.get_manager() == ClimaCalibrate.PBSManager(1)
+    p = ClimaCalibrate.add_workers(1; time = 5, device = :cpu)
     @test nprocs() == length(p) + 1
     @test workers() == p
     @test remotecall_fetch(myid, 2) == 2
@@ -21,7 +22,7 @@ end
 @testset "PBSManager - multiple processes" begin
     out_file = "pbs_unit_test.out"
     p = addprocs(
-        PBSManager(2),
+        ClimaCalibrate.PBSManager(2),
         o = out_file,
         q = "main",
         A = "UCIT0011",
@@ -37,7 +38,7 @@ end
     p = workers()
     @test ClimaCalibrate.map_remotecall_fetch(myid) == p
 
-    # single argument 
+    # Single argument
     x = rand(5)
     @test ClimaCalibrate.map_remotecall_fetch(identity, x) == fill(x, length(p))
 

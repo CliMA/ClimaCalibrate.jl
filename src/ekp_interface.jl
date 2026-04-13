@@ -6,9 +6,24 @@ import EnsembleKalmanProcesses as EKP
 import EnsembleKalmanProcesses.ParameterDistributions as PD
 import EnsembleKalmanProcesses.TOMLInterface as TI
 
-export get_prior, initialize, update_ensemble, save_G_ensemble
-export path_to_ensemble_member,
-    path_to_model_log, path_to_iteration, parameter_path, load_latest_ekp
+export initialize,
+    last_completed_iteration,
+    save_G_ensemble,
+    update_ensemble,
+    update_ensemble!,
+    observation_map_and_update!,
+    get_prior,
+    get_param_dict,
+    path_to_iteration,
+    path_to_ensemble_member,
+    path_to_model_log,
+    parameter_path,
+    checkpoint_path,
+    load_latest_ekp,
+    save_eki_and_parameters,
+    model_started,
+    model_completed,
+    write_model_completed
 
 """
     load_ekp_struct(output_dir, iteration)
@@ -228,13 +243,24 @@ end
 Compute the observation map and update the given EKP object.
 """
 function observation_map_and_update!(ekp, output_dir, iteration, prior)
-    g_ensemble = observation_map(iteration)
-    g_ensemble =
-        postprocess_g_ensemble(ekp, g_ensemble, prior, output_dir, iteration)
+    g_ensemble = ClimaCalibrate.observation_map(iteration)
+    g_ensemble = ClimaCalibrate.postprocess_g_ensemble(
+        ekp,
+        g_ensemble,
+        prior,
+        output_dir,
+        iteration,
+    )
     save_G_ensemble(output_dir, iteration, g_ensemble)
     terminate = update_ensemble!(ekp, g_ensemble, output_dir, iteration, prior)
     try
-        analyze_iteration(ekp, g_ensemble, prior, output_dir, iteration)
+        ClimaCalibrate.analyze_iteration(
+            ekp,
+            g_ensemble,
+            prior,
+            output_dir,
+            iteration,
+        )
     catch ret_code
         @error "`analyze_iteration` crashed. See stacktrace" exception =
             (ret_code, catch_backtrace())
@@ -256,77 +282,4 @@ function last_completed_iteration(output_dir)
         last_completed_iter += 1
     end
     return last_completed_iter
-end
-
-_fixed_minibatcher_indices(n_batches, batch_size) =
-    [collect(((i - 1) * batch_size + 1):(i * batch_size)) for i in 1:n_batches]
-"""
-    minibatcher_over_samples(n_samples, batch_size)
-
-Create a `FixedMinibatcher` that divides `n_samples` into batches of size `batch_size`.
-
-If `n_samples` is not divisible by `batch_size`, the remaining samples will be dropped.
-"""
-function minibatcher_over_samples(n_samples::Int, batch_size::Int)
-    n_samples <= 0 &&
-        throw(ArgumentError("Number of samples ($n_samples) must be positive"))
-    batch_size <= 0 &&
-        throw(ArgumentError("Batch size ($batch_size) must be positive"))
-    n_batches = div(n_samples, batch_size)
-    remainder = n_samples % batch_size
-    if remainder > 0
-        @warn "Number of samples $n_samples not divisible by batch size $batch_size. The last $(remainder) samples will be dropped."
-    end
-    given_batches = _fixed_minibatcher_indices(n_batches, batch_size)
-    return EKP.FixedMinibatcher(given_batches)
-end
-
-"""
-    minibatcher_over_samples(samples, batch_size)
-
-Create a `FixedMinibatcher` that divides a vector of samples into batches of size `batch_size`.
-
-If the number of samples is not divisible by `batch_size`, the remaining samples will be dropped.
-"""
-function minibatcher_over_samples(samples::Vector, batch_size::Int)
-    return minibatcher_over_samples(length(samples), batch_size)
-end
-
-"""
-    observation_series_from_samples(samples, batch_size, names = nothing)
-
-Create an `EKP.ObservationSeries` from a vector of `EKP.Observation` samples.
-
-If the number of samples is not divisible by `batch_size`, the remaining samples will be dropped.
-"""
-function observation_series_from_samples(
-    samples::Vector{<:EKP.Observation},
-    batch_size,
-    names = nothing,
-)
-    if !isnothing(names) && length(names) != length(samples)
-        throw(
-            ArgumentError(
-                "Number of names ($(length(names))) must match number of samples ($(length(samples)))",
-            ),
-        )
-    end
-    minibatcher = minibatcher_over_samples(samples, batch_size)
-    names = isnothing(names) ? string.(1:length(samples)) : names
-    return EKP.ObservationSeries(samples, minibatcher, names)
-end
-
-"""
-    g_ens_matrix(eki::EKP.EnsembleKalmanProcess{FT}) where {FT <: AbstractFloat}
-
-Construct an uninitialized G ensemble matrix of type `FT` for the current
-iteration.
-"""
-function g_ens_matrix(
-    eki::EKP.EnsembleKalmanProcess{FT},
-) where {FT <: AbstractFloat}
-    obs = EKP.get_obs(eki)
-    single_obs_len = sum(length(obs))
-    ensemble_size = EKP.get_N_ens(eki)
-    return Array{FT}(undef, single_obs_len, ensemble_size)
 end

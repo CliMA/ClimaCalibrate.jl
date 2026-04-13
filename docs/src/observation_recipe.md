@@ -101,8 +101,8 @@ ClimaCalibrate.ObservationRecipe.observation), metadata is extracted from the
 `OutputVar`s and attached to the observation. The metadata for each observation
 can be accessed with `EKP.get_metadata(obs::EKP.Observation)` and the metadata
 for each iteration can be accessed with
-[`ObservationRecipe.get_metadata_for_nth_iteration`](@ref
-ClimaCalibrate.ObservationRecipe.get_metadata_for_nth_iteration). The metadata
+[`ClimaCalibrate.get_metadata_for_nth_iteration`](@ref
+ClimaCalibrate.get_metadata_for_nth_iteration). The metadata
 can be used with `ClimaAnalysis.unflatten` to reconstruct the original
 `OutputVar` before flattening. See the ClimaAnalysis
 [documentation](https://clima.github.io/ClimaAnalysis.jl/dev/api/#FlatVar) about

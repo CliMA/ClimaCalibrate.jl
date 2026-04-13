@@ -9,8 +9,6 @@ export ScalarCovariance,
     short_names,
     seasonally_aligned_yearly_sample_date_ranges,
     change_data_type,
-    get_observations_for_nth_iteration,
-    get_metadata_for_nth_iteration,
     reconstruct_g_mean_final,
     reconstruct_diag_cov,
     reconstruct_vars
@@ -370,10 +368,6 @@ function reconstruct_g_mean_final end
 function reconstruct_diag_cov end
 
 function reconstruct_vars end
-
-function get_observations_for_nth_iteration end
-
-function get_metadata_for_nth_iteration end
 
 function _get_minibatch_indices_for_nth_iteration end
 

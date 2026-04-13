@@ -1,8 +1,17 @@
 using Distributed
 using Logging
 
+import ..ClimaCalibrate: project_dir
+
 export add_workers,
-    SlurmManager, PBSManager, default_worker_pool, set_worker_loggers
+    default_worker_pool,
+    set_worker_loggers,
+    set_worker_logger,
+    SlurmManager,
+    PBSManager,
+    get_manager,
+    map_remotecall_fetch,
+    foreach_remotecall_wait
 
 # Set the time limit for the Julia worker to be contacted by the main process, default = "60.0s"
 # https://docs.julialang.org/en/v1/manual/environment-variables/#JULIA_WORKER_TIMEOUT
@@ -10,58 +19,6 @@ worker_timeout() = "300.0"
 ENV["JULIA_WORKER_TIMEOUT"] = worker_timeout()
 
 default_worker_pool() = WorkerPool(workers())
-
-function run_worker_iteration(
-    iter,
-    ensemble_size,
-    output_dir;
-    worker_pool = default_worker_pool(),
-    failure_rate = DEFAULT_FAILURE_RATE,
-)
-    nfailures = 0
-
-    work_to_do = map(1:ensemble_size) do m
-        (w) -> begin
-            if model_completed(output_dir, iter, m)
-                @info "Skipping completed member $m (found checkpoint)"
-                return
-            elseif model_started(output_dir, iter, m)
-                @info "Resuming member $m on worker $w (incomplete run detected)"
-            else
-                @info "Running member $m on worker $w"
-            end
-            write_model_started(output_dir, iter, m)
-            remotecall_wait(forward_model, w, iter, m)
-            write_model_completed(output_dir, iter, m)
-        end
-    end
-    isempty(worker_pool.workers) && @info "No workers currently available"
-    @sync while !isempty(work_to_do)
-        if !isempty(worker_pool.workers)
-            worker = take!(worker_pool)
-            run_fwd_model = pop!(work_to_do)
-            @async try
-                run_fwd_model(worker)
-            catch e
-                @warn "Error running on worker $worker" exception = e
-                nfailures += 1
-            finally
-                push!(worker_pool, worker)
-            end
-        else
-            @debug "no workers available"
-            sleep(10) # Wait for workers to become available
-        end
-    end
-    iter_failure_rate = nfailures / ensemble_size
-    if iter_failure_rate > failure_rate
-        throw(
-            ErrorException(
-                "Execution halted: Iteration $iter had a $(round(iter_failure_rate * 100; digits=2))% failure rate, exceeding the maximum allowed threshold of $(failure_rate * 100)%.",
-            ),
-        )
-    end
-end
 
 worker_cookie() = begin
     Distributed.init_multi()
@@ -72,17 +29,19 @@ worker_cookie_arg() = `--worker=$(worker_cookie())`
 """
     SlurmManager(ntasks=get(ENV, "SLURM_NTASKS", 1))
 
-The ClusterManager for Slurm clusters, taking in the number of tasks to request with `srun`.
+The ClusterManager for Slurm clusters, taking in the number of tasks to request
+with `srun`.
 
-To execute the `srun` command, run `addprocs(SlurmManager(ntasks))`
+To execute the `srun` command, run `addprocs(SlurmManager(ntasks))`.
 
-Keyword arguments can be passed to `srun`: `addprocs(SlurmManager(ntasks), gpus_per_task=1)`
+Keyword arguments can be passed to `srun`: `addprocs(SlurmManager(ntasks),
+gpus_per_task=1)`.
 
 By default the workers will inherit the running Julia environment.
 
-To run a calibration, call `calibrate(WorkerBackend(), ...)`
+To run a calibration, call `calibrate(WorkerBackend(), ...)`.
 
-To run functions on a worker, call `remotecall(func, worker_id, args...)`
+To run functions on a worker, call `remotecall(func, worker_id, args...)`.
 """
 struct SlurmManager <: ClusterManager
     ntasks::Integer
@@ -104,7 +63,7 @@ function Distributed.manage(
     if op == :register
         Distributed.remotecall_eval(Main, id, :(using ClimaCalibrate, Logging))
         remotecall(id) do
-            ClimaCalibrate.set_worker_logger()
+            set_worker_logger()
         end
     end
 end
@@ -272,12 +231,15 @@ end
 """
     PBSManager(ntasks)
 
-The ClusterManager for PBS/Torque clusters, taking in the number of tasks to request with `qsub`.
+The ClusterManager for PBS/Torque clusters, taking in the number of tasks to
+request with `qsub`.
 
-To execute the `qsub` command, run `addprocs(PBSManager(ntasks))`. 
-Unlike the [`SlurmManager`](@ref), this will not nest scheduled jobs, but will acquire new resources.
+To execute the `qsub` command, run `addprocs(PBSManager(ntasks))`. Unlike the
+[`SlurmManager`](@ref), this will not nest scheduled jobs, but will acquire new
+resources.
 
-Keyword arguments can be passed to `qsub`: `addprocs(PBSManager(ntasks), nodes=2)`
+Keyword arguments can be passed to `qsub`: `addprocs(PBSManager(ntasks),
+nodes=2)`
 
 By default, the workers will inherit the running Julia environment.
 
@@ -300,7 +262,7 @@ function Distributed.manage(
         remotecall(cd, id, working_dir)
         Distributed.remotecall_eval(Main, id, :(using ClimaCalibrate, Logging))
         remotecall(id) do
-            ClimaCalibrate.set_worker_logger()
+            set_worker_logger()
         end
     end
 end
@@ -315,7 +277,6 @@ function Distributed.launch(
     exehome = params[:dir]
     exename = params[:exename]
     exeflags = params[:exeflags]
-    # TODO: figure out why the project is not being passed, this is not needed for SlurmManager
     exeflags = exeflags == `` ? `--project=$(project_dir())` : exeflags
     env = Dict{String, String}(params[:env])
     propagate_env_vars!(env)
@@ -347,8 +308,9 @@ end
 
 Parse params into string arguments for the worker launch command.
 
-Uses all keys that are not in `Distributed.default_addprocs_params()`.
-Keys that start with `l_` will be treated as `-l` arguments to `qsub`. For example, l_walltime = "00:10:00" is transformed into `-l walltime=00:10:00`.
+Uses all keys that are not in `Distributed.default_addprocs_params()`. Keys that
+start with `l_` will be treated as `-l` arguments to `qsub`. For example,
+l_walltime = "00:10:00" is transformed into `-l walltime=00:10:00`.
 """
 function parse_pbs_worker_params(params::Dict)
     stdkeys = keys(Distributed.default_addprocs_params())
@@ -441,7 +403,7 @@ function set_worker_loggers(workers = workers())
     return map_remotecall_fetch(workers) do worker
         @eval Main begin
             using ClimaCalibrate
-            ClimaCalibrate.set_worker_logger()
+            set_worker_logger()
         end
     end
 end
@@ -493,6 +455,10 @@ default_gpu_kwargs(::PBSManager) = (;
     backend_worker_kwargs(get_backend())...,
 )
 
+backend_worker_kwargs(::Type{DerechoBackend}) = (; q = "main", A = "UCIT0011")
+backend_worker_kwargs(::Type{GCPBackend}) = (; partition = "a3")
+backend_worker_kwargs(::Type{<:AbstractBackend}) = (;)
+
 function get_manager(cluster = :auto, nworkers = 1)
     if cluster == :slurm || (cluster == :auto && is_slurm_available())
         SlurmManager(nworkers)
@@ -514,17 +480,20 @@ end
         kwargs...
     )
 
-Add `nworkers` worker processes to the current Julia session, automatically detecting and configuring for the available computing environment.
+Add `nworkers` worker processes to the current Julia session, automatically
+detecting and configuring for the available computing environment.
 
 # Arguments
 - `nworkers::Int`: The number of worker processes to add.
-- `device::Symbol = :gpu`: The target compute device type, either `:gpu` (1 GPU, 4 CPU cores) or `:cpu` (1 CPU core).
+- `device::Symbol = :gpu`: The target compute device type, either `:gpu` (1 GPU,
+  4 CPU cores) or `:cpu` (1 CPU core).
 - `cluster::Symbol = :auto`: The cluster management system to use. Options:
   * `:auto`: Auto-detect available cluster environment (SLURM, PBS, or local)
   * `:slurm`: Force use of SLURM scheduler
   * `:pbs`: Force use of PBS scheduler
   * `:local`: Force use of local processing (standard `addprocs`)
-- `time::Int = DEFAULT_WALLTIME`: Walltime in minutes, will be formatted appropriately for the cluster system
+- `time::Int = DEFAULT_WALLTIME`: Walltime in minutes, will be formatted
+  appropriately for the cluster system
 - `kwargs`: Other kwargs can be passed directly through to `addprocs`.
 """
 function add_workers(
@@ -562,13 +531,17 @@ end
 """
     process_time_parameter(manager, time, kwargs)
 
-Process the time parameter and convert it to the appropriate format for the specific cluster manager.
-This function translates a simple `time = minutes` parameter into the appropriate format for each system.
+Process the time parameter and convert it to the appropriate format for the
+specific cluster manager. This function translates a simple `time = minutes`
+parameter into the appropriate format for each system.
 
 Priority rules:
-1. If system-specific time parameter exists in kwargs (e.g., `l_walltime` for PBS), use that directly
-2. If `time` parameter is provided, convert it to the appropriate system-specific format
-3. If neither is specified, defaults will be used from default_*_kwargs functions
+1. If system-specific time parameter exists in kwargs (e.g., `l_walltime` for
+   PBS), use that directly
+2. If `time` parameter is provided, convert it to the appropriate
+   system-specific format
+3. If neither is specified, defaults will be used from default_*_kwargs
+   functions
 """
 function process_time_parameter(::SlurmManager, time::Int, kwargs)
     # If time already exists in kwargs in Slurm format, use that (highest priority)

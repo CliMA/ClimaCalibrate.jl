@@ -1,4 +1,5 @@
 using Test
+import ClimaCalibrate
 import EnsembleKalmanProcesses: get_ϕ, get_g_mean_final
 import Statistics: var
 using Distributed
@@ -25,7 +26,7 @@ function compare_g_ensemble(eki1, eki2)
     end
 end
 
-experiment_dir = project_dir()
+experiment_dir = ClimaCalibrate.project_dir()
 include(joinpath(experiment_dir, "generate_data.jl"))
 
 @everywhere begin
@@ -42,7 +43,7 @@ include(joinpath(experiment_dir, "generate_data.jl"))
 end
 
 @everywhere begin
-    experiment_dir = project_dir()
+    experiment_dir = ClimaCalibrate.project_dir()
     include(joinpath(experiment_dir, "observation_map.jl"))
     ustar = JLD2.load_object(
         joinpath(experiment_dir, "data", "synthetic_ustar_array_noisy.jld2"),
