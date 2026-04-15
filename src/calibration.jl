@@ -1,7 +1,7 @@
 module Calibration
 
 import ClimaCalibrate
-import ..ClimaCalibrate: Backend
+import ..ClimaCalibrate: Backend, AbstractCalibrationContext
 import ClimaCalibrate.Backend: HPCBackend, WorkerBackend, JuliaBackend
 
 # Needed for interfacing with WorkerBackend
@@ -20,7 +20,8 @@ include("ekp_interface.jl")
         n_iterations,
         prior,
         output_dir,
-        model_interface;
+        model_interface,
+        ctx::AbstractCalibrationContext;
         experiment_dir = project_dir(),
         exeflags = "",
     )
@@ -35,6 +36,9 @@ forward model. The job begins by running
 `julia --project=\$experiment_dir -e 'include(\$model_interface)'` and running
 the forward model.
 
+The `ctx` is serialized to `output_dir/context.jld2` so that HPC job scripts
+can load it and pass it to `forward_model`.
+
 For more information about the `HPCBackend`, see [`HPCBackend`](@ref).
 """
 function calibrate(
@@ -43,7 +47,8 @@ function calibrate(
     n_iterations,
     prior,
     output_dir,
-    model_interface;
+    model_interface,
+    ctx::AbstractCalibrationContext;
     experiment_dir = project_dir(),
     exeflags = "",
 )
@@ -60,6 +65,9 @@ function calibrate(
     @assert isdir(experiment_dir) "Experiment directory does not exist: $experiment_dir"
     @assert isfile(model_interface) "Model interface file does not exist: $model_interface"
 
+    # Save context for HPC job scripts to load
+    JLD2.save_object(joinpath(output_dir, "context.jld2"), ctx)
+
     first_iter = last_completed_iteration(output_dir) + 1
     for iter in first_iter:n_iterations
         @info "Iteration $iter"
@@ -74,7 +82,8 @@ function calibrate(
         )
         @info "Completed iteration $iter, updating ensemble"
         ekp = load_ekp_struct(output_dir, iter)
-        terminate = observation_map_and_update!(ekp, output_dir, iter, prior)
+        terminate =
+            observation_map_and_update!(ekp, output_dir, iter, prior, ctx)
         !isnothing(terminate) && break
     end
     return ekp
@@ -166,10 +175,12 @@ function generate_job_script_for_ensemble_member(
     # This script is executed by each ensemble member
     job_body = """
     import ClimaCalibrate
+    import JLD2
     iteration = $iter; member = $member
     model_interface = "$model_interface"; include(model_interface)
     experiment_dir = "$experiment_dir"
-    ClimaCalibrate.forward_model(iteration, member)
+    ctx = JLD2.load_object(joinpath("$output_dir", "context.jld2"))
+    ClimaCalibrate.forward_model(ctx, iteration, member)
     ClimaCalibrate.write_model_completed("$output_dir", iteration, member)
     """
 
@@ -319,6 +330,7 @@ end
         n_iterations,
         prior,
         output_dir,
+        ctx::AbstractCalibrationContext,
     )
 
 Run a full calibration with `ekp` and `prior` for `n_iterations` on the given
@@ -332,6 +344,7 @@ function calibrate(
     n_iterations,
     prior,
     output_dir,
+    ctx::AbstractCalibrationContext,
 )
     output_dir = abspath(output_dir)
 
@@ -345,30 +358,37 @@ function calibrate(
     first_iter = last_completed_iteration(output_dir) + 1
     for iter in first_iter:n_iterations
         @info "Iteration $iter"
-        run_iteration(backend, iter, ensemble_size, output_dir)
+        run_iteration(backend, iter, ensemble_size, output_dir, ctx)
         @info "Completed iteration $iter, updating ensemble"
         ekp = load_ekp_struct(output_dir, iter)
-        terminate = observation_map_and_update!(ekp, output_dir, iter, prior)
+        terminate =
+            observation_map_and_update!(ekp, output_dir, iter, prior, ctx)
         !isnothing(terminate) && break
     end
     return ekp
 end
 
 """
-    run_iteration(backend::WorkerBackend, iter, ensemble_size, output_dir)
+    run_iteration(backend::WorkerBackend, iter, ensemble_size, output_dir, ctx)
 
 Run the `iter`th iteration.
 
 This function submits the work for a single ensemble member to each worker
 and waits for each worker to complete (succeed or fail).
 """
-function run_iteration(backend::WorkerBackend, iter, ensemble_size, output_dir)
+function run_iteration(
+    backend::WorkerBackend,
+    iter,
+    ensemble_size,
+    output_dir,
+    ctx,
+)
     isempty(backend.worker_pool.workers) &&
         @info "No workers currently available"
 
     # For each ensemble member, generate the work that the workers will do
     work_to_do = map(1:ensemble_size) do member
-        prepare_work_for_ensemble_member(iter, member, output_dir)
+        prepare_work_for_ensemble_member(iter, member, output_dir, ctx)
     end
 
     (; worker_pool) = backend
@@ -408,11 +428,11 @@ function run_iteration(backend::WorkerBackend, iter, ensemble_size, output_dir)
 end
 
 """
-    prepare_work_for_ensemble_member(iter, member, output_dir)
+    prepare_work_for_ensemble_member(iter, member, output_dir, ctx)
 
 Return a function that takes in a worker and run the forward model if needed.
 """
-function prepare_work_for_ensemble_member(iter, member, output_dir)
+function prepare_work_for_ensemble_member(iter, member, output_dir, ctx)
     return (worker) -> begin
         if model_completed(output_dir, iter, member)
             @info "Skipping completed member $member (found checkpoint)"
@@ -426,6 +446,7 @@ function prepare_work_for_ensemble_member(iter, member, output_dir)
         Distributed.remotecall_wait(
             ClimaCalibrate.forward_model,
             worker,
+            ctx,
             iter,
             member,
         )
@@ -440,6 +461,7 @@ end
         n_iterations,
         prior,
         output_dir,
+        ctx::AbstractCalibrationContext,
     )
 
 Run a full calibration with `ekp` and `prior` for `n_iterations` on the given
@@ -455,6 +477,7 @@ function calibrate(
     n_iterations,
     prior,
     output_dir,
+    ctx::AbstractCalibrationContext,
 )
     output_dir = abspath(output_dir)
 
@@ -468,22 +491,23 @@ function calibrate(
     first_iter = last_completed_iteration(output_dir) + 1
     for iter in first_iter:n_iterations
         @info "Iteration $iter"
-        run_iteration(backend, iter, ensemble_size, output_dir)
+        run_iteration(backend, iter, ensemble_size, output_dir, ctx)
         @info "Completed iteration $iter, updating ensemble"
         ekp = load_ekp_struct(output_dir, iter)
-        terminate = observation_map_and_update!(ekp, output_dir, iter, prior)
+        terminate =
+            observation_map_and_update!(ekp, output_dir, iter, prior, ctx)
         !isnothing(terminate) && break
     end
     return ekp
 end
 
 """
-    run_iteration(backend::JuliaBackend, iter, ensemble_size, output_dir)
+    run_iteration(backend::JuliaBackend, iter, ensemble_size, output_dir, ctx)
 
 Run the `iter`th iteration by completing the work of all the ensemble members
 sequentially.
 """
-function run_iteration(::JuliaBackend, iter, ensemble_size, output_dir)
+function run_iteration(::JuliaBackend, iter, ensemble_size, output_dir, ctx)
     on_error(e::InterruptException) = rethrow(e)
     on_error(e) =
         @error "Single ensemble member has errored. See stacktrace" exception =
@@ -492,7 +516,7 @@ function run_iteration(::JuliaBackend, iter, ensemble_size, output_dir)
     failures = 0
     foreach(1:ensemble_size) do m
         try
-            ClimaCalibrate.forward_model(iter, m)
+            ClimaCalibrate.forward_model(ctx, iter, m)
             @info "Completed member $m"
         catch e
             failures += 1

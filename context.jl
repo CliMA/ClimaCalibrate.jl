@@ -39,4 +39,9 @@ OwnCalibrationContext(iteration, member, output_dir, args)
 forward_model(context::AbstractCalibrationContext)
 observation_map(context)
 analyze_iteration(ekp, g_ensemble, context::AbstractCalibrationContext)
-postprocess_g_ensemble(ekp, g_ensemble, prior, context::AbstractCalibrationContext)
+postprocess_g_ensemble(
+    ekp,
+    g_ensemble,
+    prior,
+    context::AbstractCalibrationContext,
+)

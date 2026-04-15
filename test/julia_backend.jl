@@ -18,10 +18,12 @@ observations = [20.0]
 noise = [0.01;;]
 output_dir = mktempdir()
 
+struct DummyContext <: CAL.AbstractCalibrationContext end
+
 # Model interface
 # This "model" just samples parameters and returns them, we are checking that
 # the results are reproducible
-function CAL.forward_model(iteration, member)
+function CAL.forward_model(::DummyContext, iteration, member)
     member_path = CAL.path_to_ensemble_member(output_dir, iteration, member)
     param_path = CAL.parameter_path(output_dir, iteration, member)
     toml_dict = CP.create_toml_dict(Float64; override_file = param_path)
@@ -29,7 +31,7 @@ function CAL.forward_model(iteration, member)
     JLD2.save_object(joinpath(member_path, output_file), test_param)
 end
 
-function CAL.observation_map(iteration)
+function CAL.observation_map(::DummyContext, iteration)
     dims = 1
     G_ensemble = Array{Float64}(undef, dims..., ensemble_size)
     for m in 1:ensemble_size
@@ -41,7 +43,7 @@ function CAL.observation_map(iteration)
     return G_ensemble
 end
 
-function CAL.analyze_iteration(ekp, g_ensemble, prior, output_dir, iteration)
+function CAL.analyze_iteration(::DummyContext, ekp, g_ensemble, prior, output_dir, iteration)
     @info "Analyzing iteration"
     @info "Iteration $iteration"
     @info "Current mean constrained parameter: $(EKP.get_ϕ_mean_final(prior, ekp))"
@@ -64,6 +66,7 @@ ekp = CAL.Calibration.calibrate(
     n_iterations,
     prior,
     output_dir,
+    DummyContext(),
 )
 
 @testset "Test end-to-end calibration" begin
