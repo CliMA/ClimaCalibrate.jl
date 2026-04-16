@@ -89,7 +89,11 @@ function EnsembleBuilder.GEnsembleBuilder(
     completed = falses(length(metadatas), EKP.get_N_ens(ekp))
 
     short_name_to_metadata_map = Dict{String, Vector{MetadataInfo}}()
-    minibatch_indices = _get_minibatch_indices_for_nth_iteration(obs_series, N)
+    minibatch_indices =
+        ObservationRecipe._get_minibatch_indices_for_nth_iteration(
+            obs_series,
+            N,
+        )
 
     # Assume G_ens and minibatch_indices are one-indexed
     @assert first(size(G_ens)) == last(last(minibatch_indices))
