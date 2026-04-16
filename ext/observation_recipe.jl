@@ -705,10 +705,11 @@ function ObservationRecipe.reconstruct_g_mean_final(
     )
 
     # Reconstruct each OutputVar from the metadata
-    minibatch_indices = _get_minibatch_indices_for_nth_iteration(
-        obs_series,
-        EKP.get_N_iterations(ekp),
-    )
+    minibatch_indices =
+        ObservationRecipe._get_minibatch_indices_for_nth_iteration(
+            obs_series,
+            EKP.get_N_iterations(ekp),
+        )
     vars = map(metadatas, minibatch_indices) do metadata, range
         ClimaAnalysis.unflatten(metadata, g_mean[range])
     end
@@ -774,7 +775,10 @@ Note that the `indices` field in the `EKP.observation` cannot be used as the
 multiple `OutputVar`s are flattened and concatenated together as a single
 vector.
 """
-function _get_minibatch_indices_for_nth_iteration(obs_series, N)
+function ObservationRecipe._get_minibatch_indices_for_nth_iteration(
+    obs_series,
+    N,
+)
     all_metadata = ClimaCalibrate.get_metadata_for_nth_iteration(obs_series, N)
     minibatch_indices = _get_indices_of_metadata(all_metadata)
     return minibatch_indices

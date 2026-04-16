@@ -1465,11 +1465,20 @@ end
     metadata2 = ClimaCalibrate.get_metadata_for_nth_iteration(obs_series, 2)
     metadata3 = ClimaCalibrate.get_metadata_for_nth_iteration(obs_series, 3)
     metadata_indices1 =
-        ext._get_minibatch_indices_for_nth_iteration(obs_series, 1)
+        ObservationRecipe._get_minibatch_indices_for_nth_iteration(
+            obs_series,
+            1,
+        )
     metadata_indices2 =
-        ext._get_minibatch_indices_for_nth_iteration(obs_series, 2)
+        ObservationRecipe._get_minibatch_indices_for_nth_iteration(
+            obs_series,
+            2,
+        )
     metadata_indices3 =
-        ext._get_minibatch_indices_for_nth_iteration(obs_series, 3)
+        ObservationRecipe._get_minibatch_indices_for_nth_iteration(
+            obs_series,
+            3,
+        )
     obs1 = ClimaCalibrate.get_observations_for_nth_iteration(obs_series, 1)
     obs2 = ClimaCalibrate.get_observations_for_nth_iteration(obs_series, 2)
     obs3 = ClimaCalibrate.get_observations_for_nth_iteration(obs_series, 3)
