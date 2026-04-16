@@ -160,7 +160,7 @@ considered to be the ground truth, which is used to assess the model ensembles'
 performance when parameters are drawn from the prior parameter distributions. 
 
 It is a perfect-model calibration, using its own output as observational data. 
-By default, it runs 20 ensemble members for 6 iterations. 
+By default, it runs 20 ensemble members for 8 iterations. 
 This example can be run on the most common backend, the WorkerBackend, with the following script:
 
 ```julia
@@ -186,7 +186,8 @@ convergence_plot(
     prior,
     theta_star_vec,
     ["coefficient_a_m_businger", "coefficient_a_h_businger"],
+    output_dir,
 )
 
-g_vs_iter_plot(eki)
+g_vs_iter_plot(eki, output_dir)
 ```
