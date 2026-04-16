@@ -154,6 +154,7 @@ convergence_plot(
     prior,
     theta_star_vec,
     ["coefficient_a_m_businger", "coefficient_a_h_businger"],
+    output_dir,
 )
 
-g_vs_iter_plot(eki)
+g_vs_iter_plot(eki, output_dir)
