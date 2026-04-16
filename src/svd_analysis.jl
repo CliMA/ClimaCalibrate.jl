@@ -185,7 +185,8 @@ Requires ClimaAnalysis to be loaded.
 """
 function analyze_residual(ekp, iter; n_eigenvectors = 3)
     obs_series = EKP.get_observation_series(ekp)
-    obs_noise_cov = EKP.get_obs_noise_cov(obs_series; build = false)
+    N_iters = EKP.get_N_iterations(ekp)
+    obs_noise_cov = EKP.get_obs_noise_cov(obs_series, N_iters; build = false)
     linear_map = _create_compact_linear_map(obs_noise_cov)
     result, _ = partialschur(linear_map; nev = n_eigenvectors)
     eigvalues, eigvectors = partialeigen(result)
@@ -199,8 +200,7 @@ function analyze_residual(ekp, iter; n_eigenvectors = 3)
     mean_g = dropdims(mean(g[:, succ_ens], dims = 2), dims = 2)
     diff = EKP.get_obs(ekp, iter) - mean_g
 
-    metadata =
-        ObservationRecipe.get_metadata_for_nth_iteration(obs_series, iter)
+    metadata = EKPUtils.get_metadata_for_nth_iteration(obs_series, iter)
     ranges = ObservationRecipe._get_minibatch_indices_for_nth_iteration(
         obs_series,
         iter,
