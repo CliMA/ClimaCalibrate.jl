@@ -4,29 +4,24 @@
 Abstract supertype for user-defined calibration experiments.
 
 Users subtype this to define their experiment-specific configuration and
-dispatch the calibration interface functions. This solves two problems:
-
-1. **No type piracy**: dispatching on a user-owned subtype avoids overriding
-   unowned method signatures like `forward_model(::Int, ::Int)`.
-2. **Clean separation of concerns**: the context holds experiment configuration
-   (things fixed for the entire calibration), while changing state like
-   `iteration`, `member`, and `ekp` are passed as function arguments.
+dispatch the calibration interface functions.
 
 # Required interface
 
 Subtypes must implement:
-- `forward_model(ctx, iteration, member)` — run the forward model for one
-  ensemble member.
-- `observation_map(ctx, iteration)` — map model output to observation space,
-  returning a `G_ensemble` matrix.
+- `forward_model(ctx, iteration, member)` which runs the forward model for a
+  single ensemble member.
+- `observation_map(ctx, iteration)` which processes model output and,
+  returns a `G_ensemble` matrix.
 
 # Optional interface (have defaults)
 
 - `analyze_iteration(ctx, ekp, g_ensemble, prior, iteration)` — inspect
-  results after each ensemble update. Default: logs mean parameters and error.
+  results after each ensemble update. The default implementation logs the mean
+  constrained parameters and covariance-weighted error.
 - `postprocess_g_ensemble(ctx, ekp, g_ensemble, prior, iteration)` — transform
-  `g_ensemble` before the ensemble update. Default: identity (returns
-  `g_ensemble` unchanged).
+  `g_ensemble` before the ensemble update. The default implementation returns
+  `g_ensemble`.
 
 # Example
 
@@ -48,3 +43,5 @@ abstract type AbstractCalibrationContext end
 
 # Notes
 # ctx would be static across all iterations and members
+# A better name for this struct could be AbstractModelInterface since that is
+# what it is

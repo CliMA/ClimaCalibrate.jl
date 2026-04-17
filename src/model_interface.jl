@@ -38,7 +38,7 @@ For example, one may want to print information from the `eki` object or plot
 `g_ensemble`.
 """
 function analyze_iteration(
-    ctx::AbstractCalibrationContext,
+    ::AbstractCalibrationContext,
     ekp,
     g_ensemble,
     prior,
@@ -56,8 +56,8 @@ end
 Postprocess `g_ensemble` after evaluating the observation map and before
 updating the ensemble.
 """
-function postprocess_g_ensemble(
-    ctx::AbstractCalibrationContext,
+function postprocess_g_ensemble( # TODO: Can this be removed since it is not used right now
+    ::AbstractCalibrationContext,
     ekp,
     g_ensemble,
     prior,
