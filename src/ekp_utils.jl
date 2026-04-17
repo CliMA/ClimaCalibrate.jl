@@ -85,8 +85,8 @@ end
 """
     get_metadata_for_nth_iteration(obs_series::EKP.ObservationSeries, N)
 
-For the `N`th iteration, return a vector of the the metadata of the
-observation(s) being processed.
+For the `N`th iteration, return a vector of the metadata of the observation(s)
+being processed.
 """
 function get_metadata_for_nth_iteration(obs_series::EKP.ObservationSeries, N)
     minibatch_obs = get_observations_for_nth_iteration(obs_series, N)
@@ -103,10 +103,10 @@ function get_observations_for_nth_iteration(
     obs_series::EKP.ObservationSeries,
     N,
 )
-    num_epoches = EKP.get_length_epoch(obs_series)
-    # EKP.get_minibatch fails with N > num_epoches, so we use mod1 to go back to
+    num_epochs = EKP.get_length_epoch(obs_series)
+    # EKP.get_minibatch fails with N > num_epochs, so we use mod1 to go back to
     # the first epoch which seems consistent with what EKP does
-    minibatch_indices = EKP.get_minibatch(obs_series, mod1(N, num_epoches))
+    minibatch_indices = EKP.get_minibatch(obs_series, mod1(N, num_epochs))
     minibatch_obs = EKP.get_observations(obs_series)[minibatch_indices]
     return minibatch_obs
 end
