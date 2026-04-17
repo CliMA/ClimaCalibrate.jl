@@ -16,12 +16,15 @@ function make_job_script(
     job_name = "slurm_job",
     output = "output.txt",
 )
+    (; hpc_config) = backend
+    (; directives, env_vars) = hpc_config
+    slurm_directives = _generate_sbatch_directives(directives)
     module_load_str = module_load_string(backend)
-    (; hpc_kwargs) = backend
-    slurm_directives = _generate_sbatch_directives(hpc_kwargs)
-    ntasks = get(hpc_kwargs, :ntasks, 1)
-    gpus_per_task = get(hpc_kwargs, :gpus_per_task, 0)
-    climacomms_device = gpus_per_task > 0 ? "CUDA" : "CPU"
+    # TODO: Double check if this is right? I think this is fine since the keys
+    # will be strings anyway
+    env_var_str = join(("export $k=\"$v\"" for (k, v) in env_vars), "\n")
+    ntasks_idx = findfirst(p -> first(p) == :ntasks, directives)
+    ntasks = isnothing(ntasks_idx) ? 1 : last(directives[ntasks_idx])
     mpiexec_string = _generate_mpiexec_string(backend, ntasks, output)
 
     slurm_script = """
@@ -31,8 +34,7 @@ function make_job_script(
     $slurm_directives
 
     $module_load_str
-    export CLIMACOMMS_DEVICE="$climacomms_device"
-    export CLIMACOMMS_CONTEXT="MPI"
+    $env_var_str
 
     $mpiexec_string $job_body
     exit 0
@@ -164,11 +166,10 @@ end
 
 Generate Slurm sbatch directives from HPC kwargs.
 """
-function _generate_sbatch_directives(hpc_kwargs)
-    @assert haskey(hpc_kwargs, :time) "Slurm kwargs must include key :time"
-
-    hpc_kwargs[:time] = format_slurm_time(hpc_kwargs[:time])
-    slurm_directives = map(collect(hpc_kwargs)) do (k, v)
+function _generate_sbatch_directives(directives)
+    # TODO: Check if key is a single character since it will always be a single
+    # dash
+    slurm_directives = map(directives) do (k, v)
         "#SBATCH --$(replace(string(k), "_" => "-"))=$(replace(string(v), "_" => "-"))"
     end
     return join(slurm_directives, "\n")
@@ -222,25 +223,30 @@ This function does not validate whether `str` is correct or not.
 """
 format_slurm_time(str::AbstractString) = str
 
-
 """
     module_load_string(backend::HPCBackend)
 
 Return a string that loads the correct modules for a given backend when executed
 via bash.
 """
-function module_load_string(::CaltechHPCBackend)
+function module_load_string(backend::CaltechHPCBackend)
+    module_loads =
+        join(("module load $m" for m in backend.hpc_config.modules), "\n")
     return """export MODULEPATH="/resnick/groups/esm/modules:\$MODULEPATH"
     module purge
-    module load climacommon/2025_03_18"""
+    $module_loads"""
 end
 
-function module_load_string(::ClimaGPUBackend)
+function module_load_string(backend::ClimaGPUBackend)
+    module_loads =
+        join(("module load $m" for m in backend.hpc_config.modules), "\n")
     return """module purge
-    module load climacommon/2026_02_18"""
+    $module_loads"""
 end
 
-function module_load_string(::GCPBackend)
+function module_load_string(backend::GCPBackend)
+    isempty(backend.hpc_config.modules) ||
+        error("Loading modules is not supported by the backend")
     return """
     unset CUDA_ROOT
     unset NVHPC_CUDA_HOME

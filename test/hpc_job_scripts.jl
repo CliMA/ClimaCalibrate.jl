@@ -27,12 +27,14 @@ end
         time_limit = 1
         cpus_per_task = 16
         gpus_per_task = 1
-        hpc_kwargs = Dict(
-            :time => time_limit,
-            :cpus_per_task => cpus_per_task,
-            :gpus_per_task => gpus_per_task,
+        config = ClimaCalibrate.Backend.SlurmConfig(
+            directives = [
+                :gpus_per_task => gpus_per_task,
+                :cpus_per_task => cpus_per_task,
+                :time => time_limit,
+            ],
         )
-        backend = backend_type(; hpc_kwargs)
+        backend = backend_type(config)
 
         script = """
         sleep(30)
@@ -60,6 +62,7 @@ end
         #SBATCH --gpus-per-task=$gpus_per_task
         #SBATCH --cpus-per-task=$cpus_per_task
         #SBATCH --time=$(ClimaCalibrate.Backend.format_slurm_time(time_limit))
+        #SBATCH --ntasks=1
 
         $module_str
         export CLIMACOMMS_DEVICE="CUDA"
@@ -86,13 +89,15 @@ end
     cpus_per_task = 16
     gpus_per_task = 1
     ntasks = 2
-    hpc_kwargs = Dict(
-        :time => time_limit,
-        :ntasks => ntasks,
-        :cpus_per_task => cpus_per_task,
-        :gpus_per_task => gpus_per_task,
+    config = ClimaCalibrate.Backend.PBSConfig(
+        directives = [
+            :time => time_limit,
+            :ntasks => ntasks,
+            :cpus_per_task => cpus_per_task,
+            :gpus_per_task => gpus_per_task,
+        ],
     )
-    backend = ClimaCalibrate.DerechoBackend(; hpc_kwargs)
+    backend = ClimaCalibrate.DerechoBackend(config)
 
     script = """
     sleep(30)
@@ -122,7 +127,7 @@ end
 
 $module_str
 
-export JULIA_MPI_HAS_CUDA=true
+export JULIA_MPI_HAS_CUDA="true"
 export CLIMACOMMS_DEVICE="CUDA"
 export CLIMACOMMS_CONTEXT="MPI"
 
