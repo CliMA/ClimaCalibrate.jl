@@ -1,4 +1,3 @@
-using Distributions
 import EnsembleKalmanProcesses as EKP
 using EnsembleKalmanProcesses.ParameterDistributions
 import ClimaCalibrate as CAL
