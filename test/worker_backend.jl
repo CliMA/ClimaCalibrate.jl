@@ -1,5 +1,6 @@
 import ClimaCalibrate
 using Distributed
+import Random
 import EnsembleKalmanProcesses as EKP
 
 include(
@@ -63,12 +64,16 @@ end
     ),
 )
 
+rng_seed = 1234
+Random.seed!(rng_seed)
+rng_ekp = Random.MersenneTwister(rng_seed)
 user_initial_ensemble = EKP.construct_initial_ensemble(prior, ensemble_size)
 ekp = EKP.EnsembleKalmanProcess(
     user_initial_ensemble,
     observation,
     variance,
     EKP.Inversion();
+    rng = rng_ekp,
     localization_method = EKP.Localizers.NoLocalization(),
     accelerator = EKP.DefaultAccelerator(),
     scheduler = EKP.DefaultScheduler(),
