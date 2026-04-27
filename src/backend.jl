@@ -24,6 +24,8 @@ export HPCBackend,
     cancel_job,
     make_job_script
 
+include("backends/config.jl")
+
 abstract type AbstractBackend end
 
 """
@@ -88,12 +90,7 @@ end
 """
     HPCBackend <: AbstractBackend
 
-All concrete types of `HPCBackend` share the same keyword arguments for the
-constructors.
-
-## Keyword Arguments for HPC backends
-- `hpc_kwargs::Dict{Symbol, Any}`: Dictionary of arguments passed to the job
-  scheduler (e.g., Slurm or PBS).
+An abstract type for high performance cluster backends.
 """
 abstract type HPCBackend <: AbstractBackend end
 abstract type SlurmBackend <: HPCBackend end
@@ -137,39 +134,94 @@ end
 
 Used for Caltech's
 [high-performance computing cluster](https://www.hpc.caltech.edu/).
+"""
+struct CaltechHPCBackend <: SlurmBackend
+    hpc_config::SlurmConfig
+    job_records::Vector{JobInfo}
+end
 
-See [`HPCBackend`](@ref) for the keyword arguments to construct a
+"""
+    CaltechHPCBackend(config::SlurmConfig)
+
+Construct a `CaltechHPCBackend` for submitting jobs to Caltech's
+[high-performance computing cluster](https://www.hpc.caltech.edu/).
+
+See [`SlurmConfig`](@ref).
+"""
+function CaltechHPCBackend(config::SlurmConfig)
+    return CaltechHPCBackend(config, [])
+end
+
+"""
+    CaltechHPCBackend(; directives, modules, env_vars)
+
+Construct a `SlurmConfig` from the keyword arguments and use it to construct a
 `CaltechHPCBackend`.
 """
-Base.@kwdef struct CaltechHPCBackend <: SlurmBackend
-    hpc_kwargs::Dict{Symbol, Any} = Dict{Symbol, Any}()
-    job_records::Vector{JobInfo} = []
+function CaltechHPCBackend(; directives = [], modules = [], env_vars = [])
+    return CaltechHPCBackend(SlurmConfig(; directives, modules, env_vars), [])
 end
 
 """
     ClimaGPUBackend
 
 Used for CliMA's private GPU server.
+"""
+struct ClimaGPUBackend <: SlurmBackend
+    hpc_config::SlurmConfig
+    job_records::Vector{JobInfo}
+end
 
-See [`HPCBackend`](@ref) for the keyword arguments to construct a
+"""
+    ClimaGPUBackend(config::SlurmConfig)
+
+Construct a `ClimaGPUBackend` for submitting jobs to CliMA's private GPU server.
+
+See [`SlurmConfig`](@ref).
+"""
+function ClimaGPUBackend(config::SlurmConfig)
+    return ClimaGPUBackend(config, [])
+end
+
+"""
+    ClimaGPUBackend(; directives, modules, env_vars)
+
+Construct a `SlurmConfig` from the keyword arguments and use it to construct a
 `ClimaGPUBackend`.
 """
-Base.@kwdef struct ClimaGPUBackend <: SlurmBackend
-    hpc_kwargs::Dict{Symbol, Any} = Dict{Symbol, Any}()
-    job_records::Vector{JobInfo} = []
+function ClimaGPUBackend(; directives = [], modules = [], env_vars = [])
+    return ClimaGPUBackend(SlurmConfig(; directives, modules, env_vars), [])
 end
 
 """
     GCPBackend
 
 Used for CliMA's private GCP server.
+"""
+struct GCPBackend <: SlurmBackend
+    hpc_config::SlurmConfig
+    job_records::Vector{JobInfo}
+end
 
-See [`HPCBackend`](@ref) for the keyword arguments to construct a
+"""
+    GCPBackend(config::SlurmConfig)
+
+Construct a `GCPBackend` for submitting jobs to CliMA's private GCP server.
+
+See [`SlurmConfig`](@ref).
+"""
+function GCPBackend(config::SlurmConfig)
+    return GCPBackend(config, [])
+end
+
+"""
+    GCPBackend(; directives, modules, env_vars)
+
+Construct a `SlurmConfig` from the keyword arguments and use it to construct a
 `GCPBackend`.
 """
-Base.@kwdef struct GCPBackend <: SlurmBackend
-    hpc_kwargs::Dict{Symbol, Any} = Dict{Symbol, Any}()
-    job_records::Vector{JobInfo} = []
+function GCPBackend(; directives = [], modules = [], env_vars = [])
+    return GCPBackend(SlurmConfig(; directives, modules, env_vars), [])
 end
 
 """
@@ -177,13 +229,32 @@ end
 
 Used for NSF NCAR's
 [Derecho supercomputing system](https://ncar-hpc-docs.readthedocs.io/en/latest/compute-systems/derecho/).
+"""
+struct DerechoBackend <: HPCBackend
+    hpc_config::PBSConfig
+    job_records::Vector{JobInfo}
+end
 
-See [`HPCBackend`](@ref) for the keyword arguments to construct a
+"""
+    DerechoBackend(config::PBSConfig)
+
+Construct a `DerechoBackend` for submitting jobs to the Derecho supercomputing
+system.
+
+See [`PBSConfig`](@ref).
+"""
+function DerechoBackend(config::PBSConfig)
+    return DerechoBackend(config, [])
+end
+
+"""
+    DerechoBackend(; directives, modules, env_vars)
+
+Construct a `PBSConfig` from the keyword arguments and use it to construct a
 `DerechoBackend`.
 """
-Base.@kwdef struct DerechoBackend <: HPCBackend
-    hpc_kwargs::Dict{Symbol, Any} = Dict{Symbol, Any}()
-    job_records::Vector{JobInfo} = []
+function DerechoBackend(; directives = [], modules = [], env_vars = [])
+    return DerechoBackend(PBSConfig(; directives, modules, env_vars), [])
 end
 
 """

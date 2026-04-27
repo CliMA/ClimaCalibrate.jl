@@ -15,15 +15,33 @@ ClimaCalibrate.postprocess_g_ensemble
 ClimaCalibrate.calibrate
 ```
 
+## Config Interface
+
+```@docs
+ClimaCalibrate.Backend.AbstractHPCConfig
+ClimaCalibrate.Backend.SlurmConfig
+ClimaCalibrate.Backend.SlurmConfig()
+ClimaCalibrate.Backend.PBSConfig
+ClimaCalibrate.Backend.PBSConfig()
+```
+
 ## Backend Interface
 
 ```@docs
 ClimaCalibrate.JuliaBackend
 ClimaCalibrate.HPCBackend
 ClimaCalibrate.DerechoBackend
+ClimaCalibrate.DerechoBackend(config::PBSConfig)
+ClimaCalibrate.DerechoBackend(; )
 ClimaCalibrate.CaltechHPCBackend
+ClimaCalibrate.CaltechHPCBackend(config::SlurmConfig)
+ClimaCalibrate.CaltechHPCBackend(; )
 ClimaCalibrate.ClimaGPUBackend
+ClimaCalibrate.ClimaGPUBackend(config::SlurmConfig)
+ClimaCalibrate.ClimaGPUBackend(; )
 ClimaCalibrate.GCPBackend
+ClimaCalibrate.GCPBackend(config::SlurmConfig)
+ClimaCalibrate.GCPBackend(; )
 ClimaCalibrate.WorkerBackend
 ClimaCalibrate.get_backend
 ```

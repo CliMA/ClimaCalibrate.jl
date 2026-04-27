@@ -10,7 +10,7 @@ import ClimaCalibrate
     end
 
     # Need the backend to submit the job
-    backend = backend_type()
+    backend = backend_type(; directives = [:time => 1])
 
     job_script = """
     #!/bin/bash

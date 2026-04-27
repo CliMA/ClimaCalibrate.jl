@@ -10,7 +10,10 @@ import ClimaCalibrate
     end
 
     # Need the backend to submit the job
-    backend = backend_type()
+    # Note that the config is used to generate the job script but we will
+    # manually make one ourself
+    config = ClimaCalibrate.SlurmConfig(; directives = [:time => 60])
+    backend = backend_type(config)
 
     job_script = """
     #!/bin/bash

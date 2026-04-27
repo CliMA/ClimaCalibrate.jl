@@ -16,23 +16,22 @@ function make_job_script(
     job_name = "slurm_job",
     output = "output.txt",
 )
-    module_load_str = module_load_string(backend)
-    (; hpc_kwargs) = backend
-    slurm_directives = _generate_sbatch_directives(hpc_kwargs)
-    ntasks = get(hpc_kwargs, :ntasks, 1)
-    gpus_per_task = get(hpc_kwargs, :gpus_per_task, 0)
-    climacomms_device = gpus_per_task > 0 ? "CUDA" : "CPU"
+    (; hpc_config) = backend
+    (; directives) = hpc_config
+
+    # Note that ntasks = 1 cannot be included as a default when making the
+    # config because the cpus-per-task directive can change the default
+    ntasks = get(directives, :ntasks, 1)
     mpiexec_string = _generate_mpiexec_string(backend, ntasks, output)
 
     slurm_script = """
     #!/bin/bash
+    $(generate_directives(hpc_config))
     #SBATCH --job-name=$job_name
     #SBATCH --output=$output
-    $slurm_directives
 
-    $module_load_str
-    export CLIMACOMMS_DEVICE="$climacomms_device"
-    export CLIMACOMMS_CONTEXT="MPI"
+    $(module_load_string(backend))
+    $(generate_env_vars(hpc_config))
 
     $mpiexec_string $job_body
     exit 0
@@ -160,21 +159,6 @@ function cancel_job(::SlurmBackend, job::JobInfo)
 end
 
 """
-    generate_sbatch_directives(hpc_kwargs)
-
-Generate Slurm sbatch directives from HPC kwargs.
-"""
-function _generate_sbatch_directives(hpc_kwargs)
-    @assert haskey(hpc_kwargs, :time) "Slurm kwargs must include key :time"
-
-    hpc_kwargs[:time] = format_slurm_time(hpc_kwargs[:time])
-    slurm_directives = map(collect(hpc_kwargs)) do (k, v)
-        "#SBATCH --$(replace(string(k), "_" => "-"))=$(replace(string(v), "_" => "-"))"
-    end
-    return join(slurm_directives, "\n")
-end
-
-"""
     _generate_mpiexec_string(backend, ntasks, output)
 
 Modify the job body to log to `output` or run with MPI with `ntasks` depending
@@ -187,60 +171,27 @@ function _generate_mpiexec_string(backend, ntasks, output)
 end
 
 """
-    format_slurm_time(minutes::Int)
-
-Format `minutes` into a string accecpted by slurm.
-"""
-function format_slurm_time(minutes::Int)
-    days, remaining_minutes = divrem(minutes, (60 * 24))
-    hours, remaining_minutes = divrem(remaining_minutes, 60)
-    if days > 0
-        return string(
-            days,
-            "-",
-            lpad(hours, 2, '0'),
-            ":",
-            lpad(remaining_minutes, 2, '0'),
-            ":00",
-        )
-    else
-        return string(
-            lpad(hours, 2, '0'),
-            ":",
-            lpad(remaining_minutes, 2, '0'),
-            ":00",
-        )
-    end
-end
-
-"""
-    format_slurm_time(str::AbstractString)
-
-Return `str`.
-
-This function does not validate whether `str` is correct or not.
-"""
-format_slurm_time(str::AbstractString) = str
-
-
-"""
     module_load_string(backend::HPCBackend)
 
 Return a string that loads the correct modules for a given backend when executed
 via bash.
 """
-function module_load_string(::CaltechHPCBackend)
+function module_load_string(backend::CaltechHPCBackend)
+    module_loads = generate_modules(backend.hpc_config)
     return """export MODULEPATH="/resnick/groups/esm/modules:\$MODULEPATH"
     module purge
-    module load climacommon/2025_03_18"""
+    $module_loads"""
 end
 
-function module_load_string(::ClimaGPUBackend)
+function module_load_string(backend::ClimaGPUBackend)
+    module_loads = generate_modules(backend.hpc_config)
     return """module purge
-    module load climacommon/2026_02_18"""
+    $module_loads"""
 end
 
-function module_load_string(::GCPBackend)
+function module_load_string(backend::GCPBackend)
+    isempty(backend.hpc_config.modules) ||
+        @warn "Loading modules is not supported by the backend. Not loading any modules specified by the backend"
     return """
     unset CUDA_ROOT
     unset NVHPC_CUDA_HOME
