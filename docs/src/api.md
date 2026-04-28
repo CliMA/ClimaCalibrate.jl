@@ -3,10 +3,14 @@
 ## Model Interface
 
 ```@docs
+ClimaCalibrate.AbstractModelInterface
 ClimaCalibrate.forward_model
 ClimaCalibrate.observation_map
 ClimaCalibrate.analyze_iteration
 ClimaCalibrate.postprocess_g_ensemble
+ClimaCalibrate.model_interface_filepath
+ClimaCalibrate.experiment_dir
+ClimaCalibrate.exeflags
 ```
 
 ## Calibration Interface

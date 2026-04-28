@@ -31,11 +31,15 @@ else
     hpc_config = ClimaCalibrate.SlurmConfig(; directives, modules)
 end
 
-original_model_interface = model_interface
 interruption_model_interface, io = mktemp(@__DIR__)
+
+struct CancelModelInterface <: ClimaCalibrate.AbstractModelInterface end
+ClimaCalibrate.forward_model(::CancelModelInterface, i, m) = m == 1 && exit()
 model_interface_str = """
 import ClimaCalibrate
-ClimaCalibrate.forward_model(iter, member) = member == 1 && exit()
+struct CancelModelInterface <: ClimaCalibrate.AbstractModelInterface end
+ClimaCalibrate.forward_model(::CancelModelInterface, i, m) =
+    m == 1 && exit()
 """
 write(io, model_interface_str)
 close(io)
@@ -87,6 +91,9 @@ ClimaCalibrate.initialize(eki, prior, output_dir)
 
 backend = backend(hpc_config)
 experiment_dir = dirname(Base.active_project())
+
+# run_iteration assumes this object exists
+JLD2.save_object(joinpath(output_dir, "interface.jld2"), CancelModelInterface())
 ClimaCalibrate.Calibration.run_iteration(
     backend,
     1,
@@ -119,11 +126,10 @@ backend = ClimaCalibrate.get_backend()
 eki = ClimaCalibrate.Calibration.calibrate(
     backend(hpc_config),
     ekp,
+    SurfaceFluxModelInterface(),
     n_iterations,
     prior,
     output_dir,
-    model_interface;
-    experiment_dir,
 )
 
 @test ClimaCalibrate.last_completed_iteration(output_dir) == n_iterations
@@ -153,6 +159,7 @@ ekp = make_ekp(
 julia_eki = ClimaCalibrate.Calibration.calibrate(
     JuliaBackend(),
     ekp,
+    SurfaceFluxModelInterface(),
     n_iterations,
     prior,
     output_dir,

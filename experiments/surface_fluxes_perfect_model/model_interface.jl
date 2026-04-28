@@ -24,12 +24,21 @@ We need to follow the following steps for the calibration:
 4. define the prior distributions for θ (this is subjective and can be based on expert knowledge or previous studies)
 """
 
+struct SurfaceFluxModelInterface <: ClimaCalibrate.AbstractModelInterface end
+
 experiment_dir =
     joinpath(pkgdir_CC, "experiments", "surface_fluxes_perfect_model")
+
+ClimaCalibrate.model_interface_filepath(::SurfaceFluxModelInterface) =
+    joinpath(experiment_dir, "model_interface.jl")
 include(joinpath(experiment_dir, "sf_model.jl"))
 include(joinpath(experiment_dir, "observation_map.jl"))
 
-function forward_model(iteration, member)
+function ClimaCalibrate.forward_model(
+    ::SurfaceFluxModelInterface,
+    iteration,
+    member,
+)
     # Specify member path for output_dir
     model_config = Dict()
     output_dir = joinpath(pkgdir_CC, "output", "surface_fluxes_perfect_model")

@@ -237,13 +237,26 @@ function update_ensemble!(ekp, G_ens, output_dir, iteration, prior)
 end
 
 """
-    observation_map_and_update!(ekp, output_dir, iteration, prior)
+    observation_map_and_update!(
+        ekp,
+        output_dir,
+        iteration,
+        prior,
+        interface,
+    )
 
 Compute the observation map and update the given EKP object.
 """
-function observation_map_and_update!(ekp, output_dir, iteration, prior)
-    g_ensemble = ClimaCalibrate.observation_map(iteration)
+function observation_map_and_update!(
+    ekp,
+    output_dir,
+    iteration,
+    prior,
+    interface,
+)
+    g_ensemble = ClimaCalibrate.observation_map(interface, iteration)
     g_ensemble = ClimaCalibrate.postprocess_g_ensemble(
+        interface,
         ekp,
         g_ensemble,
         prior,
@@ -254,6 +267,7 @@ function observation_map_and_update!(ekp, output_dir, iteration, prior)
     terminate = update_ensemble!(ekp, g_ensemble, output_dir, iteration, prior)
     try
         ClimaCalibrate.analyze_iteration(
+            interface,
             ekp,
             g_ensemble,
             prior,
