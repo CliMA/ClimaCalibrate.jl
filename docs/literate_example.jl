@@ -1,9 +1,9 @@
 # # Distributed Calibration Tutorial Using Julia Workers
 # This example will teach you how to use ClimaCalibrate to parallelize your calibration with workers.
-# Workers are additional processes spun up to run code in a distributed fashion. 
+# Workers are additional processes spun up to run code in a distributed fashion.
 # In this tutorial, we will run ensemble members' forward models on different workers.
 
-# The example calibration uses CliMA's atmosphere model, [`ClimaAtmos.jl`](https://github.com/CliMA/ClimaAtmos.jl/), 
+# The example calibration uses CliMA's atmosphere model, [`ClimaAtmos.jl`](https://github.com/CliMA/ClimaAtmos.jl/),
 # in a column spatial configuration for 30 days to simulate outgoing radiative fluxes.
 # Radiative fluxes are used in the observation map to calibrate the astronomical unit.
 
@@ -15,7 +15,7 @@ using ClimaUtilities.ClimaArtifacts
 import EnsembleKalmanProcesses as EKP
 import EnsembleKalmanProcesses: I, ParameterDistributions.constrained_gaussian
 
-# Next, we add workers. These are primarily added by 
+# Next, we add workers. These are primarily added by
 # [`Distributed.addprocs`](https://docs.julialang.org/en/v1/stdlib/Distributed/#Distributed.addprocs)
 # or by starting Julia with multiple processes: `julia -p <nprocs>`.
 
@@ -63,8 +63,24 @@ mkpath(output_dir)
 # - [`path_to_ensemble_member`](@ref): Returns the ensemble member's output directory
 # - [`parameter_path`](@ref): Returns the ensemble member's parameter file as specified by [`EKP.TOMLInterface`](https://clima.github.io/EnsembleKalmanProcesses.jl/dev/API/TOMLInterface/#EnsembleKalmanProcesses.TOMLInterface.save_parameter_ensemble)
 
-# The forward model below is running `ClimaAtmos.jl` in a minimal `column` spatial configuration.
-@everywhere function CAL.forward_model(iteration, member)
+# The forward model below is running `ClimaAtmos.jl` in a minimal `column`
+# spatial configuration.
+
+# !!! note "Everywhere macro"
+#     Due to limitations in Documenter.jl (see
+#     [here](https://github.com/fredrikekre/Literate.jl/issues/254) and
+#     [here](https://github.com/JuliaDocs/Documenter.jl/issues/1848)), we append
+#     `@eval $(@__MODULE__)` to every `@everywhere` call. For your own
+#     calibration script, you do not need to do this.
+
+@everywhere @eval $(@__MODULE__) struct RadiativeFluxModelInterface <:
+                                        CAL.AbstractModelInterface end
+
+@everywhere @eval $(@__MODULE__) function CAL.forward_model(
+    ::RadiativeFluxModelInterface,
+    iteration,
+    member,
+)
     config_dict = Dict(
         "dt" => "2000secs",
         "t_end" => "30days",
@@ -86,11 +102,11 @@ mkpath(output_dir)
             ),
         ],
     )
-    #md # Set the output path for the current member
+    ## Set the output path for the current member
     member_path = CAL.path_to_ensemble_member(output_dir, iteration, member)
     config_dict["output_dir"] = member_path
 
-    #md # Set the parameters for the current member
+    ## Set the parameters for the current member
     parameter_path = CAL.parameter_path(output_dir, iteration, member)
     if haskey(config_dict, "toml")
         push!(config_dict["toml"], parameter_path)
@@ -98,7 +114,7 @@ mkpath(output_dir)
         config_dict["toml"] = [parameter_path]
     end
 
-    #md # Turn off default diagnostics
+    ## Turn off default diagnostics
     config_dict["output_default_diagnostics"] = false
 
     comms_ctx = ClimaComms.SingletonCommsContext()
@@ -110,11 +126,11 @@ end
 
 # Next, the observation map is required to process a full ensemble of model output
 # for the ensemble update step. The observation map just takes in the iteration number,
-# and always outputs an array. 
+# and always outputs an array.
 # For observation map output `G_ensemble`, `G_ensemble[:, m]` must the output of ensemble member `m`.
 # This is needed for compatibility with EnsembleKalmanProcesses.jl.
 const days = 86_400
-function CAL.observation_map(iteration)
+function CAL.observation_map(::RadiativeFluxModelInterface, iteration)
     single_member_dims = (1,)
     G_ensemble = Array{Float64}(undef, single_member_dims..., ensemble_size)
 
@@ -156,7 +172,7 @@ prior = constrained_gaussian("astronomical_unit", 6e10, 1e11, 2e5, Inf)
 parameter_file = CAL.parameter_path(output_dir, 0, 0)
 mkpath(dirname(parameter_file))
 touch(parameter_file)
-simulation = CAL.forward_model(0, 0)
+simulation = CAL.forward_model(RadiativeFluxModelInterface(), 0, 0)
 # Lastly, we use the observation map itself to generate the observations.
 observations = Vector{Float64}(undef, 1)
 observations .= process_member_data(SimDir(simulation.output_dir))
@@ -175,4 +191,11 @@ ekp = EKP.EnsembleKalmanProcess(
     EKP.Inversion(),
     EKP.default_options_dict(EKP.Inversion()),
 )
-eki = CAL.calibrate(CAL.WorkerBackend(), ekp, n_iterations, prior, output_dir)
+eki = CAL.calibrate(
+    CAL.WorkerBackend(),
+    ekp,
+    RadiativeFluxModelInterface(),
+    n_iterations,
+    prior,
+    output_dir,
+)

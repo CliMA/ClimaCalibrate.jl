@@ -1,7 +1,7 @@
 module Calibration
 
 import ClimaCalibrate
-import ..ClimaCalibrate: Backend
+import ..ClimaCalibrate: Backend, AbstractModelInterface
 import ClimaCalibrate.Backend: HPCBackend, WorkerBackend, JuliaBackend
 
 # Needed for interfacing with WorkerBackend
@@ -17,39 +17,39 @@ include("ekp_interface.jl")
     calibrate(
         backend::HPCBackend,
         ekp::EKP.EnsembleKalmanProcess,
+        interface::AbstractModelInterface,
         n_iterations,
         prior,
         output_dir,
-        model_interface;
-        experiment_dir = project_dir(),
-        exeflags = "",
     )
 
 Run a full calibration with `ekp` and `prior` for `n_iterations` on the given
 `backend`, storing the results of the calibration in `output_dir`.
 
 The work of each ensemble member which is running the forward model is done by
-submitting a job to the `backend`. The `model_interface` file and project
-directory `experiment_dir` should contain all the dependencies to run the
-forward model. The job begins by running
-`julia --project=\$experiment_dir -e 'include(\$model_interface)'` and running
-the forward model.
+submitting a job to the `backend`. The file path returned by
+[`ClimaCalibrate.model_interface_filepath`](@ref) and project directory
+`experiment_dir` should contain all the dependencies to run the forward model.
+The job begins by running `julia --project=\$experiment_dir -e
+'include(\$model_interface_filepath())'` and running the forward model.
+
+The `interface` is serialized to `interface.jld2` in `output_dir`, so that HPC
+job scripts can load and pass it to `forward_model`.
 
 For more information about the `HPCBackend`, see [`HPCBackend`](@ref).
 """
 function calibrate(
     backend::HPCBackend,
     ekp::EKP.EnsembleKalmanProcess,
+    interface::AbstractModelInterface,
     n_iterations,
     prior,
     output_dir,
-    model_interface;
-    experiment_dir = project_dir(),
-    exeflags = "",
 )
     output_dir = abspath(output_dir)
-    experiment_dir = abspath(experiment_dir)
-    model_interface = abspath(model_interface)
+    experiment_dir = abspath(ClimaCalibrate.experiment_dir(interface))
+    model_interface_fp =
+        abspath(ClimaCalibrate.model_interface_filepath(interface))
 
     ensemble_size = EKP.get_N_ens(ekp)
     @info "Initializing calibration" n_iterations ensemble_size output_dir
@@ -58,7 +58,10 @@ function calibrate(
     # Validation checks for output_dir, experiment_dir, and model_interface
     @assert isdir(output_dir) "Output directory does not exist: $output_dir"
     @assert isdir(experiment_dir) "Experiment directory does not exist: $experiment_dir"
-    @assert isfile(model_interface) "Model interface file does not exist: $model_interface"
+    @assert isfile(model_interface_fp) "Model interface file does not exist: $model_interface_fp"
+
+    # Save interface object for HPC job scripts to load
+    JLD2.save_object(joinpath(output_dir, "interface.jld2"), interface)
 
     first_iter = last_completed_iteration(output_dir) + 1
     for iter in first_iter:n_iterations
@@ -68,13 +71,14 @@ function calibrate(
             iter,
             ensemble_size,
             output_dir,
-            model_interface,
+            model_interface_fp,
             experiment_dir,
-            exeflags,
+            ClimaCalibrate.exeflags(interface),
         )
         @info "Completed iteration $iter, updating ensemble"
         ekp = load_ekp_struct(output_dir, iter)
-        terminate = observation_map_and_update!(ekp, output_dir, iter, prior)
+        terminate =
+            observation_map_and_update!(ekp, output_dir, iter, prior, interface)
         !isnothing(terminate) && break
     end
     return ekp
@@ -86,7 +90,7 @@ end
         iter,
         ensemble_size,
         output_dir,
-        model_interface,
+        model_interface_filepath,
         experiment_dir,
         exeflags,
     )
@@ -101,7 +105,7 @@ function run_iteration(
     iter,
     ensemble_size,
     output_dir,
-    model_interface,
+    model_interface_filepath,
     experiment_dir,
     exeflags,
 )
@@ -112,7 +116,7 @@ function run_iteration(
             iter,
             member,
             output_dir,
-            model_interface,
+            model_interface_filepath,
             experiment_dir,
             exeflags,
         )
@@ -146,7 +150,7 @@ end
         iter,
         member,
         output_dir,
-        model_interface,
+        model_interface_filepath,
         experiment_dir,
         exeflags,
     )
@@ -159,7 +163,7 @@ function generate_job_script_for_ensemble_member(
     iter,
     member,
     output_dir,
-    model_interface,
+    model_interface_filepath,
     experiment_dir,
     exeflags,
 )
@@ -167,9 +171,10 @@ function generate_job_script_for_ensemble_member(
     job_body = """
     import ClimaCalibrate
     iteration = $iter; member = $member
-    model_interface = "$model_interface"; include(model_interface)
-    experiment_dir = "$experiment_dir"
-    ClimaCalibrate.forward_model(iteration, member)
+    model_interface_filepath = "$model_interface_filepath"
+    include(model_interface_filepath)
+    interface = ClimaCalibrate._load(joinpath("$output_dir", "interface.jld2"))
+    ClimaCalibrate.forward_model(interface, iteration, member)
     ClimaCalibrate.write_model_completed("$output_dir", iteration, member)
     """
 
@@ -316,6 +321,7 @@ end
     calibrate(
         backend::WorkerBackend,
         ekp::EKP.EnsembleKalmanProcess,
+        interface::AbstractModelInterface,
         n_iterations,
         prior,
         output_dir,
@@ -329,6 +335,7 @@ For more information about the `WorkerBackend`, see [`WorkerBackend`](@ref).
 function calibrate(
     backend::WorkerBackend,
     ekp::EKP.EnsembleKalmanProcess,
+    interface::AbstractModelInterface,
     n_iterations,
     prior,
     output_dir,
@@ -345,30 +352,43 @@ function calibrate(
     first_iter = last_completed_iteration(output_dir) + 1
     for iter in first_iter:n_iterations
         @info "Iteration $iter"
-        run_iteration(backend, iter, ensemble_size, output_dir)
+        run_iteration(backend, interface, iter, ensemble_size, output_dir)
         @info "Completed iteration $iter, updating ensemble"
         ekp = load_ekp_struct(output_dir, iter)
-        terminate = observation_map_and_update!(ekp, output_dir, iter, prior)
+        terminate =
+            observation_map_and_update!(ekp, output_dir, iter, prior, interface)
         !isnothing(terminate) && break
     end
     return ekp
 end
 
 """
-    run_iteration(backend::WorkerBackend, iter, ensemble_size, output_dir)
+    run_iteration(
+        backend::WorkerBackend,
+        interface::AbstractModelInterface,
+        iter,
+        ensemble_size,
+        output_dir,
+    )
 
 Run the `iter`th iteration.
 
 This function submits the work for a single ensemble member to each worker
 and waits for each worker to complete (succeed or fail).
 """
-function run_iteration(backend::WorkerBackend, iter, ensemble_size, output_dir)
+function run_iteration(
+    backend::WorkerBackend,
+    interface::AbstractModelInterface,
+    iter,
+    ensemble_size,
+    output_dir,
+)
     isempty(backend.worker_pool.workers) &&
         @info "No workers currently available"
 
     # For each ensemble member, generate the work that the workers will do
     work_to_do = map(1:ensemble_size) do member
-        prepare_work_for_ensemble_member(iter, member, output_dir)
+        prepare_work_for_ensemble_member(iter, member, output_dir, interface)
     end
 
     (; worker_pool) = backend
@@ -408,11 +428,11 @@ function run_iteration(backend::WorkerBackend, iter, ensemble_size, output_dir)
 end
 
 """
-    prepare_work_for_ensemble_member(iter, member, output_dir)
+    prepare_work_for_ensemble_member(iter, member, output_dir, interface)
 
 Return a function that takes in a worker and run the forward model if needed.
 """
-function prepare_work_for_ensemble_member(iter, member, output_dir)
+function prepare_work_for_ensemble_member(iter, member, output_dir, interface)
     return (worker) -> begin
         if model_completed(output_dir, iter, member)
             @info "Skipping completed member $member (found checkpoint)"
@@ -426,6 +446,7 @@ function prepare_work_for_ensemble_member(iter, member, output_dir)
         Distributed.remotecall_wait(
             ClimaCalibrate.forward_model,
             worker,
+            interface,
             iter,
             member,
         )
@@ -437,6 +458,7 @@ end
     calibrate(
         backend::JuliaBackend,
         ekp::EKP.EnsembleKalmanProcess,
+        interface::AbstractModelInterface,
         n_iterations,
         prior,
         output_dir,
@@ -452,6 +474,7 @@ For more information about the `JuliaBackend`, see [`JuliaBackend`](@ref).
 function calibrate(
     backend::JuliaBackend,
     ekp::EKP.EnsembleKalmanProcess,
+    interface::AbstractModelInterface,
     n_iterations,
     prior,
     output_dir,
@@ -468,22 +491,35 @@ function calibrate(
     first_iter = last_completed_iteration(output_dir) + 1
     for iter in first_iter:n_iterations
         @info "Iteration $iter"
-        run_iteration(backend, iter, ensemble_size, output_dir)
+        run_iteration(backend, interface, iter, ensemble_size, output_dir)
         @info "Completed iteration $iter, updating ensemble"
         ekp = load_ekp_struct(output_dir, iter)
-        terminate = observation_map_and_update!(ekp, output_dir, iter, prior)
+        terminate =
+            observation_map_and_update!(ekp, output_dir, iter, prior, interface)
         !isnothing(terminate) && break
     end
     return ekp
 end
 
 """
-    run_iteration(backend::JuliaBackend, iter, ensemble_size, output_dir)
+    run_iteration(
+        ::JuliaBackend,
+        interface::AbstractModelInterface,
+        iter,
+        ensemble_size,
+        output_dir,
+    )
 
 Run the `iter`th iteration by completing the work of all the ensemble members
 sequentially.
 """
-function run_iteration(::JuliaBackend, iter, ensemble_size, output_dir)
+function run_iteration(
+    ::JuliaBackend,
+    interface::AbstractModelInterface,
+    iter,
+    ensemble_size,
+    output_dir,
+)
     on_error(e::InterruptException) = rethrow(e)
     on_error(e) =
         @error "Single ensemble member has errored. See stacktrace" exception =
@@ -492,7 +528,7 @@ function run_iteration(::JuliaBackend, iter, ensemble_size, output_dir)
     failures = 0
     foreach(1:ensemble_size) do m
         try
-            ClimaCalibrate.forward_model(iter, m)
+            ClimaCalibrate.forward_model(interface, iter, m)
             @info "Completed member $m"
         catch e
             failures += 1

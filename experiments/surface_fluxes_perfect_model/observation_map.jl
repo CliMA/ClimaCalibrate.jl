@@ -15,7 +15,7 @@ experiment_dir = joinpath(
 Returns the observation map (from the raw model output to the observable y),
 as specified by process_member_data, for the given iteration.
 """
-function observation_map(iteration)
+function ClimaCalibrate.observation_map(::SurfaceFluxModelInterface, iteration)
     model_output = "model_ustar_array.jld2"
 
     dims = 1

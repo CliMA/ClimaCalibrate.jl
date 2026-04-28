@@ -28,7 +28,9 @@ if nworkers() == 1
 end
 
 @everywhere using ClimaCalibrate
-@everywhere ClimaCalibrate.forward_model(i, m) = m == 1 && exit()
+@everywhere struct CancelModelInterface <: ClimaCalibrate.AbstractModelInterface end
+@everywhere ClimaCalibrate.forward_model(::CancelModelInterface, i, m) =
+    m == 1 && exit()
 
 eki = EKP.EnsembleKalmanProcess(
     EKP.construct_initial_ensemble(prior, ensemble_size),
@@ -42,6 +44,7 @@ ClimaCalibrate.initialize(eki, prior, output_dir)
 
 ClimaCalibrate.Calibration.run_iteration(
     ClimaCalibrate.WorkerBackend(),
+    CancelModelInterface(),
     1,
     ensemble_size,
     output_dir,
@@ -81,6 +84,7 @@ ekp = EKP.EnsembleKalmanProcess(
 eki = ClimaCalibrate.Calibration.calibrate(
     ClimaCalibrate.WorkerBackend(),
     ekp,
+    SurfaceFluxModelInterface(),
     n_iterations,
     prior,
     output_dir,
@@ -108,11 +112,15 @@ g_vs_iter_plot(eki, output_dir)
     @test last_iter == n_iterations
     ClimaCalibrate.Calibration.run_iteration(
         ClimaCalibrate.WorkerBackend(),
+        SurfaceFluxModelInterface(),
         last_iter + 1,
         ensemble_size,
         output_dir,
     )
-    G_ensemble = ClimaCalibrate.observation_map(last_iter + 1)
+    G_ensemble = ClimaCalibrate.observation_map(
+        SurfaceFluxModelInterface(),
+        last_iter + 1,
+    )
     ClimaCalibrate.save_G_ensemble(output_dir, last_iter + 1, G_ensemble)
     ClimaCalibrate.update_ensemble(output_dir, last_iter + 1, prior)
 
