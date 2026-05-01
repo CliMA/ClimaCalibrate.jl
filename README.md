@@ -20,10 +20,13 @@ calibration pipelines using minimal boilerplate.</strong>
 
 The recommended Julia version is: Stable release v1.11.4
 
-Currently supported backends: 
-- [Resnick High Performance Computing Center](https://www.hpc.caltech.edu/)
-- [NSF NCAR Supercomputer Derecho](https://ncar-hpc-docs.readthedocs.io/en/latest/compute-systems/derecho/)
-- CliMA's private GPU server
+ClimaCalibrate supports different backends for calibration from
+- the Julia backend for single-process calibration,
+- [Distributed.jl](https://github.com/JuliaLang/Distributed.jl) with support for
+  Slurm and PBS job schedulers,
+- [Resnick High Performance Computing Center](https://www.hpc.caltech.edu/),
+- [NSF NCAR Supercomputer Derecho](https://ncar-hpc-docs.readthedocs.io/en/latest/compute-systems/derecho/),
+- CliMA's private GPU server.
 
 ## Contributing
 

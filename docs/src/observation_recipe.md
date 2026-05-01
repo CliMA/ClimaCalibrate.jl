@@ -1,6 +1,9 @@
 # ObservationRecipe
 
 !!! warning
+    If you are not using ClimaAnalysis, you can skip this page.
+
+!!! warning
     To enable this module, use `using ClimaAnalysis` or `import
     ClimaAnalysis`.
 
