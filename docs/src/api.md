@@ -95,6 +95,8 @@ ClimaCalibrate.path_to_model_log
 ClimaCalibrate.parameter_path
 ClimaCalibrate.checkpoint_path
 ClimaCalibrate.load_latest_ekp
+ClimaCalibrate.load_ekp_struct
+ClimaCalibrate.ekp_path
 ClimaCalibrate.save_eki_and_parameters
 ```
 

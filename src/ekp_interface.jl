@@ -19,6 +19,8 @@ export initialize,
     parameter_path,
     checkpoint_path,
     load_latest_ekp,
+    load_ekp_struct,
+    ekp_path,
     save_eki_and_parameters,
     model_started,
     model_completed,
@@ -149,7 +151,6 @@ Saves the ensemble's observation map output to the correct directory based on th
 Takes an output directory, iteration number, and the ensemble output to save.
 """
 function save_G_ensemble(output_dir::AbstractString, iteration, G_ensemble)
-    iter_path = path_to_iteration(output_dir, iteration)
     JLD2.save_object(path_to_G_ensemble(output_dir, iteration), G_ensemble)
     return G_ensemble
 end
@@ -217,7 +218,6 @@ end
 Updates the EnsembleKalmanProcess object and saves the parameters for the next iteration.
 """
 function update_ensemble(output_dir::AbstractString, iteration, prior)
-    iter_path = path_to_iteration(output_dir, iteration)
     G_ens = JLD2.load_object(path_to_G_ensemble(output_dir, iteration))
 
     ekp = load_ekp_struct(output_dir, iteration)
