@@ -67,26 +67,26 @@ function EnsembleBuilder.GEnsembleBuilder(
 ) where {FT <: AbstractFloat}
     obs_series = EKP.get_observation_series(ekp)
     N = EKP.get_N_iterations(ekp) + 1
-    metadatas = ClimaCalibrate.get_metadata_for_nth_iteration(obs_series, N)
+    metadata = ClimaCalibrate.get_metadata_for_nth_iteration(obs_series, N)
 
     # It is a little wasteful to allocate the data here, but it is easier to
     # index if it is a single vector
     obs = ClimaCalibrate.get_observations_for_nth_iteration(obs_series, N)
     stacked_obs = mapreduce(EKP.get_obs, vcat, obs)
 
-    eltype(metadatas) <: ClimaAnalysis.Var.Metadata || error(
+    all(m isa ClimaAnalysis.Var.Metadata for m in metadata) || error(
         "GEnsembleBuilder is only compatible with metadata from ClimaAnalysis",
     )
 
     # Check all metadata contain a short name
     metadata_short_names =
-        collect(ClimaAnalysis.short_name(metadata) for metadata in metadatas)
+        collect(ClimaAnalysis.short_name(m) for m in metadata)
     any(==(""), metadata_short_names) && error(
         "One of the observations does not has a short name; add a short name to the OutputVar before making an observation from it",
     )
 
     G_ens = g_ens_matrix(ekp)
-    completed = falses(length(metadatas), EKP.get_N_ens(ekp))
+    completed = falses(length(metadata), EKP.get_N_ens(ekp))
 
     short_name_to_metadata_map = Dict{String, Vector{MetadataInfo}}()
     minibatch_indices =
@@ -99,11 +99,11 @@ function EnsembleBuilder.GEnsembleBuilder(
     @assert first(size(G_ens)) == last(last(minibatch_indices))
 
     all_metadata_vec = MetadataInfo[]
-    for (i, (metadata, range)) in enumerate(zip(metadatas, minibatch_indices))
-        short_name = ClimaAnalysis.short_name(metadata)
+    for (i, (m, range)) in enumerate(zip(metadata, minibatch_indices))
+        short_name = ClimaAnalysis.short_name(m)
         metadata_with_short_name_vec =
             get!(short_name_to_metadata_map, short_name, MetadataInfo[])
-        metadata_info = MetadataInfo(i, range, metadata)
+        metadata_info = MetadataInfo(i, range, m)
         push!(metadata_with_short_name_vec, metadata_info)
         push!(all_metadata_vec, metadata_info)
     end
