@@ -345,7 +345,7 @@ matrix is completely filled out.
 """
 function EnsembleBuilder.get_g_ensemble(g_ens_builder::GEnsembleBuilder)
     EnsembleBuilder.is_complete(g_ens_builder) ||
-        "G ensemble matrix is not completed. Check the OutputVars passed to the G ensemble builder. You may find it useful to call `EnsembleBuilder.missing_short_names(g_ens_builder, 1) or display the GEnsembleBuilder object in the REPL"
+        @warn "G ensemble matrix is not completed. Check the OutputVars passed to the G ensemble builder. You may find it useful to call `EnsembleBuilder.missing_short_names(g_ens_builder, 1)` or display the GEnsembleBuilder object in the REPL"
     return g_ens_builder.g_ens
 end
 

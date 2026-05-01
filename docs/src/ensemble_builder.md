@@ -1,20 +1,24 @@
 # Building G ensemble matrix
 
-!!! warning
-    To enable this module, use `using ClimaAnalysis` or `import ClimaAnalysis`.
+!!! note
+    If you are not using ClimaAnalysis, you can skip this page. To enable this
+    module, use `using ClimaAnalysis` or `import ClimaAnalysis`. This module
+    requires a version of ClimaAnalysis greater than v0.5.19.
 
 !!! note "Prerequisites"
     This module assumes that you are using `ObservationRecipe` to make your
     observations and `ClimaAnalysis` to preprocess your simulation data. If that
     is not the case, this module is not for you.
 
-!!! note "Version of ClimaAnalysis"
-    This module requires a version of ClimaAnalysis greater than v0.5.19.
-
 !!! note "Other documentation"
     It may be helpful to review the documentation for
     [`FlatVar`](https://clima.github.io/ClimaAnalysis.jl/dev/flat/) in
     ClimaAnalysis and [`ObservationRecipe`](@ref) in ClimaCalibrate.
+
+Calibration involves implementing an [`observation_map`](@ref) by hand which
+postprocess, slice, and stack simulation diagnostics into vectors.
+`GEnsembleBuilder` automates this, using the metadata baked into your
+ObservationRecipe observations to match, validate, and fill each column for you.
 
 To help with constructing G ensemble matrix when using `ObservationRecipe`,
 `ClimaCalibrate` provides the struct `GEnsembleBuilder` and its related
@@ -130,6 +134,75 @@ return it from `ClimaCalibrate.observation_map`.
 
 ```julia
 g_ens = EnsembleBuilder.get_g_ensemble(g_ens_builder)
+```
+
+## Example
+
+A complete example of using the `GEnsembleBuilder` looks like this.
+
+```julia
+import ClimaCalibrate
+import ClimaCalibrate.EnsembleBuilder
+
+function ClimaCalibrate.observation_map(interface::MyModelInterface, iteration)
+    # In this example, output_dir is stored in interface as a field
+    (; output_dir) = interface
+    ekp = JLD2.load_object(ClimaCalibrate.ekp_path(output_dir, iteration))
+    ensemble_size = EKP.get_N_ens(ekp)
+
+    g_ens_builder = EnsembleBuilder.GEnsembleBuilder(ekp)
+    for m in 1:ensemble_size
+        try
+        member_path =
+            ClimaCalibrate.path_to_ensemble_member(output_dir, iteration, m)
+        diagnostics_path = joinpath(member_path, "output_active")
+        @info "Processing member $m: $diagnostics_path"
+            process_member_data!(g_ens_builder, m, diagnostics_path)
+        catch e
+            @error "Error processing member $m, filling observation map entry with NaNs" exception =
+                e
+            EnsembleBuilder.fill_g_ens_col!(g_ens_builder, m, NaN)
+        end
+    end
+
+    if EnsembleBuilder.is_complete(g_ens_builder)
+        return EnsembleBuilder.get_g_ensemble(g_ens_builder)
+    else
+        @error "G ensemble matrix is not completed. You may find it useful to call `EnsembleBuilder.missing_short_names(g_ens_builder, 1) or display the GEnsembleBuilder object in the REPL"
+    end
+end
+
+function process_member_data!(
+    g_ens_builder,
+    col_idx,
+    diagnostics_folder_path,
+)
+    # The implementation of preprocess differs for each calibration pipeline,
+    # but this load and preprocess OutputVars using ClimaAnalysis
+    vars = preprocess(m, diagnostics_folder_path)
+
+    # It is strongly recommended to use SequentialIndicesChecker
+    seq_indices_checker = Checker.SequentialIndicesChecker()
+    checkers = (seq_indices_checker,)
+
+    # fill_g_ens_col! will remove the spinup and is mask-aware.
+    # g_ens_builder contain the metadata from the observations, so
+    # fill_g_ens_col! will only choose values over temporal and spatial
+    # coordinates that exist in the observational data
+    for var in vars
+        use_var = EnsembleBuilder.fill_g_ens_col!(
+            g_ens_builder,
+            col_idx,
+            var;
+            checkers,
+            verbose = true,
+        )
+        use_var || error(
+            "OutputVar with short name ($(ClimaAnalysis.short_name(var))) was passed, but not used",
+        )
+    end
+    return nothing
+end
 ```
 
 # Checkers

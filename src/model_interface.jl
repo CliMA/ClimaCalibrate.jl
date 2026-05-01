@@ -24,7 +24,7 @@ dispatch the calibration interface functions.
 Subtypes must implement:
 - `forward_model(interface, iteration, member)` which runs the forward model for a
   single ensemble member.
-- `observation_map(interface, iteration)` which processes model output and,
+- `observation_map(interface, iteration)` which processes model output and
   returns a `G_ensemble` matrix.
 
 To use the `HPCBackend`, the subtypes must also implement:

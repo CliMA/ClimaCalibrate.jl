@@ -1,7 +1,8 @@
 # # Distributed Calibration Tutorial Using Julia Workers
-# This example will teach you how to use ClimaCalibrate to parallelize your calibration with workers.
-# Workers are additional processes spun up to run code in a distributed fashion.
-# In this tutorial, we will run ensemble members' forward models on different workers.
+# This example will teach you how to use ClimaCalibrate to parallelize your
+# calibration with workers. Workers are additional processes spun up to run code
+# in a distributed fashion. In this tutorial, we will run ensemble members'
+# forward models on different workers.
 
 # The example calibration uses CliMA's atmosphere model, [`ClimaAtmos.jl`](https://github.com/CliMA/ClimaAtmos.jl/),
 # in a column spatial configuration for 30 days to simulate outgoing radiative fluxes.
@@ -19,9 +20,11 @@ import EnsembleKalmanProcesses: I, ParameterDistributions.constrained_gaussian
 # [`Distributed.addprocs`](https://docs.julialang.org/en/v1/stdlib/Distributed/#Distributed.addprocs)
 # or by starting Julia with multiple processes: `julia -p <nprocs>`.
 
-# `addprocs` itself initializes the workers and registers them with the main Julia process, but there are multiple ways to call it.
-# The simplest is just `addprocs(nprocs)`, which will create new local processes on your machine.
-# The other is to use [`SlurmManager`](@ref), which will acquire and start workers on Slurm resources.
+# `addprocs` itself initializes the workers and registers them with the main
+# Julia process, but there are multiple ways to call it. The simplest is just
+# `addprocs(nprocs)`, which will create new local processes on your machine.
+# The other is to use [`SlurmManager`](@ref), which will acquire and start
+# workers on Slurm resources.
 # You can use keyword arguments to specify the Slurm resources:
 
 # `addprocs(ClimaCalibrate.SlurmManager(nprocs), gpus_per_task = 1, time = "01:00:00")`
@@ -36,13 +39,14 @@ nworkers()
 #-
 workers()
 
-# We can call functions on the worker using [`remotecall`](https://docs.julialang.org/en/v1/stdlib/Distributed/#Distributed.remotecall_fetch-Tuple{Any,%20Integer,%20Vararg{Any}}). 
+# We can call functions on the worker using [`remotecall`](https://docs.julialang.org/en/v1/stdlib/Distributed/#Distributed.remotecall_fetch-Tuple{Any,%20Integer,%20Vararg{Any}}).
 # We pass in the function name and the worker ID followed by the function arguments.
 remotecall_fetch(*, 1, 4, 4)
 # ClimaCalibrate uses this functionality to run the forward model on workers.
 
-# Since the workers start in their own Julia sessions, we need to import packages and declare variables.
-# `Distributed.@everywhere` executes code on all workers, allowing us to load the code that they need.
+# Since the workers start in their own Julia sessions, we need to import
+# packages and declare variables. `Distributed.@everywhere` executes code on all
+# workers, allowing us to load the code that they need.
 @everywhere begin
     output_dir = joinpath("output", "climaatmos_calibration")
     import ClimaCalibrate as CAL
@@ -52,16 +56,24 @@ end
 output_dir = joinpath("output", "climaatmos_calibration")
 mkpath(output_dir)
 
-# First, we need to set up the forward model, which take in the sampled parameters,
-# runs, and saves diagnostic output that can be processed and compared to observations. The 
-# forward model must override `ClimaCalibrate.forward_model(iteration, member)`,
-# since the workers will run this function in parallel.
+# First, we define `RadiativeFluxModelInterface` which will subtype the
+# `ClimaCalibrate.AbstractModelInterface`. The `RadiativeFluxModelInterface`
+# will define how to run the forward model and observation map.
 
-# Since `forward_model(iteration, member)` only takes in the iteration and member numbers, 
-# so we need to use these as hooks to set the model parameters and output directory.
+# The forward model takes in the sampled parameters, runs the simulation, and
+# saves the diagnostic output that can be processed and compared to
+# observations. This is defined by
+# `ClimaCalibrate.forward_model(interface, iteration, member)`. This function
+# is ran in parallel by the `WorkerBackend` and the `HPCBackend`s.
+
+# Since `forward_model(interface, iteration, member)` only takes in the
+# iteration and member numbers, so we need to use these as hooks to set the
+# model parameters and output directory.
 # Two useful functions:
-# - [`path_to_ensemble_member`](@ref): Returns the ensemble member's output directory
-# - [`parameter_path`](@ref): Returns the ensemble member's parameter file as specified by [`EKP.TOMLInterface`](https://clima.github.io/EnsembleKalmanProcesses.jl/dev/API/TOMLInterface/#EnsembleKalmanProcesses.TOMLInterface.save_parameter_ensemble)
+# - [`path_to_ensemble_member`](@ref): Returns the ensemble member's output
+#   directory
+# - [`parameter_path`](@ref): Returns the ensemble member's parameter file as
+#   specified by [`EKP.TOMLInterface`](https://clima.github.io/EnsembleKalmanProcesses.jl/dev/API/TOMLInterface/#EnsembleKalmanProcesses.TOMLInterface.save_parameter_ensemble)
 
 # The forward model below is running `ClimaAtmos.jl` in a minimal `column`
 # spatial configuration.
@@ -125,9 +137,10 @@ mkpath(output_dir)
 end
 
 # Next, the observation map is required to process a full ensemble of model output
-# for the ensemble update step. The observation map just takes in the iteration number,
-# and always outputs an array.
-# For observation map output `G_ensemble`, `G_ensemble[:, m]` must the output of ensemble member `m`.
+# for the ensemble update step. The observation map just takes in the iteration
+# number, and always outputs an array.
+# For observation map output `G_ensemble`, `G_ensemble[:, m]` must the output of
+# ensemble member `m`.
 # This is needed for compatibility with EnsembleKalmanProcesses.jl.
 const days = 86_400
 function CAL.observation_map(::RadiativeFluxModelInterface, iteration)
@@ -177,12 +190,15 @@ simulation = CAL.forward_model(RadiativeFluxModelInterface(), 0, 0)
 observations = Vector{Float64}(undef, 1)
 observations .= process_member_data(SimDir(simulation.output_dir))
 
-# Now we are ready to run our calibration, putting it all together using the 
+# Now we are ready to run our calibration, putting it all together using the
 # `calibrate` function. The `WorkerBackend` will automatically use all workers
 # available to the main Julia process.
-# Other backends are available for forward models that can't use workers or need to be parallelized internally.
-# The simplest backend is the `JuliaBackend`, which runs all ensemble members sequentially and does not require `Distributed.jl`.
-# For more information, see the [`Backends`](https://clima.github.io/ClimaCalibrate.jl/dev/backends/) page.
+# Other backends are available for forward models that can't use workers or need
+# to be parallelized internally.
+# The simplest backend is the `JuliaBackend`, which runs all ensemble members
+# sequentially and does not require `Distributed.jl`.
+# For more information, see the [`Backends`](https://clima.github.io/ClimaCalibrate.jl/dev/backends/)
+# page.
 user_initial_ensemble = EKP.construct_initial_ensemble(prior, ensemble_size)
 ekp = EKP.EnsembleKalmanProcess(
     user_initial_ensemble,
