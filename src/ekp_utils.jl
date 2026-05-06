@@ -70,7 +70,7 @@ end
 """
     g_ens_matrix(eki::EKP.EnsembleKalmanProcess{FT}) where {FT <: AbstractFloat}
 
-Construct an uninitialized G ensemble matrix of type `FT` for the current
+Construct an G ensemble matrix of type `FT` with all `NaN`s for the current
 iteration.
 """
 function g_ens_matrix(
@@ -79,7 +79,9 @@ function g_ens_matrix(
     obs = EKP.get_obs(eki)
     single_obs_len = sum(length(obs))
     ensemble_size = EKP.get_N_ens(eki)
-    return Array{FT}(undef, single_obs_len, ensemble_size)
+    g_ens_matrix = Array{FT}(undef, single_obs_len, ensemble_size)
+    fill!(g_ens_matrix, NaN)
+    return g_ens_matrix
 end
 
 """
