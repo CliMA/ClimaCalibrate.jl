@@ -143,7 +143,7 @@ ClimaCalibrate.compute_normalized_projections
 ## Ensemble Builder Interface
 
 ```@docs
-ClimaAnalysisExt.GEnsembleBuilder
+ClimaCalibrateClimaAnalysisExt.GEnsembleBuilder
 ClimaCalibrate.EnsembleBuilder.GEnsembleBuilder
 ClimaCalibrate.EnsembleBuilder.fill_g_ens_col!
 ClimaCalibrate.EnsembleBuilder.is_complete
