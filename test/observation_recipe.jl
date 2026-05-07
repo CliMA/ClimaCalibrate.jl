@@ -15,7 +15,7 @@ using EnsembleKalmanProcesses.ParameterDistributions
 
 # Since functions not defined in ext.jl are not exported, we need to access
 # them like this
-ext = Base.get_extension(ClimaCalibrate, :ClimaAnalysisExt)
+ext = Base.get_extension(ClimaCalibrate, :ClimaCalibrateClimaAnalysisExt)
 
 import ClimaAnalysis.Template:
     TemplateVar,

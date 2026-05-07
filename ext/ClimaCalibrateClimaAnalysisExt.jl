@@ -1,4 +1,4 @@
-module ClimaAnalysisExt
+module ClimaCalibrateClimaAnalysisExt
 
 import ClimaAnalysis
 import ClimaAnalysis: OutputVar

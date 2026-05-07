@@ -17,10 +17,11 @@ Literate.markdown(
     joinpath(@__DIR__, "src"),
 )
 
-ClimaAnalysisExt = Base.get_extension(ClimaCalibrate, :ClimaAnalysisExt)
+ClimaCalibrateClimaAnalysisExt =
+    Base.get_extension(ClimaCalibrate, :ClimaCalibrateClimaAnalysisExt)
 makedocs(
     plugins = [bib],
-    modules = [ClimaCalibrate, ClimaAnalysisExt],
+    modules = [ClimaCalibrate, ClimaCalibrateClimaAnalysisExt],
     sitename = "ClimaCalibrate.jl",
     authors = "Clima",
     checkdocs = :exports,
