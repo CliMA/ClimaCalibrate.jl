@@ -26,7 +26,9 @@ function make_job_script(
 
     if gpus_per_node > 0
         ranks_per_node = gpus_per_node
-        set_gpu_rank = "set_gpu_rank"
+        # Use a bash script to set GPU ranks for each process, needed so that 
+        # MPI can properly use multiple GPUs concurrently
+        set_gpu_rank = joinpath(@__DIR__, "set_gpu_rank.sh")
     else
         ranks_per_node = cpus_per_node
         set_gpu_rank = ""
@@ -191,7 +193,8 @@ end
 
 function module_load_string(backend::DerechoBackend)
     module_loads = generate_modules(backend.hpc_config)
-    return """export MODULEPATH="/glade/campaign/univ/ucit0011/ClimaModules-Derecho:\$MODULEPATH"
-    module purge
-    $module_loads"""
+    return """module purge
+    module use /glade/campaign/univ/ucit0011/ClimaModules-Derecho
+    $module_loads
+    module list 2>&1"""
 end

@@ -116,7 +116,7 @@ export CLIMACOMMS_DEVICE="CUDA"
 export CLIMACOMMS_CONTEXT="MPI"
 
 cd \$PBS_O_WORKDIR
-\$MPITRAMPOLINE_MPIEXEC -n 2 -ppn 1 set_gpu_rank julia --project=$experiment_dir -e 'sleep(30)
+\$MPITRAMPOLINE_MPIEXEC -n 2 -ppn 1 $(joinpath(pkgdir(ClimaCalibrate), "src", "backends", "set_gpu_rank.sh")) julia --project=$experiment_dir -e 'sleep(30)
 '
 
 
