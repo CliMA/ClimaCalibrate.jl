@@ -1,6 +1,12 @@
 ClimaCalibrate.jl Release Notes
 ========================
 
+main
+-------
+
+- Add `dims` keyword argument to observation and covariance constructors in
+  the `ObservationRecipe` module [#318](https://github.com/CliMA/ClimaCalibrate.jl/pull/318)
+
 v0.3.0
 -------
 

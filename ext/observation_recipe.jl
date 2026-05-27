@@ -5,12 +5,16 @@ import ClimaCalibrate.ObservationRecipe:
     ScalarCovariance, SeasonalDiagonalCovariance, SVDplusDCovariance
 import ClimaCalibrate.ObservationRecipe: QuantileRegularization
 
+const FLATTENED_DIMS =
+    ("longitude", "latitude", "pressure_level", "x", "y", "z", "time")
+
 """
     covariance(
         covar_estimator::ScalarCovariance,
         vars::Union{OutputVar, Iterable{OutputVar}},
         start_date,
-        end_date
+        end_date;
+        dims = $FLATTENED_DIMS,
     )
 
 Compute the scalar covariance matrix.
@@ -21,7 +25,8 @@ function ObservationRecipe.covariance(
     covar_estimator::ScalarCovariance,
     vars,
     start_date,
-    end_date,
+    end_date;
+    dims = FLATTENED_DIMS,
 )
     # Convert dates to Dates.DateTime if they are strings
     start_date = Dates.DateTime(start_date)
@@ -40,7 +45,7 @@ function ObservationRecipe.covariance(
 
     diagonals = map(vars) do var
         var = ClimaAnalysis.window(var, "time", left = start_date, right = end_date)
-        flattened_data = ClimaAnalysis.flatten(var).data
+        flattened_data = ClimaAnalysis.flatten(var; dims).data
         diag_cov = ones(eltype(flattened_data), size(flattened_data)...)
         diag_cov .*= covar_estimator.scalar
 
@@ -50,7 +55,8 @@ function ObservationRecipe.covariance(
                     _lat_weights_var(
                         var,
                         min_cosd_lat = covar_estimator.min_cosd_lat,
-                    ),
+                    );
+                    dims,
                 ).data
             diag_cov .*= flattened_lat_weights
         end
@@ -64,7 +70,8 @@ end
         covar_estimator::SeasonalDiagonalCovariance,
         vars::Union{OutputVar, Iterable{OutputVar}},
         start_date,
-        end_date
+        end_date;
+        dims = $FLATTENED_DIMS,
     )
 
 Compute the noise covariance matrix of seasonal quantities from `var` that is
@@ -77,7 +84,8 @@ function ObservationRecipe.covariance(
     covar_estimator::SeasonalDiagonalCovariance,
     vars,
     start_date,
-    end_date,
+    end_date;
+    dims = FLATTENED_DIMS,
 )
     # Convert dates to Dates.DateTime if they are strings
     start_date = Dates.DateTime(start_date)
@@ -145,7 +153,7 @@ function ObservationRecipe.covariance(
         end
 
         # Add regularization
-        diag_cov = ClimaAnalysis.flatten(seasonal_variance_var).data
+        diag_cov = ClimaAnalysis.flatten(seasonal_variance_var; dims).data
         !iszero(covar_estimator.regularization) &&
             (diag_cov .+= covar_estimator.regularization)
 
@@ -156,7 +164,8 @@ function ObservationRecipe.covariance(
                     _lat_weights_var(
                         seasonal_variance_var,
                         min_cosd_lat = covar_estimator.min_cosd_lat,
-                    ),
+                    );
+                    dims,
                 ).data
             diag_cov .*= flattened_lat_weights
         end
@@ -170,7 +179,8 @@ end
         covar_estimator::SVDplusDCovariance,
         vars::Union{OutputVar, Iterable{OutputVar}},
         start_date,
-        end_date
+        end_date;
+        dims = $FLATTENED_DIMS,
     )
 
 Compute the `EKP.SVDplusD` covariance matrix appropriate for a sample with times
@@ -180,7 +190,8 @@ function ObservationRecipe.covariance(
     covar_estimator::SVDplusDCovariance,
     vars,
     start_date,
-    end_date,
+    end_date;
+    dims = FLATTENED_DIMS,
 )
     vars = _vars_to_iterable(vars)
 
@@ -202,7 +213,7 @@ function ObservationRecipe.covariance(
     end
 
     # Form stacked samples
-    stacked_samples = _stacked_samples(vars, sample_date_ranges)
+    stacked_samples = _stacked_samples(vars, sample_date_ranges, dims)
 
     # Check samples are all the same size
     all(x -> x == length(first(stacked_samples)), length.(stacked_samples)) ||
@@ -218,6 +229,7 @@ function ObservationRecipe.covariance(
         vars,
         start_date,
         end_date,
+        dims,
         min_cosd_lat = covar_estimator.min_cosd_lat,
     )
 
@@ -252,17 +264,18 @@ function ObservationRecipe.covariance(
         vars,
         sample_date_ranges,
         model_error_scale,
+        dims,
     )
 
     return EKP.SVDplusD(gamma_low_rank, model_error_scale + regularization)
 end
 
 """
-    create_regularization(regularization::AbstractFloat, _, _, _, _)
+    create_regularization(regularization::AbstractFloat, _, _, _, _, _)
 
 Create the regularization matrix of the form `regularization * I`.
 """
-function create_regularization(regularization::AbstractFloat, _, _, _, _)
+function create_regularization(regularization::AbstractFloat, _, _, _, _, _)
     return regularization * I
 end
 
@@ -273,6 +286,7 @@ end
         vars,
         sample_date_ranges,
         model_error_scale,
+        dims,
     )
 
 Create the regularization matrix where each variable gets its own regularization
@@ -289,8 +303,9 @@ function create_regularization(
     vars,
     sample_date_ranges,
     model_error_scale,
+    dims,
 )
-    metadata = _metadata_for_stacked_sample(vars, sample_date_ranges)
+    metadata = _metadata_for_stacked_sample(vars, sample_date_ranges, dims)
     index = 1
     indices_vec = []
     for md in metadata
@@ -335,6 +350,7 @@ end
         vars::Iterable{OutputVar},
         start_date,
         end_date,
+        dims;
         min_cosd_lat = 0.1
     )
 
@@ -347,7 +363,8 @@ function _apply_lat_weights_to_samples!(
     stacked_sample_matrix,
     vars,
     start_date,
-    end_date;
+    end_date,
+    dims;
     min_cosd_lat = 0.1,
 )
     flattened_lat_weights = (
@@ -360,7 +377,8 @@ function _apply_lat_weights_to_samples!(
                     right = end_date,
                 ),
                 min_cosd_lat = min_cosd_lat,
-            ),
+            );
+            dims,
         ).data for var in vars
     )
     flattened_lat_weights = sqrt.(vcat(flattened_lat_weights...))
@@ -379,6 +397,7 @@ end
         vars,
         start_date,
         end_date;
+        dims = FLATTENED_DIMS,
         name = nothing
     )
 
@@ -395,6 +414,7 @@ function ObservationRecipe.observation(
     vars,
     start_date,
     end_date;
+    dims = FLATTENED_DIMS,
     name = nothing,
 )
     # Convert dates to Dates.DateTime if they are strings
@@ -430,7 +450,8 @@ function ObservationRecipe.observation(
         covar_estimator,
         vars,
         start_date,
-        end_date,
+        end_date;
+        dims,
     )
 
     # Concatenate names and separating them with a semicolon
@@ -522,7 +543,7 @@ function ObservationRecipe.change_data_type(var::OutputVar, data_type)
 end
 
 """
-    _stacked_samples(vars::Iterable{OutputVar}, sample_date_ranges)
+    _stacked_samples(vars::Iterable{OutputVar}, sample_date_ranges, dims)
 
 Make a vector of stacked samples from multiple `OutputVar`s and an iterable of
 2-iterable of dates.
@@ -530,7 +551,7 @@ Make a vector of stacked samples from multiple `OutputVar`s and an iterable of
 Each sample corresponds to a single minibatch and the sample is stacked, because
 it may contains multiple variables.
 """
-function _stacked_samples(vars, sample_date_ranges)
+function _stacked_samples(vars, sample_date_ranges, dims)
     return map(sample_date_ranges) do (sample_start_date, sample_end_date)
         vcat(
             (
@@ -540,7 +561,8 @@ function _stacked_samples(vars, sample_date_ranges)
                         "time",
                         left = sample_start_date,
                         right = sample_end_date,
-                    ),
+                    );
+                    dims,
                 ).data for var in vars
             )...,
         )
@@ -555,7 +577,7 @@ Get metadata for a single stacked sample.
 Since this is metadata from only a single stacked sample, you cannot use the
 metadata for time information as the time information differs for each sample.
 """
-function _metadata_for_stacked_sample(vars, sample_date_ranges)
+function _metadata_for_stacked_sample(vars, sample_date_ranges, dims)
     sample_start_date, sample_end_date = first(sample_date_ranges)
     metadata = []
     for var in vars
@@ -566,7 +588,8 @@ function _metadata_for_stacked_sample(vars, sample_date_ranges)
                     "time",
                     left = sample_start_date,
                     right = sample_end_date,
-                ),
+                );
+                dims,
             ).metadata
         push!(metadata, md)
     end
