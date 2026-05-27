@@ -353,7 +353,8 @@ end
         (Dates.DateTime(i, 12, 1), Dates.DateTime(i + 1, 9, 1)) for
         i in 2007:2009
     ]
-    stacked_samples = ext._stacked_samples(vars, sample_date_ranges)
+    stacked_samples =
+        ext._stacked_samples(vars, sample_date_ranges, ext.FLATTENED_DIMS)
 
     @test length(stacked_samples) == length(sample_date_ranges)
 
@@ -624,7 +625,8 @@ end
         (Dates.DateTime(i, 12, 1), Dates.DateTime(i, 12, 1)) for i in 2007:2009
     ]
 
-    stacked_samples = ext._stacked_samples((var,), sample_date_ranges)
+    stacked_samples =
+        ext._stacked_samples((var,), sample_date_ranges, ext.FLATTENED_DIMS)
     stacked_sample_matrix_no_lat_weights = hcat(stacked_samples...)
     stacked_sample_matrix_with_lat_weights =
         copy(stacked_sample_matrix_no_lat_weights)
@@ -634,6 +636,7 @@ end
         (var,),
         Dates.DateTime(2007, 12, 1),
         Dates.DateTime(2007, 12, 1),
+        ext.FLATTENED_DIMS,
         min_cosd_lat = 0.15,
     )
     time_slice = ClimaAnalysis.slice(var, time = Dates.DateTime(2007, 12, 1))
@@ -712,7 +715,13 @@ end
     @test svd_plus_d_covar.diag_cov == Diagonal(
         vec(
             mean(
-                hcat(ext._stacked_samples((var,), sample_date_ranges)...),
+                hcat(
+                    ext._stacked_samples(
+                        (var,),
+                        sample_date_ranges,
+                        ext.FLATTENED_DIMS,
+                    )...,
+                ),
                 dims = 2,
             ) .^ 2,
         ),
@@ -736,7 +745,13 @@ end
           Diagonal([regularization for _ in 1:sample_size]) + Diagonal(
         vec(
             model_error_scale .* mean(
-                hcat(ext._stacked_samples((var,), sample_date_ranges)...),
+                hcat(
+                    ext._stacked_samples(
+                        (var,),
+                        sample_date_ranges,
+                        ext.FLATTENED_DIMS,
+                    )...,
+                ),
                 dims = 2,
             ),
         ) .^ 2,
@@ -893,7 +908,13 @@ end
     )
         return vec(
             model_error_scale .* mean(
-                hcat(ext._stacked_samples(vars, sample_date_ranges)...),
+                hcat(
+                    ext._stacked_samples(
+                        vars,
+                        sample_date_ranges,
+                        ext.FLATTENED_DIMS,
+                    )...,
+                ),
                 dims = 2,
             ),
         ) .^ 2
