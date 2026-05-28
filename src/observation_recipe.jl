@@ -9,6 +9,8 @@ export ScalarCovariance,
     short_names,
     seasonally_aligned_yearly_sample_date_ranges,
     change_data_type,
+    reconstruct_g,
+    reconstruct_g_mean,
     reconstruct_g_mean_final,
     reconstruct_diag_cov,
     reconstruct_vars
@@ -362,6 +364,10 @@ function short_names end
 function seasonally_aligned_yearly_sample_date_ranges end
 
 function change_data_type end
+
+function reconstruct_g end
+
+function reconstruct_g_mean end
 
 function reconstruct_g_mean_final end
 

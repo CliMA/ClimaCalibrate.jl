@@ -4,6 +4,11 @@ ClimaCalibrate.jl Release Notes
 main
 -------
 
+- Add `reconstruct_g` for reconstructing the G ensemble matrix as a matrix of
+  `OutputVar`s and `reconstruct_g_mean` for reconstructing the mean of the G
+  ensemble matrix as a vector of `OutputVar`s
+  [#319](https://github.com/CliMA/ClimaCalibrate.jl/pull/319)
+
 v0.3.1
 -------
 
