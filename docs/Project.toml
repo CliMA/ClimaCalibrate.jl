@@ -12,6 +12,10 @@ EnsembleKalmanProcesses = "aa8a2aa5-91d8-4396-bcef-d4f2ec43552d"
 JLD2 = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
 Literate = "98b081ad-f1c9-55d3-8b20-4c87d4299306"
 
+[weakdeps]
+ClimaCore = "d414da3d-4745-48bb-8d80-42e94e092884"
+
 [compat]
 ClimaAtmos = "=0.28.3"
+ClimaCore = "=0.14.51"
 EnsembleKalmanProcesses = "2"
