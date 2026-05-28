@@ -1539,6 +1539,119 @@ end
     @test obs3 == [obs_series.observations[1], obs_series.observations[2]]
 end
 
+@testset "Reconstruct g and g mean" begin
+    time =
+        ClimaAnalysis.Utils.date_to_time.(
+            Dates.DateTime(2007, 12),
+            [Dates.DateTime(2007, 12) + Dates.Month(3 * i) for i in 0:47],
+        )
+    time_var =
+        TemplateVar() |>
+        add_dim("time", time, units = "s") |>
+        add_attribs(
+            short_name = "time",
+            long_name = "Time",
+            start_date = "2007-12-1",
+            blah = "blah2",
+        ) |>
+        one_to_n_data() |>
+        initialize
+
+    lon = [-45.0, 0.0, 45.0]
+    lon_var =
+        TemplateVar() |>
+        add_dim("lon", lon, units = "degrees") |>
+        add_dim("time", time, units = "s") |>
+        add_attribs(
+            short_name = "lon",
+            long_name = "Longitude",
+            start_date = "2007-12-1",
+            super = "fun",
+        ) |>
+        one_to_n_data() |>
+        initialize
+
+    trim_var(var, start_date, end_date) =
+        ClimaAnalysis.window(var, "time", left = start_date, right = end_date)
+
+    time_var_length = length(
+        trim_var(
+            time_var,
+            Dates.DateTime(2007, 12),
+            Dates.DateTime(2008, 9),
+        ).data,
+    )
+    lon_var_length = length(
+        trim_var(
+            lon_var,
+            Dates.DateTime(2007, 12),
+            Dates.DateTime(2008, 9),
+        ).data,
+    )
+
+    covar_estimator = ObservationRecipe.ScalarCovariance()
+
+    observations = [
+        ObservationRecipe.observation(
+            covar_estimator,
+            (time_var, lon_var),
+            Dates.DateTime(year, 12),
+            Dates.DateTime(year + 1, 9),
+        ) for year in (2007, 2008, 2009, 2010)
+    ]
+
+    obs_series = EKP.ObservationSeries(
+        Dict(
+            "observations" => observations,
+            "names" => ["1", "2", "3", "4"],
+            "minibatcher" =>
+                ClimaCalibrate.minibatcher_over_samples([1, 2, 3, 4], 2),
+        ),
+    )
+
+    prior = constrained_gaussian("pi_groups_coeff", 1.0, 0.3, 0, Inf)
+
+    eki = EKP.EnsembleKalmanProcess(
+        obs_series,
+        EKP.TransformUnscented(prior, impose_prior = true),
+        verbose = true,
+        scheduler = EKP.DataMisfitController(on_terminate = "continue"),
+    )
+    G_ens = ClimaCalibrate.g_ens_matrix(eki)
+    col = vcat(
+        fill(1, time_var_length),
+        fill(2, lon_var_length),
+        fill(3, time_var_length),
+        fill(4, lon_var_length),
+    )
+    M = hcat(col, 2 * col, 3 * col)
+    G_ens .= M
+    EKP.update_ensemble!(eki, G_ens)
+
+    g_ens_as_vars = ObservationRecipe.reconstruct_g(eki, 1)
+    @test size(g_ens_as_vars) == (4, 3)
+    @test ClimaAnalysis.short_name.(g_ens_as_vars[:, 1]) ==
+          ["time", "lon", "time", "lon"]
+    for I in CartesianIndices(g_ens_as_vars)
+        i, j = Tuple(I)
+        @test all(g_ens_as_vars[i, j].data .== i * j)
+    end
+    # This is an error thrown by EKP which is a BoundsError, but we only care
+    # that some kind of error is thrown here
+    @test_throws Any ObservationRecipe.reconstruct_g(eki, 2)
+
+    g_mean_as_vars = ObservationRecipe.reconstruct_g_mean(eki, 1)
+    @test length(g_mean_as_vars) == 4
+    @test ClimaAnalysis.short_name.(g_mean_as_vars) ==
+          ["time", "lon", "time", "lon"]
+    for (i, var) in enumerate(g_mean_as_vars)
+        # For i = 1, it is the average of 1, 2, and 3.
+        # For i = 2, it is the average of 2, 4, and 6.
+        # This pattern continues for i = 3 and i = 4.
+        @test all(var.data .== 2 * i)
+    end
+end
+
 @testset "Reconstruct mean g ens final" begin
     if pkgversion(EnsembleKalmanProcesses) > v"2.4.3"
         # Test with a two OutputVars and two iterations with a single

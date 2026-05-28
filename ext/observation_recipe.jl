@@ -700,6 +700,83 @@ function _lat_weights_var(var::OutputVar; min_cosd_lat = 0.1)
 end
 
 """
+    reconstruct_g(ekp::EKP.EnsembleKalmanProcess, it::Integer)
+
+Reconstruct the G ensemble matrix of the `it`th iteration as a matrix of
+`OutputVar`s.
+"""
+function ObservationRecipe.reconstruct_g(
+    ekp::EKP.EnsembleKalmanProcess,
+    it::Integer,
+)
+    obs_series = EKP.get_observation_series(ekp)
+    metadata = ClimaCalibrate.get_metadata_for_nth_iteration(obs_series, it)
+    all(m isa ClimaAnalysis.Var.Metadata for m in metadata) || error(
+        "Getting the short names from an observation is only supported with metadata from ClimaAnalysis",
+    )
+
+    g_ens = EKP.get_g(ekp, it)
+    num_cols = size(g_ens)[2]
+
+    # Check if length of g ensemble is the same as the length of the data in the metadatas
+    total_metadata_length =
+        sum(ClimaAnalysis.flattened_length(m) for m in metadata)
+    size(g_ens, 1) != total_metadata_length && error(
+        "Length of g_ens is not the same as the length of all the metadata",
+    )
+
+    # Reconstruct each OutputVar for every ensemble member (column of g_ens)
+    minibatch_indices =
+        ObservationRecipe._get_minibatch_indices_for_nth_iteration(
+            obs_series,
+            it,
+        )
+    vars_per_ens = [
+        map(metadata, minibatch_indices) do m, range
+            ClimaAnalysis.unflatten(m, g_ens[range, col])
+        end for col in 1:num_cols
+    ]
+    return hcat(vars_per_ens...)
+end
+
+"""
+    reconstruct_g_mean(ekp::EKP.EnsembleKalmanProcess, it::Integer)
+
+Reconstruct the mean forward model evaluation at the `it`th iteration as a
+vector of `OutputVar`s.
+"""
+function ObservationRecipe.reconstruct_g_mean(
+    ekp::EKP.EnsembleKalmanProcess,
+    it::Integer,
+)
+    obs_series = EKP.get_observation_series(ekp)
+    metadata = ClimaCalibrate.get_metadata_for_nth_iteration(obs_series, it)
+    all(m isa ClimaAnalysis.Var.Metadata for m in metadata) || error(
+        "Getting the short names from an observation is only supported with metadata from ClimaAnalysis",
+    )
+
+    g_mean = EKP.get_g_mean(ekp, it)
+
+    # Check if length of g ensemble is the same as the length of the data in the metadatas
+    total_metadata_length =
+        sum(ClimaAnalysis.flattened_length(m) for m in metadata)
+    length(g_mean) != total_metadata_length && error(
+        "Length of g_mean is not the same as the length of all the metadata",
+    )
+
+    # Reconstruct each OutputVar from the metadata
+    minibatch_indices =
+        ObservationRecipe._get_minibatch_indices_for_nth_iteration(
+            obs_series,
+            it,
+        )
+    vars = map(metadata, minibatch_indices) do m, range
+        ClimaAnalysis.unflatten(m, g_mean[range])
+    end
+    return vars
+end
+
+"""
     reconstruct_g_mean_final(ekp::EKP.EnsembleKalmanProcess)
 
 Reconstruct the mean forward model evaluation at the last iteration as a
@@ -708,34 +785,7 @@ vector of `OutputVar`s.
 function ObservationRecipe.reconstruct_g_mean_final(
     ekp::EKP.EnsembleKalmanProcess,
 )
-    obs_series = EKP.get_observation_series(ekp)
-    metadata = ClimaCalibrate.get_metadata_for_nth_iteration(
-        obs_series,
-        EKP.get_N_iterations(ekp),
-    )
-    all(m isa ClimaAnalysis.Var.Metadata for m in metadata) || error(
-        "Getting the short names from an observation is only supported with metadata from ClimaAnalysis",
-    )
-
-    g_mean = EKP.get_g_mean_final(ekp)
-
-    # Check if length of g ensemble is the same as the length of the data in the metadatas
-    total_metadata_length =
-        sum(ClimaAnalysis.flattened_length(m) for m in metadata)
-    length(g_mean) != total_metadata_length && error(
-        "Length of g_mean_final is not the same as the length of all the metadata",
-    )
-
-    # Reconstruct each OutputVar from the metadata
-    minibatch_indices =
-        ObservationRecipe._get_minibatch_indices_for_nth_iteration(
-            obs_series,
-            EKP.get_N_iterations(ekp),
-        )
-    vars = map(metadata, minibatch_indices) do m, range
-        ClimaAnalysis.unflatten(m, g_mean[range])
-    end
-    return vars
+    ObservationRecipe.reconstruct_g_mean(ekp, EKP.get_N_iterations(ekp))
 end
 
 """
