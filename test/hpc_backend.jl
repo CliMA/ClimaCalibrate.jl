@@ -14,6 +14,8 @@ backend = ClimaCalibrate.get_backend()
 directives = Dict{Symbol, Any}(:time => 5, :ntasks => 1, :cpus_per_task => 1)
 if backend == ClimaCalibrate.DerechoBackend
     directives[:queue] = "preempt"
+    directives[:gpus_per_task] = 1
+    directives[:cpus_per_task] = 4
 end
 
 climacommon_dict = Dict(
