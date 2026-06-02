@@ -28,23 +28,66 @@ function ObservationRecipe.covariance(
     end_date;
     dims = FLATTENED_DIMS,
 )
-    # Convert dates to Dates.DateTime if they are strings
-    start_date = Dates.DateTime(start_date)
-    end_date = Dates.DateTime(end_date)
+    return _covariance(covar_estimator, vars, start_date, end_date; dims)
+end
 
+"""
+    covariance(
+        covar_estimator::ScalarCovariance,
+        vars::Union{OutputVar, Iterable{OutputVar}};
+        dims = $FLATTENED_DIMS,
+    )
+
+Compute the scalar covariance matrix.
+
+Data from `vars` will not be used to compute the covariance matrix.
+"""
+function ObservationRecipe.covariance(
+    covar_estimator::ScalarCovariance,
+    vars;
+    dims = FLATTENED_DIMS,
+)
+    return _covariance(covar_estimator, vars, nothing, nothing; dims)
+end
+
+"""
+    _covariance(
+        covar_estimator::ScalarCovariance,
+        vars,
+        start_date,
+        end_date;
+        dims = FLATTENED_DIMS,
+    )
+
+Helper function for creating a scalar covariance matrix when `start_date` and
+`end_date` are either `nothing` or values convertible to `Dates.DateTime`.
+"""
+function _covariance(
+    covar_estimator::ScalarCovariance,
+    vars,
+    start_date,
+    end_date;
+    dims = FLATTENED_DIMS,
+)
     vars = _vars_to_iterable(vars)
+    dates_provided = !isnothing(start_date) && !isnothing(end_date)
+    if dates_provided
+        # Convert dates to Dates.DateTime if they are strings
+        start_date = Dates.DateTime(start_date)
+        end_date = Dates.DateTime(end_date)
 
-    for var in vars
-        _check_time_dim(var)
+        _check_time_dim_of_vars(vars, start_date, end_date)
     end
 
-    # Check if dates for start_date and end_date are in var
-    _check_dates_in_var(vars, start_date, end_date)
-
-    start_date <= end_date || error("$start_date should earlier than $end_date")
-
     diagonals = map(vars) do var
-        var = ClimaAnalysis.window(var, "time", left = start_date, right = end_date)
+        if dates_provided
+            var = ClimaAnalysis.window(
+                var,
+                "time",
+                left = start_date,
+                right = end_date,
+            )
+        end
         flattened_data = ClimaAnalysis.flatten(var; dims).data
         diag_cov = ones(eltype(flattened_data), size(flattened_data)...)
         diag_cov .*= covar_estimator.scalar
@@ -93,14 +136,7 @@ function ObservationRecipe.covariance(
 
     vars = _vars_to_iterable(vars)
 
-    for var in vars
-        _check_time_dim(var)
-    end
-
-    # Check if dates for start_date and end_date are in var
-    _check_dates_in_var(vars, start_date, end_date)
-
-    start_date <= end_date || error("$start_date should earlier than $end_date")
+    _check_time_dim_of_vars(vars, start_date, end_date)
 
     diagonals = map(vars) do var
         # Var is an OutputVar whose time slices are seasonal statistics
@@ -417,23 +453,63 @@ function ObservationRecipe.observation(
     dims = FLATTENED_DIMS,
     name = nothing,
 )
-    # Convert dates to Dates.DateTime if they are strings
-    start_date = Dates.DateTime(start_date)
-    end_date = Dates.DateTime(end_date)
+    return _observation(covar_estimator, vars, start_date, end_date; dims, name)
+end
 
-    start_date <= end_date ||
-        error("$start_date should not be later than $end_date")
+"""
+    observation(
+        covar_estimator::ScalarCovariance,
+        vars;
+        dims = FLATTENED_DIMS,
+        name = nothing
+    )
 
+Return an `EKP.Observation` with data in `vars`, a covariance matrix defined by
+`covar_estimator`, `name` determined from the short names of `vars`, and
+metadata.
+
+!!! note "Metadata"
+    Metadata in `EKP.observation` is only added with versions of
+    EnsembleKalmanProcesses later than v2.4.2.
+"""
+function ObservationRecipe.observation(
+    covar_estimator::ScalarCovariance,
+    vars;
+    dims = FLATTENED_DIMS,
+    name = nothing,
+)
+    return _observation(covar_estimator, vars, nothing, nothing; dims, name)
+end
+
+"""
+    _observation(
+        covar_estimator::AbstractCovarianceEstimator,
+        vars,
+        start_date,
+        end_date;
+        dims = FLATTENED_DIMS,
+        name = nothing,
+    )
+
+Helper function for creating an `EKP.Observation` when `start_date` and
+`end_date` are either `nothing` or values convertible to `Dates.DateTime`.
+"""
+function _observation(
+    covar_estimator::AbstractCovarianceEstimator,
+    vars,
+    start_date,
+    end_date;
+    dims = FLATTENED_DIMS,
+    name = nothing,
+)
     vars = _vars_to_iterable(vars)
+    dates_provided = !isnothing(start_date) && !isnothing(end_date)
+    if dates_provided
+        # Convert dates to Dates.DateTime if they are strings
+        start_date = Dates.DateTime(start_date)
+        end_date = Dates.DateTime(end_date)
 
-    # Check if start date and end date exist in vars
-    _check_dates_in_var(vars, start_date, end_date)
-
-    # Check if dates are unique and short name exists
-    for var in vars
-        allunique(ClimaAnalysis.dates(var)) || @warn(
-            "Dates in OutputVar with short name $(short_name(var)) are not unique. You will not be able to use GEnsembleBuilder",
-        )
+        _check_time_dim_of_vars(vars, start_date, end_date)
     end
 
     any(==(""), ClimaAnalysis.short_name.(vars)) && @warn(
@@ -441,18 +517,29 @@ function ObservationRecipe.observation(
     )
 
     # Get the flattened sample and metadata
-    windowed_vars =
-        ClimaAnalysis.window.(vars, "time", left = start_date, right = end_date)
-    flat_vars = map(var -> ClimaAnalysis.flatten(var; dims), windowed_vars)
+    maybe_windowed_vars =
+        dates_provided ?
+        ClimaAnalysis.window.(
+            vars,
+            "time",
+            left = start_date,
+            right = end_date,
+        ) : vars
+    flat_vars =
+        map(var -> ClimaAnalysis.flatten(var; dims), maybe_windowed_vars)
     stacked_sample = vcat((flat_var.data for flat_var in flat_vars)...)
     metadata = [(flat_var.metadata for flat_var in flat_vars)...]
-    covar = ObservationRecipe.covariance(
-        covar_estimator,
-        vars,
-        start_date,
-        end_date;
-        dims,
-    )
+    if dates_provided
+        covar = ObservationRecipe.covariance(
+            covar_estimator,
+            vars,
+            start_date,
+            end_date;
+            dims,
+        )
+    else
+        covar = ObservationRecipe.covariance(covar_estimator, vars; dims)
+    end
 
     # Concatenate names and separating them with a semicolon
     isnothing(name) && (
@@ -470,7 +557,6 @@ function ObservationRecipe.observation(
         ),
     )
 end
-
 """
     short_names(obs::EKP.Observation)
 
