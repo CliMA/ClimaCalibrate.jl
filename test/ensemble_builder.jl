@@ -314,6 +314,56 @@ end
     @test matched_var.attributes == var.attributes
 end
 
+@testset "GEnsembleBuilder with OutputVar with no time dimension" begin
+    lon = [-45.0, 0.0, 45.0]
+    x = [1.0, 3.0]
+    lon_var =
+        TemplateVar() |>
+        add_dim("lon", lon, units = "degrees") |>
+        add_dim("x", x, units = "m") |>
+        add_attribs(
+            short_name = "hi",
+            long_name = "hello",
+            start_date = "2007-12-1",
+            super = "fun",
+            units = "m",
+        ) |>
+        one_to_n_data() |>
+        initialize
+
+    covar_estimator = ObservationRecipe.ScalarCovariance()
+
+    obs_vec = [ObservationRecipe.observation(covar_estimator, lon_var)]
+    obs_series = EKP.ObservationSeries(
+        Dict(
+            "observations" => obs_vec,
+            "names" => ["1"],
+            "minibatcher" =>
+                ClimaCalibrate.minibatcher_over_samples([1], 1),
+        ),
+    )
+
+    prior = constrained_gaussian("pi_groups_coeff", 1.0, 0.3, 0, Inf)
+    eki = EKP.EnsembleKalmanProcess(
+        obs_series,
+        EKP.TransformUnscented(prior, impose_prior = true),
+        verbose = true,
+        scheduler = EKP.DataMisfitController(on_terminate = "continue"),
+    )
+
+    g_ens_builder = EnsembleBuilder.GEnsembleBuilder(eki)
+    g_ens = EnsembleBuilder.get_g_ensemble(g_ens_builder)
+    @test size(g_ens) == (6, EKP.get_N_ens(eki))
+    @test size(g_ens_builder.completed) == (1, EKP.get_N_ens(eki))
+    @test keys(g_ens_builder.metadata_by_short_name) == Set(["hi"])
+
+    for i in 1:3
+        @test !EnsembleBuilder.is_complete(g_ens_builder)
+        @test EnsembleBuilder.fill_g_ens_col!(g_ens_builder, i, lon_var)
+    end
+    @test EnsembleBuilder.is_complete(g_ens_builder)
+end
+
 @testset "Use GEnsembleBuilder for a fake calibration" begin
     pkgversion(EnsembleKalmanProcesses) > v"2.4.3" || return
 
