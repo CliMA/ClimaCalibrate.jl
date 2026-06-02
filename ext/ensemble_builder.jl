@@ -250,9 +250,11 @@ function _try_fill_g_ens_col_with_var!(
         data,
     ) || return false
 
-    match_dates_var = _match_dates(var, metadata)
+    if ClimaAnalysis.has_time(var) && ClimaAnalysis.has_time(metadata)
+        var = _match_dates(var, metadata)
+    end
     g_ens_builder.g_ens[range, col_idx] .=
-        ClimaAnalysis.flatten(match_dates_var, metadata).data
+        ClimaAnalysis.flatten(var, metadata).data
     if g_ens_builder.completed[index, col_idx]
         @warn(
             "This portion of the G ensemble matrix ($range, $col_idx) is already filled out by another OutputVar. Replacing the contents with the new OutputVar"
