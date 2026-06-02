@@ -335,9 +335,11 @@ end
         initialize
 
     lon = [-45.0, 0.0, 45.0]
+    x = [1.0]
     lon_var =
         TemplateVar() |>
         add_dim("lon", lon, units = "degrees") |>
+        add_dim("x", x, units = "m") |>
         add_dim("time", time, units = "s") |>
         add_attribs(
             short_name = "hi",
@@ -393,7 +395,8 @@ end
                 "time",
                 left = start_date,
                 right = end_date,
-            ),
+            );
+            dims = ext.FLATTENED_DIMS,
         )
     end
 
@@ -410,7 +413,7 @@ end
         @test EnsembleBuilder.fill_g_ens_col!(
             g_ens_builder,
             i,
-            permutedims(lon_var, ("time", "lon")),
+            permutedims(lon_var, ("time", "lon", "x")),
         )
     end
     @test EnsembleBuilder.is_complete(g_ens_builder)

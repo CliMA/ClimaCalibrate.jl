@@ -1271,6 +1271,8 @@ end
 @testset "Observation" begin
     lat = [-90.0, -30.0, 30.0, 90.0]
     lon = [-60.0, -30.0, 0.0, 30.0, 60.0]
+    x = [1.0, 2.0]
+    y = [3.0]
     time =
         ClimaAnalysis.Utils.date_to_time.(
             Dates.DateTime(2007, 12),
@@ -1281,6 +1283,8 @@ end
         add_dim("time", time, units = "s") |>
         add_dim("lon", lon, units = "degrees") |>
         add_dim("lat", lat, units = "degrees") |>
+        add_dim("x", x, units = "m") |>
+        add_dim("y", y, units = "m") |>
         add_attribs(
             short_name = "hi",
             long_name = "hello",
@@ -1325,8 +1329,13 @@ end
             left = start_date,
             right = end_date,
         )
-    data1 = ClimaAnalysis.flatten(window_dates(var)).data
-    data2 = ClimaAnalysis.flatten(window_dates(neg_var)).data
+    data1 =
+        ClimaAnalysis.flatten(window_dates(var); dims = ext.FLATTENED_DIMS).data
+    data2 =
+        ClimaAnalysis.flatten(
+            window_dates(neg_var);
+            dims = ext.FLATTENED_DIMS,
+        ).data
 
     flattened_data = vcat(data1, data2)
     @test obs.samples[1] == flattened_data
@@ -1341,9 +1350,9 @@ end
 
         # Test if metadata is correct by unflattening back to an OutputVar
         unflattened_var =
-            ClimaAnalysis.unflatten(obs.metadata[1], obs.samples[1][1:80])
+            ClimaAnalysis.unflatten(obs.metadata[1], obs.samples[1][1:160])
         neg_unflattened_var =
-            ClimaAnalysis.unflatten(obs.metadata[2], obs.samples[1][81:end])
+            ClimaAnalysis.unflatten(obs.metadata[2], obs.samples[1][161:end])
 
         windowed_var = window_dates(var)
         neg_windowed_var = window_dates(neg_var)
