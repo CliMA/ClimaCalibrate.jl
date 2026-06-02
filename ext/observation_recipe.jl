@@ -443,7 +443,7 @@ function ObservationRecipe.observation(
     # Get the flattened sample and metadata
     windowed_vars =
         ClimaAnalysis.window.(vars, "time", left = start_date, right = end_date)
-    flat_vars = map(var -> ClimaAnalysis.flatten(var), windowed_vars)
+    flat_vars = map(var -> ClimaAnalysis.flatten(var; dims), windowed_vars)
     stacked_sample = vcat((flat_var.data for flat_var in flat_vars)...)
     metadata = [(flat_var.metadata for flat_var in flat_vars)...]
     covar = ObservationRecipe.covariance(
