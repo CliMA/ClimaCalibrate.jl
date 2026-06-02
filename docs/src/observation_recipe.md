@@ -29,10 +29,10 @@ from, often limited, time series observations.
 
 ### Necessary data preprocessing
 
-The `OutputVar`s should represent **time series data of summary statistics**.
-For example, to compute seasonal averages of a `OutputVar`, one can use
-`ClimaAnalysis.average_season_across_time`, which will produce a `OutputVar`
-that can be used with either `SeasonalDiagonalCovariance` or
+In most cases, the `OutputVar`s represent **time series data of summary
+statistics**. For example, to compute seasonal averages of a `OutputVar`, one
+can use `ClimaAnalysis.average_season_across_time`, which will produce a
+`OutputVar` that can be used with either `SeasonalDiagonalCovariance` or
 `SVDplusDCovariance`.
 
 ```julia

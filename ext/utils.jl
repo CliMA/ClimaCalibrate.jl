@@ -1,4 +1,34 @@
 """
+    _check_time_dim_of_vars(vars, start_date, end_date)
+
+Checking the time dimension of `vars`, `start_date`, and `end_date`.
+
+This function checks the the time dimension of `vars` with `_check_time_dim`,
+the start date and end dates are in `vars`, the `start_date` is before the
+`end_date`, and all dates are unique in `vars`.
+
+This function is used when making an `EKP.Observation` or covariance matrix.
+"""
+function _check_time_dim_of_vars(vars, start_date, end_date)
+    for var in vars
+        _check_time_dim(var)
+    end
+
+    # Check if dates for start_date and end_date are in var
+    _check_dates_in_var(vars, start_date, end_date)
+
+    start_date <= end_date || error("$start_date should earlier than $end_date")
+
+    # Check if dates are unique and short name exists
+    for var in vars
+        allunique(ClimaAnalysis.dates(var)) || @warn(
+            "Dates in OutputVar with short name $(short_name(var)) are not unique. You will not be able to use GEnsembleBuilder",
+        )
+    end
+    return nothing
+end
+
+"""
     _check_dates_in_var(vars::Iterable{OutputVar}, start_date, end_date)
 
 Check `start_date` and `end_date` are in `vars`.

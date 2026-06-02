@@ -599,6 +599,44 @@ end
     )
 end
 
+@testset "ScalarCovariance for OutputVars with no time dimension" begin
+    lat = [-90.0, -30.0, 30.0, 90.0]
+    lon = [-60.0, -30.0, 0.0, 30.0, 60.0]
+    var =
+        TemplateVar() |>
+        add_dim("lon", lon, units = "degrees") |>
+        add_dim("lat", lat, units = "degrees") |>
+        add_attribs(
+            short_name = "hi",
+            long_name = "hello",
+            start_date = "2007-12-1",
+            blah = "blah2",
+        ) |>
+        one_to_n_data(collected = true) |>
+        initialize
+
+    data_length = length(var.data)
+
+    # Only scalar
+    covar_estimator = ObservationRecipe.ScalarCovariance(scalar = 100.0)
+    scalar_covar = ObservationRecipe.covariance(covar_estimator, var)
+    @test Diagonal(ones(data_length) .* 100) == scalar_covar
+
+    # Scalar and latitude weights
+    covar_estimator = ObservationRecipe.ScalarCovariance(
+        scalar = 10.0,
+        use_latitude_weights = true,
+        min_cosd_lat = 0.2,
+    )
+    scalar_covar = ObservationRecipe.covariance(covar_estimator, var)
+    @test scalar_covar ==
+          10.0 .* Diagonal(
+        ClimaAnalysis.flatten(
+            ext._lat_weights_var(var, min_cosd_lat = 0.2),
+        ).data,
+    )
+end
+
 @testset "Latitude weights to matrix of samples" begin
     lat = [-90.0, -30.0, 30.0, 90.0]
     lon = [-60.0, -30.0, 0.0, 30.0, 60.0]
@@ -1389,6 +1427,69 @@ end
         Dates.DateTime(2008, 8),
     )
 
+end
+
+@testset "Observation with no time dimension" begin
+    lat = [-90.0, -30.0, 30.0, 90.0]
+    lon = [-60.0, -30.0, 0.0, 30.0, 60.0]
+    x = [1.0, 2.0]
+    y = [3.0]
+    var =
+        TemplateVar() |>
+        add_dim("lon", lon, units = "degrees") |>
+        add_dim("lat", lat, units = "degrees") |>
+        add_dim("x", x, units = "m") |>
+        add_dim("y", y, units = "m") |>
+        add_attribs(
+            short_name = "hi",
+            long_name = "hello",
+            start_date = "2007-12-1",
+            blah = "blah2",
+        ) |>
+        one_to_n_data(collected = true) |>
+        initialize
+    neg_var = -2.0 * var
+    neg_var.attributes["hi"] = "hello"
+    neg_var.dim_attributes["lon"]["a dim"] = "attribute"
+
+    covar_estimator = ObservationRecipe.ScalarCovariance(scalar = 2.0)
+
+    obs = ObservationRecipe.observation(covar_estimator, (var, neg_var))
+
+    # We already test the covariance matrix, so we test if the flattened
+    # sample is formed correctly and if the metadata is correct
+    # Test if flattened sample is correct
+    data1 = ClimaAnalysis.flatten(var; dims = ext.FLATTENED_DIMS).data
+    data2 = ClimaAnalysis.flatten(neg_var; dims = ext.FLATTENED_DIMS).data
+
+    flattened_data = vcat(data1, data2)
+    @test obs.samples[1] == flattened_data
+
+    # Also check the observation name
+    @test obs.names == ["hi;-2.0 * hi"]
+
+    if pkgversion(EnsembleKalmanProcesses) > v"2.4.2"
+        # Test metadata in observation is there in the EKP object
+        @test obs.metadata isa Vector{T} where {T <: ClimaAnalysis.Var.Metadata}
+        @test length(obs.metadata) == 2
+
+        # Test if metadata is correct by unflattening back to an OutputVar
+        unflattened_var =
+            ClimaAnalysis.unflatten(obs.metadata[1], obs.samples[1][1:40])
+        neg_unflattened_var =
+            ClimaAnalysis.unflatten(obs.metadata[2], obs.samples[1][41:end])
+
+        # Test if the two OutputVars are equivalent
+        @test unflattened_var.data == var.data
+        @test unflattened_var.attributes == var.attributes
+        @test unflattened_var.dim_attributes == var.dim_attributes
+        @test unflattened_var.dims == var.dims
+
+        @test neg_unflattened_var.data == neg_var.data
+        @test neg_unflattened_var.attributes == neg_var.attributes
+        @test neg_unflattened_var.dim_attributes == neg_var.dim_attributes
+        @test neg_unflattened_var.dims == neg_var.dims
+    end
 end
 
 @testset "Short names of observation" begin
