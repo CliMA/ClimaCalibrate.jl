@@ -19,7 +19,7 @@ if nworkers() == 1
             PBSManager(nprocs),
             q = "main",
             A = "UCIT0011",
-            l_select = "1:ncpus=1",
+            l_select = "1:ncpus=1:ngpus=1",
             l_walltime = "00:30:00",
         )
     else
