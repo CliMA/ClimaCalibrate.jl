@@ -3,7 +3,7 @@ import ClimaCalibrate
 
 @testset "PBSManager Unit Tests" begin
     @test ClimaCalibrate.get_manager() == ClimaCalibrate.PBSManager(1)
-    p = ClimaCalibrate.add_workers(1; time = 5, device = :cpu)
+    p = ClimaCalibrate.add_workers(1; time = 5, device = :gpu)
     @test nprocs() == length(p) + 1
     @test workers() == p
     @test remotecall_fetch(myid, 2) == 2
@@ -26,7 +26,7 @@ end
         o = out_file,
         q = "main",
         A = "UCIT0011",
-        l_select = "ncpus=1",
+        l_select = "1:ncpus=1:ngpus=1",
         l_walltime = "00:05:00",
     )
     @test nprocs() == length(p) + 1

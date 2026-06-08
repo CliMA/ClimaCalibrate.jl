@@ -18,7 +18,7 @@ import ClimaCalibrate
     #PBS -A UCIT0011
     #PBS -q preempt
     #PBS -l walltime=00:01:00
-    #PBS -l select=1:ncpus=1
+    #PBS -l select=1:ncpus=1:ngpus=1
 
     sleep 10
     """
