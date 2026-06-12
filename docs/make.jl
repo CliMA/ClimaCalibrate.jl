@@ -39,6 +39,7 @@ makedocs(
         "Observations" => "observations.md",
         "Observation Recipes" => "observation_recipe.md",
         "G Ensemble Builder" => "ensemble_builder.md",
+        "How do I?" => "howdoi.md",
         "API" => "api.md",
     ],
 )
