@@ -21,4 +21,7 @@ include("ensemble_builder.jl")
 include("checkers.jl")
 include("svd_analysis.jl")
 
+include("visualization.jl")
+export Visualization
+
 end # module ClimaCalibrate

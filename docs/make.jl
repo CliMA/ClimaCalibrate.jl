@@ -2,6 +2,8 @@ using Documenter
 using Documenter: doctest
 using ClimaCalibrate
 import ClimaAnalysis # needed to load ClimaAnalysis extension
+import CairoMakie # needed to load Makie extension
+import Makie # needed to load Makie extension
 using Base.CoreLogging
 using DocumenterCitations
 import Literate
@@ -39,6 +41,7 @@ makedocs(
         "Observations" => "observations.md",
         "Observation Recipes" => "observation_recipe.md",
         "G Ensemble Builder" => "ensemble_builder.md",
+        "Visualization" => "visualization.md",
         "How do I?" => "howdoi.md",
         "API" => "api.md",
     ],

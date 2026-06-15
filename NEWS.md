@@ -9,6 +9,10 @@ main
   ensemble matrix as a vector of `OutputVar`s
   [#319](https://github.com/CliMA/ClimaCalibrate.jl/pull/319)
 - Add "How do I?" section in the documentation
+  [#330](https://github.com/CliMA/ClimaCalibrate.jl/pull/330)
+- Add `ClimaCalibrateMakie` extension for plotting ensemble members, the mean
+  forward map evaluation, and the observations
+  [#331](https://github.com/CliMA/ClimaCalibrate.jl/pull/331)
 
 v0.3.1
 -------
