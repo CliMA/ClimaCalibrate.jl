@@ -12,6 +12,7 @@ DocumenterCitations = "daee34ce-89f3-4625-b898-19384cb65244"
 EnsembleKalmanProcesses = "aa8a2aa5-91d8-4396-bcef-d4f2ec43552d"
 JLD2 = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
 Literate = "98b081ad-f1c9-55d3-8b20-4c87d4299306"
+Makie = "ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a"
 
 [weakdeps]
 ClimaCore = "d414da3d-4745-48bb-8d80-42e94e092884"
