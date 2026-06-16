@@ -110,6 +110,23 @@ ClimaCalibrate.EKPUtils.get_metadata_for_nth_iteration
 ClimaCalibrate.EKPUtils.g_ens_matrix
 ```
 
+## Sample Builder Interface
+
+```@docs
+ClimaCalibrateClimaAnalysisExt.SampleCollection
+ClimaCalibrate.SampleBuilder.build_samples
+ClimaCalibrate.SampleBuilder.build_samples_by_times
+ClimaCalibrate.SampleBuilder.num_samples
+ClimaCalibrate.SampleBuilder.reconstruct_col
+ClimaCalibrateClimaAnalysisExt.ObservedSampleCollection
+ClimaCalibrate.SampleBuilder.choose_obs
+ClimaCalibrate.SampleBuilder.reconstruct_obs
+ClimaCalibrate.SampleBuilder.get_obs
+ClimaCalibrate.SampleBuilder.get_obs_metadata
+ClimaCalibrate.SampleBuilder.get_samples
+ClimaCalibrate.SampleBuilder.get_metadata
+```
+
 ## Observation Recipe Interface
 
 ```@docs
