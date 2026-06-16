@@ -5,9 +5,6 @@ import ClimaCalibrate.ObservationRecipe:
     ScalarCovariance, SeasonalDiagonalCovariance, SVDplusDCovariance
 import ClimaCalibrate.ObservationRecipe: QuantileRegularization
 
-const FLATTENED_DIMS =
-    ("longitude", "latitude", "pressure_level", "x", "y", "z", "time")
-
 """
     covariance(
         covar_estimator::ScalarCovariance,
