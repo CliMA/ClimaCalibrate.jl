@@ -8,6 +8,7 @@ main
   `OutputVar`s and `reconstruct_g_mean` for reconstructing the mean of the G
   ensemble matrix as a vector of `OutputVar`s
   [#319](https://github.com/CliMA/ClimaCalibrate.jl/pull/319)
+- Add "How do I?" section in the documentation
 
 v0.3.1
 -------
