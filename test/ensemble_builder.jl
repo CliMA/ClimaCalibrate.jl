@@ -151,6 +151,25 @@ import ClimaAnalysis.Template:
         verbose = true,
     )
 
+    # Check length of dimensions
+    diff_length_lat = [-80.0]
+    diff_lat_length_var =
+        TemplateVar() |>
+        add_dim("lat", diff_length_lat, units = "degrees_west") |>
+        add_attribs(short_name = "hey") |>
+        initialize
+    @test !Checker.check(
+        dim_values_checker,
+        var,
+        make_metadata(diff_lat_length_var),
+    )
+    @test_logs (:info, r"is not the same as length of dimension") Checker.check(
+        dim_values_checker,
+        var,
+        make_metadata(diff_lat_length_var),
+        verbose = true,
+    )
+
     # Check indices are sequential
     sequential_indices_checker = Checker.SequentialIndicesChecker()
     @test Checker.check(
