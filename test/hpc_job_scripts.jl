@@ -58,6 +58,8 @@ import ClimaCalibrate
         exit 0
         """
 
+        @test length(split(sbatch_string, "\n")) ==
+              length(split(expected_sbatch_contents, "\n"))
         for (generated_str, test_str) in zip(
             split(sbatch_string, "\n"),
             split(expected_sbatch_contents, "\n"),
@@ -119,9 +121,10 @@ cd \$PBS_O_WORKDIR
 \$MPITRAMPOLINE_MPIEXEC -n 2 -ppn 1 $(joinpath(pkgdir(ClimaCalibrate), "src", "backends", "set_gpu_rank.sh")) julia --project=$experiment_dir -e 'sleep(30)
 '
 
+"""
 
-    """
-
+    @test length(split(pbs_string, "\n")) ==
+          length(split(expected_pbs_contents, "\n"))
     for (generated_str, test_str) in
         zip(split(pbs_string, "\n"), split(expected_pbs_contents, "\n"))
         # Test one line at a time to see discrepancies

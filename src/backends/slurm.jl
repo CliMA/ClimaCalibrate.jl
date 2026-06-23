@@ -120,7 +120,7 @@ function job_status(::SlurmBackend, job::JobInfo)
     exit_code = process.exitcode
 
     invalid_job_err = "slurm_load_jobs error: Invalid job id specified"
-    @debug job_id status exit_code stderr
+    @debug id status exit_code stderr
 
     if status == "" && exit_code == 0 && stderr == ""
         return COMPLETED
@@ -137,7 +137,7 @@ function job_status(::SlurmBackend, job::JobInfo)
         return RUNNING
     end
 
-    @warn "Job ID $job_id has unknown status `$status`. Marking as completed"
+    @warn "Job ID $id has unknown status `$status`. Marking as completed"
     return COMPLETED
 end
 

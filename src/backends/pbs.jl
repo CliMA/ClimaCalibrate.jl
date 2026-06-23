@@ -90,10 +90,7 @@ function submit_job(backend::DerechoBackend, job_script::String)
             cmd = `qsub -V $pbs_filepath`
             # readchomp return a substring
             job_id = String(readchomp(setenv(cmd, clean_env)))
-            # Parse job ID, handling potential format issues
-            if isnothing(job_id)
-                error("Failed to parse job ID from output: $job_id")
-            end
+            isempty(job_id) && error("empty job ID returned")
             job_info = JobInfo(backend, job_id, job_script)
             push!(backend.job_records, job_info)
             return job_info

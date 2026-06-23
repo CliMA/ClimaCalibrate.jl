@@ -23,7 +23,7 @@ function _check_time_dim_of_vars(vars, start_date, end_date)
     # Check if dates are unique and short name exists
     for var in vars
         allunique(ClimaAnalysis.dates(var)) || @warn(
-            "Dates in OutputVar with short name $(short_name(var)) are not unique. You will not be able to use GEnsembleBuilder",
+            "Dates in OutputVar with short name $(ClimaAnalysis.short_name(var)) are not unique. You will not be able to use GEnsembleBuilder",
         )
     end
     return nothing
