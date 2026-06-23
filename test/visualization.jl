@@ -3,6 +3,7 @@ import Dates
 import CairoMakie
 import ClimaCalibrate
 import ClimaCalibrate: ObservationRecipe, EnsembleBuilder
+import ClimaCalibrate.SampleBuilder: build_samples_by_times
 import ClimaAnalysis
 import ClimaAnalysis.Template:
     TemplateVar,
@@ -39,12 +40,9 @@ using EnsembleKalmanProcesses.ParameterDistributions
 
     start_date = Dates.DateTime(2007, 12)
     end_date = start_date + Dates.Second(time[end])
-    obs = ObservationRecipe.observation(
-        covar_estimator,
-        (var, neg_var),
-        start_date,
-        end_date,
-    )
+    sample_collection =
+        build_samples_by_times([var, neg_var], [(start_date, end_date)])
+    obs = ObservationRecipe.observation(covar_estimator, sample_collection, 1)
 
     obs_series = EKP.ObservationSeries(
         Dict(

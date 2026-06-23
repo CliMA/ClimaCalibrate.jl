@@ -14,6 +14,36 @@ main
   forward map evaluation, and the observations
   [#331](https://github.com/CliMA/ClimaCalibrate.jl/pull/331)
 - Add the `workers_per_node` keyword argument to `add_workers`, which runs multiple independent workers on a single allocation.
+- Add the `SampleBuilder` module and refactor `ObservationRecipe`
+  [#334](https://github.com/CliMA/ClimaCalibrate.jl/pull/334)
+  - The `SampleBuilder` module handles transforming one or more
+    `ClimaAnalysis.OutputVar`s into a matrix of samples with metadata.
+  - Building an observation is now a two-step process: use `SampleBuilder` to
+    turn `ClimaAnalysis.OutputVar`s into a `SampleCollection`, then pass a
+    covariance estimator, the `SampleCollection`, and the index of the sample to
+    use as the observation to `ObservationRecipe` to estimate the covariance and
+    build the `EKP.Observation`.
+  - **Breaking**: sample construction moved from the covariance estimators to
+    `SampleBuilder`, changing the `ObservationRecipe` API:
+    - `ObservationRecipe.observation` is now
+      `observation(covar_estimator, sample_collection, i)` and
+      `ObservationRecipe.covariance` is now
+      `covariance(covar_estimator, sample_collection)`; both take a
+      `SampleCollection` instead of `OutputVar`s and dates. The covariance
+      matrix does not depend on which sample is chosen as the observation.
+    - Keywords that control how samples are built moved to
+      `SampleBuilder.build_samples` and `build_samples_by_times`: `dims`
+      (flatten order) and the element type of the samples and their metadata
+      (`FT`, default `Float32`, replacing the removed
+      `ObservationRecipe.change_data_type`).
+    - `SVDplusDCovariance` no longer takes `sample_date_ranges`; window the
+      time series into samples with `SampleBuilder.build_samples_by_times`
+      instead.
+  - **Breaking**: `SeasonalDiagonalCovariance` now estimates the variance across
+    the sample columns and requires at least two samples. A single multi-year
+    `OutputVar` is no longer accepted as one sample; split it into one sample
+    per year with `build_samples_by_times`. The `ignore_nan` keyword was
+    removed (`NaN`s are always ignored).
 
 v0.3.1
 -------

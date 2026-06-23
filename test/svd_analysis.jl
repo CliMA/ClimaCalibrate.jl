@@ -182,7 +182,6 @@ end
     ]
 
     covar_estimator_with_q_reg = ObservationRecipe.SVDplusDCovariance(
-        sample_date_ranges;
         regularization = 0.01,
         model_error_scale = 0.05,
     )
@@ -190,15 +189,16 @@ end
     obs_vec = [
         ObservationRecipe.observation(
             covar_estimator_with_q_reg,
-            (var,),
-            "2007-12-1",
-            "2008-9-1",
+            CAL.SampleBuilder.build_samples_by_times([var], sample_date_ranges),
+            1,
         ),
         ObservationRecipe.observation(
             covar_estimator_with_q_reg,
-            (no_lon_var,),
-            "2007-12-1",
-            "2008-9-1",
+            CAL.SampleBuilder.build_samples_by_times(
+                [no_lon_var],
+                sample_date_ranges,
+            ),
+            1,
         ),
     ]
     obs_series = EKP.ObservationSeries(
