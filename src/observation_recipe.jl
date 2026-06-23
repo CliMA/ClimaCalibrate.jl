@@ -15,13 +15,11 @@ export ScalarCovariance,
     reconstruct_diag_cov,
     reconstruct_vars
 
-import Dates
-
 """
     abstract type AbstractCovarianceEstimator end
 
-An object that estimates the noise covariance matrix from observational data
-that is appropriate for a sample between `start_date` and `end_date`.
+An object that estimates the noise covariance matrix from the samples in an
+`ObservedSampleCollection`.
 
 `AbstractCovarianceEstimator` have to provide one function,
 `ObservationRecipe.covariance`.
@@ -31,13 +29,14 @@ The function has to have the signature
 ```julia
 ObservationRecipe.covariance(
     covar_estimator::AbstractCovarianceEstimator,
-    vars,
-    start_date,
-    end_date,
+    osc::ObservedSampleCollection,
 )
 ```
 
-and return a noise covariance matrix.
+and return a noise covariance matrix. The `ObservedSampleCollection` (built with
+`SampleBuilder.build_samples` / `build_samples_by_times` and `choose_obs`)
+carries the matrix of flattened samples and their metadata; the chosen
+observation is column `osc.i`.
 """
 abstract type AbstractCovarianceEstimator end
 
@@ -119,9 +118,6 @@ struct SeasonalDiagonalCovariance{
     """A regularization term added to the diagonal of the covariance matrix"""
     regularization::FT2
 
-    """All NaNs are ignored when computing the covariance matrix"""
-    ignore_nan::Bool
-
     """Use latitude weights"""
     use_latitude_weights::Bool
 
@@ -133,7 +129,6 @@ end
     SeasonalDiagonalCovariance(;
         model_error_scale = 0.0,
         regularization = 0.0,
-        ignore_nan = true,
         use_latitude_weights = false,
         min_cosd_lat = 0.1,
     )
@@ -141,6 +136,11 @@ end
 Create a `SeasonalDiagonalCovariance` which specifies how the covariance matrix
 should be formed. When used with `ObservationRecipe.observation` or
 `ObservationRecipe.covariance`, return a `Diagonal` matrix.
+
+The samples used to compute the covariance matrix come from the
+`ObservedSampleCollection` (e.g. built with
+`SampleBuilder.build_samples_by_times`), where each sample is one year of
+seasonal statistics. `NaN`s are ignored when computing the seasonal variance.
 
 Keyword arguments
 =====================
@@ -152,11 +152,6 @@ Keyword arguments
 
 - `regularization`: A diagonal matrix of the form `regularization * I` is added
   to the covariance matrix.
-
-- `ignore_nan`: If `true`, then `NaN`s are ignored when computing the covariance
-  matrix. Otherwise, `NaN` are included in the intermediate calculation of the
-  covariance matrix. Note that all `NaN`s are removed in the last step of
-  forming the covariance matrix even if `ignore_nan` is `false`.
 
 - `use_latitude_weights`: If `true`, then latitude weighting is applied to the
   covariance matrix. Latitude weighting is multiplying the values along the
@@ -171,7 +166,6 @@ Keyword arguments
 function SeasonalDiagonalCovariance(;
     model_error_scale = 0.0,
     regularization = 0.0,
-    ignore_nan = true,
     use_latitude_weights = false,
     min_cosd_lat = 0.1,
 )
@@ -188,7 +182,6 @@ function SeasonalDiagonalCovariance(;
     return SeasonalDiagonalCovariance(
         model_error_scale,
         regularization,
-        ignore_nan,
         use_latitude_weights,
         min_cosd_lat,
     )
@@ -231,7 +224,6 @@ matrix from `ClimaAnalysis.OutputVar`s.
 struct SVDplusDCovariance{
     FT1 <: AbstractFloat,
     FT2 <: Union{AbstractFloat, QuantileRegularization},
-    DATE <: Dates.AbstractDateTime,
     FT3 <: AbstractFloat,
     R <: Union{Integer, Nothing},
 } <: AbstractCovarianceEstimator
@@ -241,9 +233,6 @@ struct SVDplusDCovariance{
 
     """A regularization term added to the diagonal of the covariance matrix"""
     regularization::FT2
-
-    """Tuple of the start and end dates of the samples"""
-    sample_date_ranges::Vector{NTuple{2, DATE}}
 
     """Use latitude weights"""
     use_latitude_weights::Bool
@@ -256,8 +245,7 @@ struct SVDplusDCovariance{
 end
 
 """
-    SVDplusDCovariance(
-        sample_date_ranges;
+    SVDplusDCovariance(;
         model_error_scale = 0.0,
         regularization = 0.0,
         use_latitude_weights = false,
@@ -269,25 +257,22 @@ Create a `SVDplusDCovariance` which specifies how the covariance matrix should
 be formed. When used with `ObservationRecipe.observation` or
 `ObservationRecipe.covariance`, return a `EKP.SVDplusD` covariance matrix.
 
+The samples used to compute the covariance matrix come from the
+`ObservedSampleCollection` (e.g. built with
+`SampleBuilder.build_samples_by_times`), where each sample is one column.
+
 !!! note "Recommended sample size"
-    For `sample_date_ranges`, it is recommended that each sample contains data
-    from a single year. For example, if the samples are created from time series
-    data of seasonal averages, then each sample should contain all four seasons.
-    Otherwise, the covariance matrix may not make sense. For example, if each
-    sample contains two years of seasonally averaged data, then the sample mean
-    is the seasonal mean of every other season across the years stacked
-    vertically. For a concrete example, if the samples contain DJF for both 2010
-    and 2011. Then, the sample mean will be the mean of DJF 2010, 2011, and so
-    on, and the mean of DJF 2011, 2013, and so on. As a result, if one were to
-    use this covariance matrix with `model_error_scale`, the covariance matrix
-    will not make sense.
-
-Positional arguments
-=====================
-
-- `sample_date_ranges`: The start and end dates of each sample. This is used to
-  determine the sample from the time series data of the `OutputVar`s. These
-  dates must be present in all the `OutputVar`s.
+    When constructing the samples (e.g. with `build_samples_by_times`), it is
+    recommended that each sample contains data from a single year. For example,
+    if the samples are created from time series data of seasonal averages, then
+    each sample should contain all four seasons. Otherwise, the covariance matrix
+    may not make sense. For example, if each sample contains two years of
+    seasonally averaged data, then the sample mean is the seasonal mean of every
+    other season across the years stacked vertically. For a concrete example, if
+    the sample contain DJF for both 2010 and 2011. Then, the sample mean will be
+    the mean of DJF 2010, 2012, and so on, and the mean of DJF 2011, 2013, and so
+    on. As a result, if one were to use this covariance matrix with
+    `model_error_scale`, the covariance matrix will not make sense.
 
 Keyword arguments
 =====================
@@ -313,8 +298,7 @@ Keyword arguments
 - `rank`: Rank of the singular value decomposition (SVD). If `nothing` is passed
   in, then the rank is automatically inferred from the data.
 """
-function SVDplusDCovariance(
-    sample_date_ranges;
+function SVDplusDCovariance(;
     model_error_scale = 0.0,
     regularization = 0.0,
     use_latitude_weights = false,
@@ -326,15 +310,6 @@ function SVDplusDCovariance(
     if regularization isa AbstractFloat
         regularization < zero(regularization) &&
             error("Regularization ($regularization) should not be negative")
-    end
-
-    sample_date_ranges = [
-        (Dates.DateTime(date_pair[1]), Dates.DateTime(date_pair[2])) for
-        date_pair in sample_date_ranges
-    ]
-    for (first_date, last_date) in sample_date_ranges
-        first_date <= last_date ||
-            error("$first_date should not be later than $last_date")
     end
     if use_latitude_weights && min_cosd_lat <= zero(min_cosd_lat)
         error(
@@ -348,7 +323,6 @@ function SVDplusDCovariance(
     return SVDplusDCovariance(
         model_error_scale,
         regularization,
-        sample_date_ranges,
         use_latitude_weights,
         min_cosd_lat,
         rank,
