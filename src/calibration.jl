@@ -201,7 +201,7 @@ end
         output_dir,
     )
 
-Submit a job that run `job_script` to the `backend` and return the job info.
+Submit a job that runs `job_script` to the `backend` and return the job info.
 
 If the forward model is already completed (e.g. from a previous calibration
 attempt), then `nothing` is returned instead.
@@ -304,9 +304,7 @@ end
 """
     log_member_error(output_dir, iteration, member)
 
-Log a warning message when an error occurs.
-
-If `verbose`, includes the ensemble member's output.
+Log a warning message when an error occurs, including the ensemble member's output.
 """
 function log_member_error(output_dir, iteration, member)
     member_log = path_to_model_log(output_dir, iteration, member)
@@ -430,7 +428,7 @@ end
 """
     prepare_work_for_ensemble_member(iter, member, output_dir, interface)
 
-Return a function that takes in a worker and run the forward model if needed.
+Return a function that takes in a worker and runs the forward model if needed.
 """
 function prepare_work_for_ensemble_member(iter, member, output_dir, interface)
     return (worker) -> begin

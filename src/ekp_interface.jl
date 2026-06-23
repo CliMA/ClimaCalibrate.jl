@@ -116,7 +116,7 @@ path_to_G_ensemble(output_dir, iteration) =
     get_prior(param_dict::AbstractDict; names = nothing)
     get_prior(prior_path::AbstractString; names = nothing)
 
-Constructs the combined prior distribution from a `param_dict` or a TOML configuration file specified by `prior_path`.
+Construct the combined prior distribution from a `param_dict` or a TOML configuration file specified by `prior_path`.
 If `names` is provided, only those parameters are used.
 """
 function get_prior(prior_path::AbstractString; names = nothing)
@@ -134,7 +134,7 @@ end
 """
     get_param_dict(distribution; names)
 
-Generates a dictionary for parameters based on the specified distribution, assumed to be of floating-point type.
+Generate a dictionary for parameters based on the specified distribution, assumed to be of floating-point type.
 If `names` is not provided, the distribution's names will be used.
 """
 function get_param_dict(
@@ -147,7 +147,7 @@ end
 """
     save_G_ensemble(output_dir::AbstractString, iteration, G_ensemble)
 
-Saves the ensemble's observation map output to the correct directory based on the provided configuration.
+Save the ensemble's observation map output to the correct directory.
 Takes an output directory, iteration number, and the ensemble output to save.
 """
 function save_G_ensemble(output_dir::AbstractString, iteration, G_ensemble)
@@ -197,7 +197,7 @@ end
 """
     save_eki_and_parameters(eki, output_dir, iteration, prior)
 
-Save EKI state and parameters. Helper function for [`initialize`](@ref) and [`update_ensemble`](@ref)
+Save EKI state and parameters. Helper function for [`initialize`](@ref) and [`update_ensemble`](@ref).
 """
 function save_eki_and_parameters(eki, output_dir, iteration, prior)
     param_dict = get_param_dict(prior)
@@ -215,7 +215,7 @@ end
 """
     update_ensemble(output_dir::AbstractString, iteration, prior)
 
-Updates the EnsembleKalmanProcess object and saves the parameters for the next iteration.
+Update the EnsembleKalmanProcess object and save the parameters for the next iteration.
 """
 function update_ensemble(output_dir::AbstractString, iteration, prior)
     G_ens = JLD2.load_object(path_to_G_ensemble(output_dir, iteration))
@@ -228,7 +228,7 @@ end
 """
     update_ensemble!(ekp, G_ens, output_dir, iteration, prior)
 
-Updates an EKP object with data G_ens, saving the object and final parameters to disk.
+Update an EKP object with data G_ens, saving the object and parameters for the next iteration to disk.
 """
 function update_ensemble!(ekp, G_ens, output_dir, iteration, prior)
     terminate = EKP.update_ensemble!(ekp, G_ens)
@@ -284,7 +284,7 @@ end
 """
     last_completed_iteration(output_dir)
 
-Determines the last completed iteration given an `output_dir` containing a calibration run.
+Determine the last completed iteration given an `output_dir` containing a calibration run.
 
 If no iteration has been completed yet, return 0.
 """

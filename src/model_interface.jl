@@ -35,12 +35,12 @@ To use the `HPCBackend`, the subtypes must also implement:
 
 # Optional interface
 
-- `analyze_iteration(interface, ekp, g_ensemble, prior, iteration)` which
-  inspect results after each ensemble update. The default implementation logs
-  the mean constrained parameters and covariance-weighted error.
-- `postprocess_g_ensemble(interface, ekp, g_ensemble, prior, iteration)` which
-  transform `g_ensemble` before the ensemble update. The default implementation
-  returns `g_ensemble`.
+- `analyze_iteration(interface, ekp, g_ensemble, prior, output_dir, iteration)`
+  which inspects results after each ensemble update. The default implementation
+  logs the mean constrained parameters and covariance-weighted error.
+- `postprocess_g_ensemble(interface, ekp, g_ensemble, prior, output_dir,
+  iteration)` which transforms `g_ensemble` before the ensemble update. The
+  default implementation returns `g_ensemble`.
 
 For `HPCBackend`, the subtypes can also implement:
 - `experiment_dir(interface)` which returns the Julia project directory passed
@@ -83,7 +83,7 @@ end
 """
     observation_map(interface::AbstractModelInterface, iteration)
 
-Runs the observation map for the specified iteration.
+Run the observation map for the specified iteration.
 This function must be implemented for each calibration experiment,
 dispatching on the user's subtype of `AbstractModelInterface`.
 """
@@ -92,14 +92,13 @@ function observation_map(interface::AbstractModelInterface, iteration)
 end
 
 """
-    analyze_iteration(interface::AbstractModelInterface, ekp, g_ensemble, prior, iteration)
+    analyze_iteration(interface::AbstractModelInterface, ekp, g_ensemble, prior, output_dir, iteration)
 
-After updating the ensemble and before starting the next iteration,
-`analyze_iteration` is evaluated.
+Analyze results after updating the ensemble and before starting the next iteration.
 
 This function is optional to implement.
 
-For example, one may want to print information from the `eki` object or plot
+For example, one may want to print information from the `ekp` object or plot
 `g_ensemble`.
 """
 function analyze_iteration(
@@ -121,6 +120,7 @@ end
         ekp,
         g_ensemble,
         prior,
+        output_dir,
         iteration
     )
 

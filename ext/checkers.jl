@@ -28,8 +28,8 @@ function Checker.check(
     data = nothing,
     verbose = false,
 )
-    # Do not need to check if the short name is there, since we already know that
-    # the short name of metadata exists
+    # Do not need to check if the short name is there, since we already know
+    # that the short name of metadata exists
     var_short_name = ClimaAnalysis.short_name(var)
     metadata_short_name = ClimaAnalysis.short_name(metadata)
     same_short_name = var_short_name == metadata_short_name
@@ -141,7 +141,7 @@ end
 
 """
     Checker.check(
-        ::DimValuesMatch,
+        ::DimValuesChecker,
         var::OutputVar,
         metadata::Metadata;
         data = nothing,
@@ -203,8 +203,8 @@ end
         verbose = false,
     )
 
-Return `true` if the dates of `var` map to sequential indices of the dates of
-`metadata`, `false` otherwise.
+Return `true` if the dates of `metadata` map to consecutive indices within the
+dates of `var`, `false` otherwise.
 
 !!! note "Use this check"
     It is recommended to always enable this check when possible.
@@ -253,8 +253,8 @@ end
     )
 
 Return `true` if the absolute difference of the proportion of positive values in
-`var.data` and the proportion of positive values in `data` is less than the threshold
-defined in `SignChecker`, `false` otherwise.
+`var.data` and the proportion of positive values in `data` is less than the
+threshold defined in `SignChecker`, `false` otherwise.
 """
 function Checker.check(
     checker::SignChecker,

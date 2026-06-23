@@ -1,9 +1,9 @@
 """
     _check_time_dim_of_vars(vars, start_date, end_date)
 
-Checking the time dimension of `vars`, `start_date`, and `end_date`.
+Check the time dimension of `vars`, `start_date`, and `end_date`.
 
-This function checks the the time dimension of `vars` with `_check_time_dim`,
+This function checks the time dimension of `vars` with `_check_time_dim`,
 the start date and end dates are in `vars`, the `start_date` is before the
 `end_date`, and all dates are unique in `vars`.
 
@@ -17,7 +17,8 @@ function _check_time_dim_of_vars(vars, start_date, end_date)
     # Check if dates for start_date and end_date are in var
     _check_dates_in_var(vars, start_date, end_date)
 
-    start_date <= end_date || error("$start_date should earlier than $end_date")
+    start_date <= end_date ||
+        error("$start_date should be earlier than $end_date")
 
     # Check if dates are unique and short name exists
     for var in vars
@@ -56,17 +57,19 @@ function _vars_to_iterable(vars)
 end
 
 """
-    split_by_season_from_seconds(time_dim,
-                               reference_date;
-                               seasons = ("MAM", "JJA", "SON", "DJF"))
+    split_by_season_from_seconds(
+        time_dim,
+        reference_date;
+        seasons = ("MAM", "JJA", "SON", "DJF")
+    )
 
-Split `time_dim` into a vector of vectors, where each vector represent a single
+Split `time_dim` into a vector of vectors, where each vector represents a single
 season.
 
 The order of the seasons can be chosen with the `seasons` keyword argument.
 
-This function differs from `ClimaAnalysis.Utils.split_by_season` as that function
-expects dates, while this function expect times in term of seconds.
+This function differs from `ClimaAnalysis.Utils.split_by_season` as that
+function expects dates, while this function expects times in terms of seconds.
 """
 function split_by_season_from_seconds(
     time_dim,
@@ -112,9 +115,9 @@ function find_seasons(start_date, end_date)
 end
 
 """
-    check_time_dim(var::OutputVar)
+    _check_time_dim(var::OutputVar)
 
-Check time dimension exists, unit for the time dimension is second, and a
+Check that the time dimension exists, that the unit for the time dimension is second, and that a
 start date is present.
 
 This function is borrowed from ClimaAnalysis.
@@ -129,11 +132,12 @@ function _check_time_dim(var::OutputVar)
 end
 
 """
-    dates_or_times(var::OutputVar)
+    dates_or_times(var_or_metadata::Union{OutputVar, Metadata})
 
-Return the temporal dimension of `var` as dates if possible and time otherwise.
+Return the temporal dimension of `var_or_metadata` as dates if possible and time
+otherwise.
 
-This function assumes that a temporal dimension exists in `var`.
+This function assumes that a temporal dimension exists in `var_or_metadata`.
 """
 function dates_or_times(var_or_metadata::Union{OutputVar, Metadata})
     temporal_dim = try
