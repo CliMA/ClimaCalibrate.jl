@@ -561,7 +561,6 @@ end
     data = copy(var.data)
     data[1, 1, 1] = NaN
     data[3, 2, 4] = NaN
-    data[21, 3, 2]
     nan_var = ClimaAnalysis.remake(var, data = data)
     window_nan_var = ClimaAnalysis.window(
         nan_var,
@@ -1629,7 +1628,7 @@ end
     @test metadata2[2].attributes["short_name"] == "time"
     @test metadata2[3].attributes["short_name"] == "lon"
 
-    @test length(metadata_indices1) == 3
+    @test length(metadata_indices2) == 3
     @test metadata_indices2[1] == 1:12
     @test metadata_indices2[2] == 13:16
     @test metadata_indices2[3] == 17:28
@@ -1639,10 +1638,10 @@ end
     @test metadata3[2].attributes["short_name"] == "lon"
     @test metadata3[3].attributes["short_name"] == "time"
 
-    @test length(metadata_indices1) == 3
-    @test metadata_indices1[1] == 1:4
-    @test metadata_indices1[2] == 5:16
-    @test metadata_indices1[3] == 17:20
+    @test length(metadata_indices3) == 3
+    @test metadata_indices3[1] == 1:4
+    @test metadata_indices3[2] == 5:16
+    @test metadata_indices3[3] == 17:20
 
     @test obs1 == [obs_series.observations[1], obs_series.observations[2]]
     @test obs2 == [obs_series.observations[3], obs_series.observations[4]]

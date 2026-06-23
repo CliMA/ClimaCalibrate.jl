@@ -1,6 +1,5 @@
-import TOML, YAML
+import TOML
 import JLD2
-import Random
 import EnsembleKalmanProcesses as EKP
 import EnsembleKalmanProcesses.ParameterDistributions as PD
 import EnsembleKalmanProcesses.TOMLInterface as TI
