@@ -12,7 +12,7 @@ import ClimaCalibrate.Visualization:
 
 Plot members of the G ensemble matrix as line plots.
 
-If the `iter` keyword argument is not passed, then this plot the last completed
+If the `iter` keyword argument is not passed, then this plots the last completed
 G ensemble matrix. Otherwise, it plots the `iter`th G ensemble matrix.
 """
 Makie.@recipe Plot_G (ekp,) begin
@@ -51,7 +51,7 @@ end
 
 Plot mean forward map evaluation as a line plot.
 
-If the `iter` keyword argument is not passed, then this plot the last mean
+If the `iter` keyword argument is not passed, then this plots the last mean
 forward map evaluation. Otherwise, it plots the `iter`th mean forward map
 evaluation.
 """
@@ -89,7 +89,7 @@ end
 
 Plot the observations as a line plot.
 
-If the `iter` keyword argument is not passed, then this plot the observations
+If the `iter` keyword argument is not passed, then this plots the observations
 for the last iteration. Otherwise, it plots the observations for the `iter`th
 iteration.
 """
@@ -101,7 +101,7 @@ Makie.@recipe Plot_Obs (ekp,) begin
 end
 
 """
-    Makie.plot!(g_ens_plot::Plot_Obs)
+    Makie.plot!(obs_plot::Plot_Obs)
 
 Plot the observations as a line plot.
 

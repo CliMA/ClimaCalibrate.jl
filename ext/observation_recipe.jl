@@ -632,10 +632,10 @@ end
     _stacked_samples(vars::Iterable{OutputVar}, sample_date_ranges, dims)
 
 Make a vector of stacked samples from multiple `OutputVar`s and an iterable of
-2-iterable of dates.
+2-element iterables of dates.
 
 Each sample corresponds to a single minibatch and the sample is stacked, because
-it may contains multiple variables.
+it may contain multiple variables.
 """
 function _stacked_samples(vars, sample_date_ranges, dims)
     return map(sample_date_ranges) do (sample_start_date, sample_end_date)
@@ -656,7 +656,7 @@ function _stacked_samples(vars, sample_date_ranges, dims)
 end
 
 """
-    _metadata_for_stacked_sample(vars, sample_date_ranges)
+    _metadata_for_stacked_sample(vars, sample_date_ranges, dims)
 
 Get metadata for a single stacked sample.
 
@@ -683,24 +683,26 @@ function _metadata_for_stacked_sample(vars, sample_date_ranges, dims)
 end
 
 """
-    group_and_reduce_by(var::OutputVar, group_by, reduce_by)
+    group_and_reduce_by(var::OutputVar, dim_name, group_by, reduce_by)
 
 Group the dimension `dim_name` using `group_by` and apply the reduction
 `reduce_by` along the dimension.
 
-The first element in each group is used as the dimension of the resulting `OutputVar`.
+The first element in each group is used as the dimension of the resulting
+`OutputVar`.
 
-Only the short name, long name, units, and start date are kept. All other attributes are
-discarded in the process.
+Only the short name, long name, units, and start date are kept. All other
+attributes are discarded in the process.
 
-The function `group_by` takes in a vector of values for a dimension and returns a vector of
-vectors of values of the dimension. The function `reduce_by` must be of the form `f(A;
-dims)`, where `A` is a slice of `var.data` and `dims` is the index of `A` to reduce against
-and return the reduction over the `dims` dimension.
+The function `group_by` takes in a vector of values for a dimension and returns
+a vector of vectors of values of the dimension. The function `reduce_by` must be
+of the form `f(A; dims)`, where `A` is a slice of `var.data` and `dims` is the
+index of `A` to reduce against and return the reduction over the `dims`
+dimension.
 
-Note `group_by` does not need to partition the values of the dimension. For example, the
-`group_by` function can be `group_by(dim) = [[first(dim)]]`, which return the first slice of
-the `OutputVar`.
+Note `group_by` does not need to partition the values of the dimension. For
+example, the `group_by` function can be `group_by(dim) = [[first(dim)]]`, which
+return the first slice of the `OutputVar`.
 """
 function group_and_reduce_by(var::OutputVar, dim_name, group_by, reduce_by)
     dim_name_in_var =
@@ -750,7 +752,7 @@ function group_and_reduce_by(var::OutputVar, dim_name, group_by, reduce_by)
 end
 
 """
-    lat_weights_var(var::OutputVar; min_cosd_lat = 0.1)
+    _lat_weights_var(var::OutputVar; min_cosd_lat = 0.1)
 
 Return a `OutputVar` where each data value corresponds to `(1 / max(cosd(lat),
 min_cosd_lat))` if there is no `NaN` at its coordinate and `NaN` otherwise.
@@ -924,7 +926,7 @@ function ObservationRecipe.reconstruct_vars(obs::EKP.Observation)
 end
 
 """
-    _get_minibatch_indices_for_nth_iteration(ekp::EKP.EnsembleKalmanProcess, N)
+    _get_minibatch_indices_for_nth_iteration(obs_series, N)
 
 Get the indices that correspond to each metadata for the minibatch of the `N`th
 iteration.

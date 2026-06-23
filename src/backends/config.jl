@@ -31,7 +31,7 @@ abstract type AbstractHPCConfig end
     SlurmConfig <: AbstractHPCConfig
 
 A configuration holding Slurm directives, modules, and environment variables
-that will be used when creating a job scripts by the `SlurmBackend`s.
+that will be used when creating job scripts by the `SlurmBackend`s.
 """
 struct SlurmConfig <: AbstractHPCConfig
     directives::OrderedDict{Symbol, Any}
@@ -43,7 +43,7 @@ end
     PBSConfig <: AbstractHPCConfig
 
 A configuration holding PBS directives, modules, and environment variables
-that will be used when creating a job scripts by the [`DerechoBackend`](@ref).
+that will be used when creating job scripts by the [`DerechoBackend`](@ref).
 """
 struct PBSConfig <: AbstractHPCConfig
     directives::OrderedDict{Symbol, Any}
@@ -292,7 +292,7 @@ function _check_climacommon(modules; env = ENV)
        job_module_cc != loaded_module_cc
         # Like the case above, do not throw an error because the user might want
         # to load different versions of climacommon
-        @warn "The climacommon module ($job_module_cc) specfied in the job script and the climacommon module ($loaded_module_cc) currently loaded are not the same. You may get issues with precompilation and instantiation of the Julia environment when the job starts"
+        @warn "The climacommon module ($job_module_cc) specified in the job script and the climacommon module ($loaded_module_cc) currently loaded are not the same. You may get issues with precompilation and instantiation of the Julia environment when the job starts"
     end
 
     return nothing
@@ -370,7 +370,7 @@ end
 """
     generate_env_vars(config::AbstractHPCConfig)
 
-Generate a string of environmental variables from the modules specified in
+Generate a string of environment variable export commands from the environment variables specified in
 `config` for inclusion in job scripts.
 """
 function generate_env_vars(config::AbstractHPCConfig)
@@ -380,7 +380,7 @@ end
 """
     format_slurm_time(minutes::Int)
 
-Format `minutes` into a string accepted by slurm.
+Format `minutes` into a string accepted by Slurm.
 """
 function format_slurm_time(minutes::Int)
     days, remaining_minutes = divrem(minutes, (60 * 24))

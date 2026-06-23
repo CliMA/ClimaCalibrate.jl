@@ -42,7 +42,7 @@ end
 """
     submit_job(backend::SlurmBackend, job_script::String)
 
-Submit a `job` that run `job_script` with `backend`.
+Submit a `job` that runs `job_script` with `backend`.
 
 The `job_script` should be generated with `make_job_script`.
 """
@@ -161,8 +161,8 @@ end
 """
     _generate_mpiexec_string(backend, ntasks, output)
 
-Modify the job body to log to `output` or run with MPI with `ntasks` depending
-on the `backend`.
+Return an mpiexec string: `mpiexec -n \$ntasks` for `GCPBackend`, or an `srun` string
+logging to `output` for other backends.
 """
 function _generate_mpiexec_string(backend, ntasks, output)
     # TODO: Remove this exception for GCPBackend

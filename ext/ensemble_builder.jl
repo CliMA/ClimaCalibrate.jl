@@ -25,7 +25,7 @@ An object to help build G ensemble matrix by using the metadata stored in the
 `EKP.EnsembleKalmanProcess` object. Metadata must come from `ClimaAnalysis`.
 
 `GEnsembleBuilder` takes in preprocessed `OutputVar`s and automatically
-construct the corresponding G ensemble matrix for the current iteration of the
+constructs the corresponding G ensemble matrix for the current iteration of the
 calibration.
 """
 struct GEnsembleBuilder{
@@ -82,7 +82,7 @@ function EnsembleBuilder.GEnsembleBuilder(
     metadata_short_names =
         collect(ClimaAnalysis.short_name(m) for m in metadata)
     any(==(""), metadata_short_names) && error(
-        "One of the observations does not has a short name; add a short name to the OutputVar before making an observation from it",
+        "One of the observations does not have a short name; add a short name to the OutputVar before making an observation from it",
     )
 
     G_ens = g_ens_matrix(ekp)
@@ -133,17 +133,17 @@ end
         verbose = false
     )
 
-Fill the `col_idx`th of the G ensemble matrix from the `OutputVar` `var` and
-`ekp`. If it was successful, return `true`, otherwise, return `false`.
+Fill the `col_idx`th column of the G ensemble matrix from `var` using
+`g_ens_builder`. If it was successful, return `true`, otherwise, return `false`.
 
 It is assumed that the times or dates of a single `OutputVar` is a superset of
 the times or dates of one or more metadata in the minibatch.
 
 This function relies on the short names in the metadata. This function will not
-behave correctly if the short names are mislabled or not present.
+behave correctly if the short names are mislabeled or not present.
 
 Furthermore, this function assumes that all observations are generated using
-`ObservationRecipe.Observation` which guarantees that the metadata exists and
+`ObservationRecipe.observation` which guarantees that the metadata exists and
 the correct placement of metadata.
 """
 function EnsembleBuilder.fill_g_ens_col!(
@@ -157,7 +157,7 @@ function EnsembleBuilder.fill_g_ens_col!(
     # metadata_by_short_name maps short names to metadata
     var_short_name = ClimaAnalysis.short_name(var)
     var_short_name == "" && error(
-        "The OutputVar does not has a short name. Add a short name to the OutputVar.",
+        "The OutputVar does not have a short name. Add a short name to the OutputVar.",
     )
 
     metadata_by_short_name = g_ens_builder.metadata_by_short_name
@@ -219,8 +219,8 @@ end
         metadata_info::MetadataInfo
     )
 
-Try to fill the `col_idx`th of the G ensemble matrix using `metadata_info` and
-`var`. Return `true` if sucessful and `false` if not.
+Try to fill the `col_idx`th column of the G ensemble matrix using `metadata_info` and
+`var`. Return `true` if successful and `false` if not.
 """
 function _try_fill_g_ens_col_with_var!(
     g_ens_builder::GEnsembleBuilder,
@@ -295,15 +295,15 @@ end
 Return a `OutputVar` using `var` whose dates are the same as the dates in
 `metadata`.
 
-If not all dates in `var` can be found in the dates in `metadata`, then
-`nothing` is returned.
+If not all dates in `metadata` can be found in the dates in `var`, then
+an error is thrown.
 
 !!! warning "Matching dates"
     This function will match the dates even if the dates in `var` is out of
     order or there are more dates in `var` than the dates in `metadata`.
     For example, if `var` contains monthly averages and `metadata` represents
     seasonal averages, then this function will not return an error, because
-    all dates in `metadata` is in the set of all dates in `var`.
+    all dates in `metadata` are in the set of all dates in `var`.
 """
 function _match_dates(var::OutputVar, metadata::Metadata)
     # Metadata comes from observational data and var is simulation data
@@ -329,7 +329,7 @@ end
 """
     EnsembleBuilder.is_complete(g_ens_builder::GEnsembleBuilder)
 
-Return `true` if all the entries of the G ensemble matrix is filled out and
+Return `true` if all the entries of the G ensemble matrix are filled out and
 `false` otherwise.
 """
 function EnsembleBuilder.is_complete(g_ens_builder::GEnsembleBuilder)

@@ -7,10 +7,10 @@ export plot_g, plot_g!, plot_g_mean, plot_g_mean!, plot_obs, plot_obs!
 
 Plot members of the G ensemble matrix as line plots.
 
-If the `iter` keyword argument is not passed, then this plot the last completed
+If the `iter` keyword argument is not passed, then this plots the last completed
 G ensemble matrix. Otherwise, it plots the `iter`th G ensemble matrix.
 
-All `Makie` keyword arguments compatible with `Makie.lines` is also compatible
+All `Makie` keyword arguments compatible with `Makie.lines` are also compatible
 with this function.
 """
 function plot_g end
@@ -27,11 +27,11 @@ function plot_g! end
 
 Plot mean forward map evaluation as a line plot.
 
-If the `iter` keyword argument is not passed, then this plot the last mean
+If the `iter` keyword argument is not passed, then this plots the last mean
 forward map evaluation. Otherwise, it plots the `iter`th mean forward map
 evaluation.
 
-All `Makie` keyword arguments compatible with `Makie.lines` is also compatible
+All `Makie` keyword arguments compatible with `Makie.lines` are also compatible
 with this function.
 """
 function plot_g_mean end
@@ -49,10 +49,11 @@ function plot_g_mean! end
 
 Plot the observations as a line plot.
 
-If the `iter` keyword argument is not passed, then this plot the observations of
-the last iteration. Otherwise, plot the observations of the `iter`th iteration.
+If the `iter` keyword argument is not passed, then this plots the observations
+of the last iteration. Otherwise, it plots the observations of the `iter`th
+iteration.
 
-All `Makie` keyword arguments compatible with `Makie.lines` is also compatible
+All `Makie` keyword arguments compatible with `Makie.lines` are also compatible
 with this function.
 """
 function plot_obs end

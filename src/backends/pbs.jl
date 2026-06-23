@@ -56,7 +56,7 @@ end
 """
     submit_job(backend::DerechoBackend, job_script::String)
 
-Submit a `job` that run `job_script` with `backend`.
+Submit a `job` that runs `job_script` with `backend`.
 
 The `job_script` should be generated with `make_job_script`.
 """
@@ -154,10 +154,10 @@ function job_status(::DerechoBackend, job::JobInfo)
 end
 
 """
-    _qstat_output(jobid, env; attempts=3, delay=0.25)
+    _qstat_output(id, env; attempts=3, delay=0.25)
 
 Best-effort qstat caller: tries dsv then plain format, with a few short retries.
-Returns the output String or `nothing` if all attempts fail.
+Return the output String or `nothing` if all attempts fail.
 """
 function _qstat_output(id::String, env; attempts = 3, delay = 0.25)
     # Try different qstat formats in order of preference
@@ -177,7 +177,7 @@ function _qstat_output(id::String, env; attempts = 3, delay = 0.25)
 end
 
 """
-    cancel_job(::SlurmBackend, job::JobInfo)
+    cancel_job(::DerechoBackend, job::JobInfo)
 
 Cancel `job` by running the command `qdel`.
 """

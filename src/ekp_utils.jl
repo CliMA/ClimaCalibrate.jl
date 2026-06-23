@@ -70,7 +70,7 @@ end
 """
     g_ens_matrix(eki::EKP.EnsembleKalmanProcess{FT}) where {FT <: AbstractFloat}
 
-Construct an G ensemble matrix of type `FT` with all `NaN`s for the current
+Construct a G ensemble matrix of type `FT` with all `NaN`s for the current
 iteration.
 """
 function g_ens_matrix(

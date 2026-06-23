@@ -105,7 +105,7 @@ end
     SeasonalDiagonalCovariance <: AbstractCovarianceEstimator
 
 Contain the necessary information to construct a diagonal covariance matrix
-whose entries represents seasonal covariances from `ClimaAnalysis.OutputVar`s.
+whose entries represent seasonal covariances from `ClimaAnalysis.OutputVar`s.
 """
 struct SeasonalDiagonalCovariance{
     FT1 <: AbstractFloat,
@@ -276,8 +276,8 @@ be formed. When used with `ObservationRecipe.observation` or
     Otherwise, the covariance matrix may not make sense. For example, if each
     sample contains two years of seasonally averaged data, then the sample mean
     is the seasonal mean of every other season across the years stacked
-    vertically. For a concrete example, if the sample contain DJF for both 2010
-    and 2011. Then, the sample mean will be of mean of DJF 2010, 2012, and so
+    vertically. For a concrete example, if the samples contain DJF for both 2010
+    and 2011. Then, the sample mean will be the mean of DJF 2010, 2011, and so
     on, and the mean of DJF 2011, 2013, and so on. As a result, if one were to
     use this covariance matrix with `model_error_scale`, the covariance matrix
     will not make sense.
@@ -285,7 +285,7 @@ be formed. When used with `ObservationRecipe.observation` or
 Positional arguments
 =====================
 
-- `sample_date_ranges`: The start and end dates of each samples. This is used to
+- `sample_date_ranges`: The start and end dates of each sample. This is used to
   determine the sample from the time series data of the `OutputVar`s. These
   dates must be present in all the `OutputVar`s.
 
@@ -310,7 +310,7 @@ Keyword arguments
   than zero as values close to zero along the diagonal of the covariance matrix
   can lead to issues when taking the inverse of the covariance matrix.
 
-- `rank`: Rank of the singlar value decomposition (SVD). If `nothing` is passed
+- `rank`: Rank of the singular value decomposition (SVD). If `nothing` is passed
   in, then the rank is automatically inferred from the data.
 """
 function SVDplusDCovariance(
