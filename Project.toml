@@ -13,7 +13,6 @@ LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 LinearMaps = "7a12625a-238d-50fd-b39a-03d52299707e"
 Logging = "56ddb016-857b-54e1-b83d-db4d58db5568"
 OrderedCollections = "bac558e1-5e72-5ebc-8fee-abe8a469f55d"
-Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 Reexport = "189a3867-3050-52da-a836-e630ba90ab69"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 TOML = "fa267f1f-6049-4f14-aa54-33bafae1ed76"
@@ -60,8 +59,9 @@ ClimaAnalysis = "29b5916a-a76c-4e73-9657-3c8fd22e65e6"
 ClimaParams = "5c42b081-d73a-476f-9059-fd94b934656c"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 NaNStatistics = "b946abbf-3ea7-4610-9019-9858bfdeaf2d"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 SafeTestsets = "1bc83da4-3b8d-516f-aca4-4fe02f6d838f"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
-test = ["Aqua", "CairoMakie", "ClimaAnalysis", "ClimaParams", "LinearAlgebra", "NaNStatistics", "SafeTestsets", "Test"]
+test = ["Aqua", "CairoMakie", "ClimaAnalysis", "ClimaParams", "LinearAlgebra", "NaNStatistics", "Random", "SafeTestsets", "Test"]
