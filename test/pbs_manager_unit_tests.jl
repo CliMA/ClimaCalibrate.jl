@@ -1,9 +1,22 @@
 using Test, Distributed, Logging
 import ClimaCalibrate
 
+# Blocking version of add_workers for test
+function add_workers_and_wait(n; timeout = 1200, kwargs...)
+    ids = fetch(ClimaCalibrate.add_workers(n; kwargs...))
+    pool = ClimaCalibrate.Backend.GLOBAL_WORKER_POOL
+    tstart = time()
+    while !all(id -> id in pool.workers, ids)
+        (time() - tstart) > timeout &&
+            error("Workers did not initialize within $(timeout)s")
+        sleep(0.5)
+    end
+    return ids
+end
+
 @testset "PBSManager Unit Tests" begin
     @test ClimaCalibrate.get_manager() == ClimaCalibrate.PBSManager(1)
-    p = ClimaCalibrate.add_workers(1; time = 5, device = :gpu)
+    p = add_workers_and_wait(1; time = 5, device = :gpu)
     @test nprocs() == length(p) + 1
     @test workers() == p
     @test remotecall_fetch(myid, 2) == 2
@@ -61,6 +74,9 @@ end
     @test nprocs() == 1
     @test workers() == [1]
 
-    @test isfile(out_file)
-    rm(out_file)
+    # Each worker is submitted individually and writes to `<o>-<i>.out`
+    for i in 1:2
+        @test isfile("$out_file-$i.out")
+        rm("$out_file-$i.out")
+    end
 end

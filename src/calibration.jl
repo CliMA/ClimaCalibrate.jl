@@ -391,10 +391,19 @@ function run_iteration(
 
     (; worker_pool) = backend
     nfailures = Base.Threads.Atomic{Int}(0)
+    # Number of forward models currently running on checked-out workers. Those
+    # workers are absent from the pool but will return when they finish, so an
+    # empty pool with `inflight > 0` is not a stall
+    inflight = Base.Threads.Atomic{Int}(0)
+    # Track how long the pool has been empty *with nothing running* so an
+    # asynchronous calibration does not hang forever if no workers ever start
+    t_last_available = time()
     @sync while !isempty(work_to_do)
         if !isempty(worker_pool.workers)
+            t_last_available = time()
             worker = take!(worker_pool)
             run_fwd_model = pop!(work_to_do)
+            Base.Threads.atomic_add!(inflight, 1)
             @async try
                 run_fwd_model(worker)
             catch e
@@ -403,9 +412,31 @@ function run_iteration(
                 # workers
                 Base.Threads.atomic_add!(nfailures, 1)
             finally
+                Base.Threads.atomic_sub!(inflight, 1)
                 push!(worker_pool, worker)
             end
         else
+            # No workers in the pool. With asynchronous submission this is
+            # expected early on. Only error if the pool stays empty with no
+            # workers initializing, none running, and no progress for longer
+            # than EMPTY_POOL_TIMEOUT. Reset the timer while models are running
+            # or workers are initializing, since those will replenish the pool.
+            if inflight[] > 0 || Backend.n_initializing_workers() > 0
+                t_last_available = time()
+            end
+            t_empty = time() - t_last_available
+            if inflight[] == 0 &&
+               Backend.n_initializing_workers() == 0 &&
+               t_empty > Backend.EMPTY_POOL_TIMEOUT
+                throw(
+                    ErrorException(
+                        "No workers available for $(round(Int, t_empty))s \
+                        (timeout $(Backend.EMPTY_POOL_TIMEOUT)s) with no workers \
+                        initializing or running. Ensure workers were submitted \
+                        (e.g. with `add_workers`) and are able to start.",
+                    ),
+                )
+            end
             @debug "No workers available"
             sleep(10) # Wait for workers to become available
         end

@@ -27,16 +27,18 @@ computing environments.
     - [`GCPBackend`](@ref): CliMA's Google cloud platform.
 
 !!! note "What are the differences between the `WorkerBackend` and the `HPCBackend`?"
-    The `WorkerBackend` requests for all the resources up front to do all the
-    work (typically executing a forward model) for a single iteration while the
-    `HPCBackend` submits a job for each ensemble member for a single iteration.
-    On a busy cluster, the `WorkerBackend` can stall an entire iteration waiting
-    for enough free resources to launch all workers at once. The `HPCBackend`
-    avoids this by submitting each ensemble member as an independent job, so
-    progress for a calibration is made as soon as any ensemble member completes.
-    Because each `HPCBackend` job starts a fresh Julia process, precompilation
-    occurs on every job submission. Workers in the `WorkerBackend` are
-    long-lived, so precompiled code is reused across all iterations.
+    The `WorkerBackend` assigns work to a pool of long-lived Julia workers, while
+    the `HPCBackend` submits a job for each ensemble member for a single
+    iteration. [`add_workers`](@ref) submits each worker as an individual
+    scheduler allocation, so on a busy cluster the scheduler can start them
+    independently as resources free up rather than needing to place every worker
+    at once. Each worker adds itself to a global pool once it has started and
+    loaded its code, and forward model runs are dispatched to workers as they
+    become available. Use [`@worker_setup`](@ref) instead of `@everywhere` to load
+    model code so that workers joining later are initialized correctly. Because
+    each `HPCBackend` job starts a fresh Julia process, precompilation occurs on
+    every job submission. Workers in the `WorkerBackend` are long-lived, so
+    precompiled code is reused across all iterations.
 
 ## Choosing the right backend for calibration
 

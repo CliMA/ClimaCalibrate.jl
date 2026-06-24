@@ -1,10 +1,22 @@
 using Test, Distributed, Logging
 import ClimaCalibrate
+# Blocking version of add_workers for test
+function add_workers_and_wait(n; timeout = 1200, kwargs...)
+    ids = fetch(ClimaCalibrate.add_workers(n; kwargs...))
+    pool = ClimaCalibrate.Backend.GLOBAL_WORKER_POOL
+    tstart = time()
+    while !all(id -> id in pool.workers, ids)
+        (time() - tstart) > timeout &&
+            error("Workers did not initialize within $(timeout)s")
+        sleep(0.5)
+    end
+    return ids
+end
 
 @testset "SlurmManager Unit Tests" begin
     @test ClimaCalibrate.get_manager() == ClimaCalibrate.SlurmManager(1)
     out_file = tempname()
-    p = ClimaCalibrate.add_workers(1; device = :cpu, o = out_file, time = 5)
+    p = add_workers_and_wait(1; device = :cpu, o = out_file, time = 5)
     @test nprocs() == 2
     @test workers() == p
     @test fetch(@spawnat :any myid()) == p[1]
@@ -16,8 +28,8 @@ import ClimaCalibrate
     rmprocs(p)
     @test nprocs() == 1
     @test workers() == [1]
-    # Check output file creation
-    @test isfile(out_file)
+    # Each worker is submitted individually and writes to `<o>-<i>.out`
+    @test isfile("$out_file-1.out")
 
     # Test incorrect generic arguments
     @test_throws TaskFailedException p =

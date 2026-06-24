@@ -13,24 +13,34 @@ include(
 )
 
 nprocs = 5
+# Submit workers asynchronously: each worker is an individual allocation that
+# adds itself to the global pool once started. The calibration begins with an
+# empty pool and picks up workers as they join
 if nworkers() == 1
     if ClimaCalibrate.get_backend() == ClimaCalibrate.DerechoBackend
-        addprocs(
-            PBSManager(nprocs),
+        ClimaCalibrate.add_workers(
+            nprocs;
+            cluster = :pbs,
             q = "main",
             A = "UCIT0011",
             l_select = "1:ncpus=1:ngpus=1",
             l_walltime = "00:30:00",
         )
     else
-        addprocs(ClimaCalibrate.SlurmManager(nprocs))
+        ClimaCalibrate.add_workers(nprocs; cluster = :slurm, device = :cpu)
     end
 end
 
-@everywhere using ClimaCalibrate
-@everywhere struct CancelModelInterface <: ClimaCalibrate.AbstractModelInterface end
-@everywhere ClimaCalibrate.forward_model(::CancelModelInterface, i, m) =
-    m == 1 && exit()
+# Use `@worker_setup` (not `@everywhere`) so workers that join later are
+# initialized with the model code before they run the forward model
+ClimaCalibrate.@worker_setup using ClimaCalibrate
+ClimaCalibrate.@worker_setup struct CancelModelInterface <:
+                                    ClimaCalibrate.AbstractModelInterface end
+ClimaCalibrate.@worker_setup ClimaCalibrate.forward_model(
+    ::CancelModelInterface,
+    i,
+    m,
+) = m == 1 && exit()
 
 eki = EKP.EnsembleKalmanProcess(
     EKP.construct_initial_ensemble(prior, ensemble_size),
@@ -58,7 +68,7 @@ ClimaCalibrate.Calibration.run_iteration(
     end
 end
 
-@everywhere include(
+ClimaCalibrate.@worker_setup include(
     joinpath(
         pkgdir(ClimaCalibrate),
         "experiments",
