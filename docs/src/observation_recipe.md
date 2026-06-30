@@ -95,9 +95,6 @@ import ClimaCalibrate.SampleBuilder
 # ClimaAnalysis.average_season_across_time
 vars = ClimaAnalysis.average_season_across_time.(vars)
 
-# We want the covariance matrix to be Float32, so we change it here.
-vars = ObservationRecipe.change_data_type.(vars, Float32)
-
 # We need the start and end dates of each sample. To find these, we can use the
 # function below. In this example, the dates in `vars` are all the same. For
 # debugging, it is helpful to use `ClimaAnalysis.dates(var)`.

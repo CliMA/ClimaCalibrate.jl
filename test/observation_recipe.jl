@@ -108,21 +108,6 @@ import ClimaAnalysis.Template:
     )
 end
 
-@testset "Change data type of OutputVar" begin
-    time = [0.0, 1.0, 2.0]
-    var =
-        TemplateVar() |>
-        add_dim("time", time, units = "s") |>
-        one_to_n_data(data_type = Float32) |>
-        initialize
-    var64 = ObservationRecipe.change_data_type(var, Float64)
-    @test eltype(var64.data) == Float64
-    var32 = ObservationRecipe.change_data_type(var, Float32)
-    @test eltype(var32.data) == Float32
-    var32 = ObservationRecipe.change_data_type(var, Float16)
-    @test eltype(var32.data) == Float16
-end
-
 @testset "Covariance constructors" begin
     # Negative value for scalar
     @test_throws ErrorException ObservationRecipe.ScalarCovariance(;
@@ -551,10 +536,9 @@ end
         model_error_scale = 2.0f0,
         regularization = 1.0f0,
     )
-    var32 = ObservationRecipe.change_data_type(var, Float32)
     osc32 = SampleBuilder.choose_obs(
-        SampleBuilder.generate_samples_by_times(
-            [var32],
+        SampleBuilder.build_samples_by_times(
+            [var],
             sample_date_ranges;
             FT = Float32,
         ),
@@ -886,10 +870,9 @@ end
 
     # Check float type
     covar_estimator = ObservationRecipe.SeasonalDiagonalCovariance()
-    var32 = ObservationRecipe.change_data_type(var, Float32)
     osc32 = SampleBuilder.choose_obs(
-        SampleBuilder.generate_samples_by_times(
-            [var32],
+        SampleBuilder.build_samples_by_times(
+            [var],
             sample_date_ranges;
             FT = Float32,
         ),

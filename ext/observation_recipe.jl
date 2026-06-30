@@ -405,18 +405,6 @@ function ObservationRecipe.seasonally_aligned_yearly_sample_date_ranges(
 end
 
 """
-    change_data_type(var::OutputVar, data_type)
-
-Return a `OutputVar` with `data` of type `data_type`.
-
-This is useful if you want to make covariance matrix whose element type is
-`data_type`.
-"""
-function ObservationRecipe.change_data_type(var::OutputVar, data_type)
-    return ClimaAnalysis.remake(var, data = data_type.(var.data))
-end
-
-"""
     _flat_lat_weights(all_metadata; min_cosd_lat = 0.1)
 
 Return the latitude weights `1 / max(cosd(lat), min_cosd_lat)`, flattened and

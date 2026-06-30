@@ -8,7 +8,6 @@ export ScalarCovariance,
     observation,
     short_names,
     seasonally_aligned_yearly_sample_date_ranges,
-    change_data_type,
     reconstruct_g,
     reconstruct_g_mean,
     reconstruct_g_mean_final,
@@ -336,8 +335,6 @@ function observation end
 function short_names end
 
 function seasonally_aligned_yearly_sample_date_ranges end
-
-function change_data_type end
 
 function reconstruct_g end
 

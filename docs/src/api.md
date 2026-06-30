@@ -147,7 +147,6 @@ ClimaCalibrate.ObservationRecipe.reconstruct_g_mean_final
 ClimaCalibrate.ObservationRecipe.reconstruct_diag_cov
 ClimaCalibrate.ObservationRecipe.reconstruct_vars
 ClimaCalibrate.ObservationRecipe.seasonally_aligned_yearly_sample_date_ranges
-ClimaCalibrate.ObservationRecipe.change_data_type
 ```
 
 ## SVD Residual Analysis
