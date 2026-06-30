@@ -1,137 +1,4 @@
 """
-    _check_time_dim_of_vars(vars, start_date, end_date)
-
-Check the time dimension of `vars`, `start_date`, and `end_date`.
-
-This function checks the time dimension of `vars` with `_check_time_dim`,
-the start date and end dates are in `vars`, the `start_date` is before the
-`end_date`, and all dates are unique in `vars`.
-
-This function is used when making an `EKP.Observation` or covariance matrix.
-"""
-function _check_time_dim_of_vars(vars, start_date, end_date)
-    for var in vars
-        _check_time_dim(var)
-    end
-
-    # Check if dates for start_date and end_date are in var
-    _check_dates_in_var(vars, start_date, end_date)
-
-    start_date <= end_date ||
-        error("$start_date should be earlier than $end_date")
-
-    # Check if dates are unique and short name exists
-    for var in vars
-        allunique(ClimaAnalysis.dates(var)) || @warn(
-            "Dates in OutputVar with short name $(ClimaAnalysis.short_name(var)) are not unique. You will not be able to use GEnsembleBuilder",
-        )
-    end
-    return nothing
-end
-
-"""
-    _check_dates_in_var(vars::Iterable{OutputVar}, start_date, end_date)
-
-Check `start_date` and `end_date` are in `vars`.
-"""
-function _check_dates_in_var(vars, start_date, end_date)
-    for var in vars
-        start_date in ClimaAnalysis.dates(var) || error(
-            "$start_date is not a date in the OutputVar with the short name $(get(var.attributes, "short_name", nothing))",
-        )
-        end_date in ClimaAnalysis.dates(var) || error(
-            "$end_date is not a date in the OutputVar with the short name $(get(var.attributes, "short_name", nothing))",
-        )
-    end
-    return nothing
-end
-
-"""
-    _vars_to_iterable(vars::Union{OutputVar, Iterable{OutputVar}})
-
-Make `vars` into an iterable if `vars` is an `OutputVar`. Otherwise, return `vars`.
-"""
-function _vars_to_iterable(vars)
-    vars isa OutputVar && (vars = (vars,))
-    return vars
-end
-
-"""
-    split_by_season_from_seconds(
-        time_dim,
-        reference_date;
-        seasons = ("MAM", "JJA", "SON", "DJF")
-    )
-
-Split `time_dim` into a vector of vectors, where each vector represents a single
-season.
-
-The order of the seasons can be chosen with the `seasons` keyword argument.
-
-This function differs from `ClimaAnalysis.Utils.split_by_season` as that
-function expects dates, while this function expects times in terms of seconds.
-"""
-function split_by_season_from_seconds(
-    time_dim,
-    reference_date;
-    seasons = ("MAM", "JJA", "SON", "DJF"),
-)
-    reference_date isa AbstractString &&
-        (reference_date = Dates.DateTime(reference_date))
-    grouped_dates =
-        ClimaAnalysis.Utils.time_to_date.(reference_date, time_dim) |>
-        (dates -> ClimaAnalysis.Utils.split_by_season(dates, seasons = seasons))
-    grouped_times = [
-        ClimaAnalysis.Utils.date_to_time.(reference_date, x) for
-        x in grouped_dates
-    ]
-    return grouped_times
-end
-
-"""
-    find_seasons(start_date, end_date)
-
-Find all the seasons between `start_date` and `end_date`.
-"""
-function find_seasons(start_date, end_date)
-    start_date <= end_date ||
-        error("$start_date should not be later than $end_date")
-    (first_season, first_year) =
-        ClimaAnalysis.Utils.find_season_and_year(start_date)
-    # Because the year is determined from the second month, we need to handle
-    # the case when the season is DJF
-    first_year = first_season == "DJF" ? first_year - 1 : first_year
-    season_to_month = Dict("MAM" => 3, "JJA" => 6, "SON" => 9, "DJF" => 12)
-    first_date_of_season =
-        Dates.DateTime(first_year, season_to_month[first_season], 1)
-    curr_date = first_date_of_season
-    seasons = String[]
-    while curr_date <= end_date
-        season, _ = ClimaAnalysis.Utils.find_season_and_year(curr_date)
-        push!(seasons, season)
-        curr_date += Dates.Month(3) # Season change every three months
-    end
-    return seasons
-end
-
-"""
-    _check_time_dim(var::OutputVar)
-
-Check that the time dimension exists, that the unit for the time dimension is second, and that a
-start date is present.
-
-This function is borrowed from ClimaAnalysis.
-"""
-function _check_time_dim(var::OutputVar)
-    ClimaAnalysis.has_time(var) || error("Time is not a dimension in var")
-    ClimaAnalysis.dim_units(var, ClimaAnalysis.time_name(var)) == "s" ||
-        error("Unit for time is not second")
-    haskey(var.attributes, "start_date") ||
-        error("Start date is not found in var")
-    return nothing
-end
-
-"""
     dates_or_times(var_or_metadata::Union{OutputVar, Metadata})
 
 Return the temporal dimension of `var_or_metadata` as dates if possible and time
@@ -146,4 +13,66 @@ function dates_or_times(var_or_metadata::Union{OutputVar, Metadata})
         ClimaAnalysis.times(var_or_metadata)
     end
     return temporal_dim
+end
+
+"""
+    find_season_and_year(date::Dates.DateTime)
+
+For a given date, find the appopriate season and year.
+
+This function was copied from ClimaAnalysis.
+"""
+function find_season_and_year(date::Dates.DateTime)
+    if Dates.Month(3) <= Dates.Month(date) <= Dates.Month(5)
+        return ("MAM", Dates.year(date))
+    elseif Dates.Month(6) <= Dates.Month(date) <= Dates.Month(8)
+        return ("JJA", Dates.year(date))
+    elseif Dates.Month(9) <= Dates.Month(date) <= Dates.Month(11)
+        return ("SON", Dates.year(date))
+    else
+        corrected_year =
+            Dates.month(date) == 12 ? Dates.year(date) + 1 : Dates.year(date)
+        return ("DJF", corrected_year)
+    end
+end
+
+"""
+    _get_indices_of_metadata(metadata::Iterable{ClimaAnalysis.Var.Metadata})
+
+For a vector of `ClimaAnalysis.Var.Metadata`, return a list of ranges for
+indexing.
+
+This is useful when you have a vector created from the concatenation of
+multiple flattened `OutputVar`s. The returned ranges let you extract the slice
+that belongs to each metadata entry and pass it to `ClimaAnalysis.unflatten` to
+reconstruct the original `OutputVar`.
+"""
+function _get_indices_of_metadata(metadata)
+    ranges = UnitRange{Int}[]
+    index = 1
+    for md in metadata
+        data_size = ClimaAnalysis.flattened_length(md)
+        start_idx = index
+        index += data_size
+        push!(ranges, start_idx:(start_idx + data_size - 1))
+    end
+    return ranges
+end
+
+"""
+    _reconstruct_vars(data, all_metadata)
+
+Reconstruct a vector of `OutputVar`s from a flat vector `data` and
+`all_metadata`, an iterable of `ClimaAnalysis.Var.Metadata`.
+
+The vector `data` is the vertical concatenation of the flattened variables. For
+example, this can be a column of a `SampleCollection`, a stacked observation
+sample, or the diagonal of a covariance matrix.
+"""
+function _reconstruct_vars(data, all_metadata)
+    ranges = _get_indices_of_metadata(all_metadata)
+    return OutputVar[
+        ClimaAnalysis.unflatten(metadata, view(data, range)) for
+        (metadata, range) in zip(all_metadata, ranges)
+    ]
 end

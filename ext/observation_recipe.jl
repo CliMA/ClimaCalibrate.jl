@@ -5,270 +5,168 @@ import ClimaCalibrate.ObservationRecipe:
     ScalarCovariance, SeasonalDiagonalCovariance, SVDplusDCovariance
 import ClimaCalibrate.ObservationRecipe: QuantileRegularization
 
-const FLATTENED_DIMS =
-    ("longitude", "latitude", "pressure_level", "x", "y", "z", "time")
-
 """
     covariance(
         covar_estimator::ScalarCovariance,
-        vars::Union{OutputVar, Iterable{OutputVar}},
-        start_date,
-        end_date;
-        dims = $FLATTENED_DIMS,
+        osc::ObservedSampleCollection,
     )
 
-Compute the scalar covariance matrix.
+Compute the scalar covariance matrix for the observation in `osc`.
 
-Data from `vars` will not be used to compute the covariance matrix.
+When `covar_estimator.use_latitude_weights` is `true`, the data of the
+observation is also used to determine which coordinates are `NaN`.
+
+The matrix of samples in `osc` is ignored.
 """
 function ObservationRecipe.covariance(
     covar_estimator::ScalarCovariance,
-    vars,
-    start_date,
-    end_date;
-    dims = FLATTENED_DIMS,
+    osc::ObservedSampleCollection,
 )
-    return _covariance(covar_estimator, vars, start_date, end_date; dims)
-end
+    FT = eltype(get_samples(osc))
+    all_metadata = get_obs_metadata(osc)
 
-"""
-    covariance(
-        covar_estimator::ScalarCovariance,
-        vars::Union{OutputVar, Iterable{OutputVar}};
-        dims = $FLATTENED_DIMS,
-    )
-
-Compute the scalar covariance matrix.
-
-Data from `vars` will not be used to compute the covariance matrix.
-"""
-function ObservationRecipe.covariance(
-    covar_estimator::ScalarCovariance,
-    vars;
-    dims = FLATTENED_DIMS,
-)
-    return _covariance(covar_estimator, vars, nothing, nothing; dims)
-end
-
-"""
-    _covariance(
-        covar_estimator::ScalarCovariance,
-        vars,
-        start_date,
-        end_date;
-        dims = FLATTENED_DIMS,
-    )
-
-Helper function for creating a scalar covariance matrix when `start_date` and
-`end_date` are either `nothing` or values convertible to `Dates.DateTime`.
-"""
-function _covariance(
-    covar_estimator::ScalarCovariance,
-    vars,
-    start_date,
-    end_date;
-    dims = FLATTENED_DIMS,
-)
-    vars = _vars_to_iterable(vars)
-    dates_provided = !isnothing(start_date) && !isnothing(end_date)
-    if dates_provided
-        # Convert dates to Dates.DateTime if they are strings
-        start_date = Dates.DateTime(start_date)
-        end_date = Dates.DateTime(end_date)
-
-        _check_time_dim_of_vars(vars, start_date, end_date)
+    total_length = sum(ClimaAnalysis.flattened_length, all_metadata)
+    diag_cov = fill(FT(covar_estimator.scalar), total_length)
+    if covar_estimator.use_latitude_weights
+        diag_cov .*= _flat_lat_weights(
+            all_metadata,
+            min_cosd_lat = covar_estimator.min_cosd_lat,
+        )
     end
-
-    diagonals = map(vars) do var
-        if dates_provided
-            var = ClimaAnalysis.window(
-                var,
-                "time",
-                left = start_date,
-                right = end_date,
-            )
-        end
-        flattened_data = ClimaAnalysis.flatten(var; dims).data
-        diag_cov = ones(eltype(flattened_data), size(flattened_data)...)
-        diag_cov .*= covar_estimator.scalar
-
-        if covar_estimator.use_latitude_weights
-            flattened_lat_weights =
-                ClimaAnalysis.flatten(
-                    _lat_weights_var(
-                        var,
-                        min_cosd_lat = covar_estimator.min_cosd_lat,
-                    );
-                    dims,
-                ).data
-            diag_cov .*= flattened_lat_weights
-        end
-        diag_cov
-    end
-    return Diagonal(vcat(diagonals...))
+    return Diagonal(diag_cov)
 end
 
 """
     covariance(
         covar_estimator::SeasonalDiagonalCovariance,
-        vars::Union{OutputVar, Iterable{OutputVar}},
-        start_date,
-        end_date;
-        dims = $FLATTENED_DIMS,
+        osc::ObservedSampleCollection,
     )
 
-Compute the noise covariance matrix of seasonal quantities from `var` that is
-appropriate for a sample of seasonal quantities across time for seasons between
-`start_date` and `end_date`.
+Compute the diagonal covariance matrix of seasonal quantities for the
+observation in `osc`.
 
-The diagonal is computed from the variances of the seasonal quantities.
+The diagonal entries are the per-entry variance across the samples (columns) of
+`osc.sample_collection` — i.e. the variance of each season across years
+(`NaN`s ignored). Each sample (column) must represent the same sequence of
+seasons with one time slice per season. This is validated against the metadata.
+At least two samples (years) are required to estimate a variance.
 """
 function ObservationRecipe.covariance(
     covar_estimator::SeasonalDiagonalCovariance,
-    vars,
-    start_date,
-    end_date;
-    dims = FLATTENED_DIMS,
+    osc::ObservedSampleCollection,
 )
-    # Convert dates to Dates.DateTime if they are strings
-    start_date = Dates.DateTime(start_date)
-    end_date = Dates.DateTime(end_date)
+    samples = get_samples(osc)
+    n_samples = size(samples, 2)
+    n_samples >= 2 || error(
+        "SeasonalDiagonalCovariance needs at least 2 samples to estimate the covariance matrix; got $n_samples",
+    )
 
-    vars = _vars_to_iterable(vars)
+    # The samples must represent seasons that line up across all samples
+    _check_metadata_represent_seasons(get_metadata(osc))
 
-    _check_time_dim_of_vars(vars, start_date, end_date)
+    # Variance of each season across the samples (years)
+    # Reduce per row, since we want the variance of each season
+    diag_cov = collect(nanvar(view(samples, i, :)) for i in axes(samples, 1))
 
-    diagonals = map(vars) do var
-        # Var is an OutputVar whose time slices are seasonal statistics
-        seasonal_statistics_across_time_var = var
-
-        # Throw an error if there are multiple time slices in a single season
-        for season in ClimaAnalysis.Utils.split_by_season_across_time(
-            ClimaAnalysis.dates(var),
-        )
-            if length(season) > 1
-                short_name = get(var.attributes, "short_name", nothing)
-                error(
-                    "Detected multiple times for a season ($season) in the OutputVar with the short name $short_name. SeasonalDiagonalCovariance can only be used with OutputVars with a single time slice for each season",
-                )
-            end
-        end
-
-        # Variance of the seasons
-        seasons = find_seasons(start_date, end_date)
-        group_by_season(time_dim) = split_by_season_from_seconds(
-            time_dim,
-            var.attributes["start_date"],
-            seasons = seasons,
-        )
-        reduce_by = covar_estimator.ignore_nan ? nanvar : Statistics.var
-
-        # This can duplicate the same season which is what we want, because
-        # a sample can be longer than a single year
-        seasonal_variance_var = group_and_reduce_by(
-            seasonal_statistics_across_time_var,
-            "time",
-            group_by_season,
-            reduce_by,
-        )
-
-        # Add model error scale
-        if !iszero(covar_estimator.model_error_scale)
-            reduce_by = covar_estimator.ignore_nan ? nanmean : mean
-            seasonal_average_var = group_and_reduce_by(
-                seasonal_statistics_across_time_var,
-                "time",
-                group_by_season,
-                reduce_by,
-            )
-            seasonal_variance_var.data .+=
-                (
-                    covar_estimator.model_error_scale .*
-                    seasonal_average_var.data
-                ) .^ 2
-        end
-
-        # Add regularization
-        diag_cov = ClimaAnalysis.flatten(seasonal_variance_var; dims).data
-        !iszero(covar_estimator.regularization) &&
-            (diag_cov .+= covar_estimator.regularization)
-
-        # Add latitude weights
-        if covar_estimator.use_latitude_weights
-            flattened_lat_weights =
-                ClimaAnalysis.flatten(
-                    _lat_weights_var(
-                        seasonal_variance_var,
-                        min_cosd_lat = covar_estimator.min_cosd_lat,
-                    );
-                    dims,
-                ).data
-            diag_cov .*= flattened_lat_weights
-        end
-        diag_cov
+    # Add model error scale
+    if !iszero(covar_estimator.model_error_scale)
+        seasonal_mean =
+            collect(nanmean(view(samples, i, :)) for i in axes(samples, 1))
+        diag_cov .+= (covar_estimator.model_error_scale .* seasonal_mean) .^ 2
     end
-    return Diagonal(vcat(diagonals...))
+
+    # Add regularization
+    !iszero(covar_estimator.regularization) &&
+        (diag_cov .+= covar_estimator.regularization)
+
+    # Add latitude weights
+    if covar_estimator.use_latitude_weights
+        # The metadata is the same across all samples, so the observation's is fine
+        all_metadata = get_obs_metadata(osc)
+        diag_cov .*= _flat_lat_weights(
+            all_metadata,
+            min_cosd_lat = covar_estimator.min_cosd_lat,
+        )
+    end
+    return Diagonal(diag_cov)
+end
+
+"""
+    _check_metadata_represent_seasons(metadata_mat)
+
+Validate that the samples with metadata in `metadata_mat` represent seasons.
+
+For every row of the matrix of metadata, each metadata must represent a single
+year of seasonal data (e.g. (2009 DJF, 2010 MAM, 2010 JJA, and 2010 SON)). Every
+row must have the same ordering of seasons, but the year can differ between the
+samples.
+
+Note that the years between the samples can be the same, since the samples can
+be generated from a simulation by varying the parameters or initial condition,
+but keeping everything else the same.
+"""
+function _check_metadata_represent_seasons(metadata_mat)
+    for metadata_row in eachrow(metadata_mat)
+        all(ClimaAnalysis.has_time.(metadata_row)) || error(
+            "SeasonalDiagonalCovariance require every variable to have a time dimension",
+        )
+
+        date_vecs = ClimaAnalysis.dates.(metadata_row)
+        seasons_found = nothing
+        for date_vec in date_vecs
+            season_and_year_vec = find_season_and_year.(date_vec)
+            allunique(season_and_year_vec) || error(
+                "Multiple time points correspond to the same season and year",
+            )
+
+            length(season_and_year_vec) > 4 && error(
+                "There are more than 4 combination of season and year identified for a single variable",
+            )
+
+            # The limitation of this is that we specify what constitutes a year
+            # worth of seasons
+            allequal(last.(season_and_year_vec)) ||
+                error("The seasons do not come from the same year")
+            isnothing(seasons_found) &&
+                (seasons_found = first.(season_and_year_vec))
+
+            seasons_found == first.(season_and_year_vec) || error(
+                "Order of seasons for a variable across different samples are not the same",
+            )
+        end
+
+    end
+    return nothing
 end
 
 """
     covariance(
         covar_estimator::SVDplusDCovariance,
-        vars::Union{OutputVar, Iterable{OutputVar}},
-        start_date,
-        end_date;
-        dims = $FLATTENED_DIMS,
+        osc::ObservedSampleCollection,
     )
 
-Compute the `EKP.SVDplusD` covariance matrix appropriate for a sample with times
-between `start_date` and `end_date`.
+Compute the `EKP.SVDplusD` covariance matrix for the observation in `osc`.
+
+The covariance is computed from all the samples (columns) in
+`osc.sample_collection`. The metadata of the chosen observation column
+(`osc.i`) is used to size and weight the diagonal terms.
 """
 function ObservationRecipe.covariance(
     covar_estimator::SVDplusDCovariance,
-    vars,
-    start_date,
-    end_date;
-    dims = FLATTENED_DIMS,
+    osc::ObservedSampleCollection,
 )
-    vars = _vars_to_iterable(vars)
+    stacked_sample_matrix = copy(get_samples(osc))
+    metadata = get_obs_metadata(osc)
 
-    # Convert dates to Dates.DateTime if they are strings
-    start_date = Dates.DateTime(start_date)
-    end_date = Dates.DateTime(end_date)
-
-    start_date <= end_date ||
-        error("$start_date should be earlier than $end_date")
-
-    # Check start and end dates provided are valid
-    sample_date_ranges = covar_estimator.sample_date_ranges
-    (start_date, end_date) in sample_date_ranges ||
-        error("$start_date and $end_date are not in $(sample_date_ranges)")
-
-    # Check all dates in sample_date_ranges are valid
-    for (sample_start_date, sample_end_date) in sample_date_ranges
-        _check_dates_in_var(vars, sample_start_date, sample_end_date)
-    end
-
-    # Form stacked samples
-    stacked_samples = _stacked_samples(vars, sample_date_ranges, dims)
-
-    # Check samples are all the same size
-    all(x -> x == length(first(stacked_samples)), length.(stacked_samples)) ||
-        error(
-            "Length of all the samples are not the same. Try checking sample_date_ranges and the dates of the OutputVars passed in. If there are `NaN`s in the data, check that the number of `NaN`s in each sample is the same.",
-        )
-
-    # Compute SVD of covariance matrix
-    stacked_sample_matrix = hcat(stacked_samples...)
-
+    # Apply latitude weights first so that both the SVD and the model error
+    # scale (the mean) are computed from the weighted matrix.
     covar_estimator.use_latitude_weights && _apply_lat_weights_to_samples!(
         stacked_sample_matrix,
-        vars,
-        start_date,
-        end_date,
-        dims,
+        metadata,
         min_cosd_lat = covar_estimator.min_cosd_lat,
     )
 
+    # Compute SVD of covariance matrix
     (; rank) = covar_estimator
     gamma_low_rank = if isnothing(rank)
         EKP.tsvd_cov_from_samples(stacked_sample_matrix)
@@ -286,9 +184,10 @@ function ObservationRecipe.covariance(
     # averages over two years, then this quantity is the mean of seasonal
     # averages spanned over two years, where the first DJF is the mean of every
     # other DJF and the second DJF is the mean of every other DJF.
+    FT = eltype(stacked_sample_matrix)
     model_error_scale =
         (
-            covar_estimator.model_error_scale .*
+            FT(covar_estimator.model_error_scale) .*
             mean(stacked_sample_matrix, dims = 2)
         ) .^ 2
     model_error_scale = Diagonal(vec(model_error_scale))
@@ -297,32 +196,37 @@ function ObservationRecipe.covariance(
     regularization = create_regularization(
         covar_estimator.regularization,
         covar_estimator,
-        vars,
-        sample_date_ranges,
+        metadata,
         model_error_scale,
-        dims,
     )
 
     return EKP.SVDplusD(gamma_low_rank, model_error_scale + regularization)
 end
 
 """
-    create_regularization(regularization::AbstractFloat, _, _, _, _, _)
+    create_regularization(regularization::AbstractFloat, _, _, model_error_scale)
 
 Create the regularization matrix of the form `regularization * I`.
+
+The scalar is cast to the element type of `model_error_scale` so the resulting
+covariance keeps a consistent element type (e.g. Float32).
 """
-function create_regularization(regularization::AbstractFloat, _, _, _, _, _)
-    return regularization * I
+function create_regularization(
+    regularization::AbstractFloat,
+    _,
+    _,
+    model_error_scale,
+)
+    FT = eltype(model_error_scale)
+    return FT(regularization) * I
 end
 
 """
     create_regularization(
         regularization::QuantileRegularization,
         covar_estimator::SVDplusDCovariance,
-        vars,
-        sample_date_ranges,
+        metadata,
         model_error_scale,
-        dims,
     )
 
 Create the regularization matrix where each variable gets its own regularization
@@ -331,29 +235,21 @@ vector.
 
 For each variable, the `qtl` quantile of the model error scale diagonal entries
 corresponding to that variable is computed and used as a constant regularization
-term for all entries belonging to that variable.
+term for all entries belonging to that variable. The per-variable index ranges
+are determined from `metadata` (one `Metadata` per variable).
 """
 function create_regularization(
     regularization::QuantileRegularization,
     covar_estimator::SVDplusDCovariance,
-    vars,
-    sample_date_ranges,
+    metadata,
     model_error_scale,
-    dims,
 )
-    metadata = _metadata_for_stacked_sample(vars, sample_date_ranges, dims)
-    index = 1
-    indices_vec = []
-    for md in metadata
-        data_size = ClimaAnalysis.flattened_length(md)
-        start_idx = index
-        index += data_size
-        push!(indices_vec, start_idx:(start_idx + data_size - 1))
-    end
+    indices_vec = _get_indices_of_metadata(metadata)
 
     (; qtl) = regularization
 
     model_error_scale_vec = model_error_scale.diag
+    FT = eltype(model_error_scale)
 
     regularization_vals_vec = []
     for (i, indices) in enumerate(indices_vec)
@@ -363,7 +259,7 @@ function create_regularization(
         # quantile computation)
         length(var_model_error_scale_vec) < 1 / qtl &&
             error("Insufficient samples for computing quantile")
-        qtl_for_var = Statistics.quantile(var_model_error_scale_vec, qtl)
+        qtl_for_var = FT(Statistics.quantile(var_model_error_scale_vec, qtl))
         qtl_for_var ≈ 0.0 && error(
             "Zero found for the quantile ($qtl) of the model error scale for the variable ($(ClimaAnalysis.short_name(metadata[i]))). The model error scale ($(covar_estimator.model_error_scale)) might be too small",
         )
@@ -383,171 +279,62 @@ end
 """
     _apply_lat_weights_to_samples!(
         stacked_sample_matrix,
-        vars::Iterable{OutputVar},
-        start_date,
-        end_date,
-        dims;
-        min_cosd_lat = 0.1
+        all_metadata;
+        min_cosd_lat = 0.1,
     )
 
-Apply latitude weights to the matrix of samples.
+Apply latitude weights to every column of `stacked_sample_matrix` in place.
 
-The latitude weights applied is `1 / sqrt(max(cosd(lat), min_cosd_lat))` to each
-column of the matrix.
+The latitude weight applied is `sqrt(1 / max(cosd(lat), min_cosd_lat))`. The
+weights are derived from `all_metadata` (see [`_flat_lat_weights`](@ref)) and
+are the same for every column, so the same weight vector is applied to all
+columns.
 """
 function _apply_lat_weights_to_samples!(
     stacked_sample_matrix,
-    vars,
-    start_date,
-    end_date,
-    dims;
+    all_metadata;
     min_cosd_lat = 0.1,
 )
-    flattened_lat_weights = (
-        ClimaAnalysis.flatten(
-            _lat_weights_var(
-                ClimaAnalysis.window(
-                    var,
-                    "time",
-                    left = start_date,
-                    right = end_date,
-                ),
-                min_cosd_lat = min_cosd_lat,
-            );
-            dims,
-        ).data for var in vars
-    )
-    flattened_lat_weights = sqrt.(vcat(flattened_lat_weights...))
-    flattened_lat_weights =
-        reshape(flattened_lat_weights, length(flattened_lat_weights), 1)
     # It is okay to find the latitude weights for a single column and apply it
     # to every other column, because the flattening of OutputVars should be the
     # same for each column
-    stacked_sample_matrix .*= flattened_lat_weights
+    flat_lat_weights = _flat_lat_weights(all_metadata; min_cosd_lat)
+    stacked_sample_matrix .*= sqrt.(flat_lat_weights)
     return nothing
 end
 
 """
     observation(
         covar_estimator::AbstractCovarianceEstimator,
-        vars,
-        start_date,
-        end_date;
-        dims = FLATTENED_DIMS,
-        name = nothing
-    )
-
-Return an `EKP.Observation` with a sample between the dates `start_date` and
-`end_date`, a covariance matrix defined by `covar_estimator`, `name` determined
-from the short names of `vars`, and metadata.
-
-!!! note "Metadata"
-    Metadata in `EKP.observation` is only added with versions of
-    EnsembleKalmanProcesses later than v2.4.2.
-"""
-function ObservationRecipe.observation(
-    covar_estimator::AbstractCovarianceEstimator,
-    vars,
-    start_date,
-    end_date;
-    dims = FLATTENED_DIMS,
-    name = nothing,
-)
-    return _observation(covar_estimator, vars, start_date, end_date; dims, name)
-end
-
-"""
-    observation(
-        covar_estimator::ScalarCovariance,
-        vars;
-        dims = FLATTENED_DIMS,
-        name = nothing
-    )
-
-Return an `EKP.Observation` with data in `vars`, a covariance matrix defined by
-`covar_estimator`, `name` determined from the short names of `vars`, and
-metadata.
-
-!!! note "Metadata"
-    Metadata in `EKP.observation` is only added with versions of
-    EnsembleKalmanProcesses later than v2.4.2.
-"""
-function ObservationRecipe.observation(
-    covar_estimator::ScalarCovariance,
-    vars;
-    dims = FLATTENED_DIMS,
-    name = nothing,
-)
-    return _observation(covar_estimator, vars, nothing, nothing; dims, name)
-end
-
-"""
-    _observation(
-        covar_estimator::AbstractCovarianceEstimator,
-        vars,
-        start_date,
-        end_date;
-        dims = FLATTENED_DIMS,
+        osc::ObservedSampleCollection;
         name = nothing,
     )
 
-Helper function for creating an `EKP.Observation` when `start_date` and
-`end_date` are either `nothing` or values convertible to `Dates.DateTime`.
+Return an `EKP.Observation` with the observation in `osc` as the sample, a
+covariance matrix defined by `covar_estimator`, `name` determined from the short
+names of the observation, and metadata.
+
+!!! note "Metadata"
+    Metadata in `EKP.observation` is only added with versions of
+    EnsembleKalmanProcesses later than v2.4.2.
 """
-function _observation(
+function ObservationRecipe.observation(
     covar_estimator::AbstractCovarianceEstimator,
-    vars,
-    start_date,
-    end_date;
-    dims = FLATTENED_DIMS,
+    osc::ObservedSampleCollection;
     name = nothing,
 )
-    vars = _vars_to_iterable(vars)
-    dates_provided = !isnothing(start_date) && !isnothing(end_date)
-    if dates_provided
-        # Convert dates to Dates.DateTime if they are strings
-        start_date = Dates.DateTime(start_date)
-        end_date = Dates.DateTime(end_date)
+    stacked_sample = collect(get_obs(osc))
+    metadata = collect(get_obs_metadata(osc))
 
-        _check_time_dim_of_vars(vars, start_date, end_date)
-    end
-
-    any(==(""), ClimaAnalysis.short_name.(vars)) && @warn(
+    any(==(""), ClimaAnalysis.short_name.(metadata)) && @warn(
         "There are OutputVar(s) with no short name. You will not be able to use GEnsembleBuilder"
     )
 
-    # Get the flattened sample and metadata
-    maybe_windowed_vars =
-        dates_provided ?
-        ClimaAnalysis.window.(
-            vars,
-            "time",
-            left = start_date,
-            right = end_date,
-        ) : vars
-    flat_vars =
-        map(var -> ClimaAnalysis.flatten(var; dims), maybe_windowed_vars)
-    stacked_sample = vcat((flat_var.data for flat_var in flat_vars)...)
-    metadata = [(flat_var.metadata for flat_var in flat_vars)...]
-    if dates_provided
-        covar = ObservationRecipe.covariance(
-            covar_estimator,
-            vars,
-            start_date,
-            end_date;
-            dims,
-        )
-    else
-        covar = ObservationRecipe.covariance(covar_estimator, vars; dims)
-    end
+    covar = ObservationRecipe.covariance(covar_estimator, osc)
 
     # Concatenate names and separating them with a semicolon
-    isnothing(name) && (
-        name = join(
-            [get(var.attributes, "short_name", nothing) for var in vars],
-            ";",
-        )
-    )
+    isnothing(name) &&
+        (name = join([ClimaAnalysis.short_name(m) for m in metadata], ";"))
     return EKP.Observation(
         Dict(
             "samples" => stacked_sample,
@@ -557,6 +344,7 @@ function _observation(
         ),
     )
 end
+
 """
     short_names(obs::EKP.Observation)
 
@@ -587,8 +375,9 @@ A seasonally aligned year is defined to be from December to November of the
 following year.
 
 This function is useful for finding the sample dates of samples consisting of
-all four seasons in a single year. For example, one can use this function to
-find the `sample_date_ranges` when constructing `SVDplusDCovariance`.
+all four seasons in a single year. For example, one can pass these date ranges
+to `SampleBuilder.build_samples_by_times` to build the samples for a
+`SVDplusDCovariance` or `SeasonalDiagonalCovariance`.
 
 !!! note "All four seasons in a year is not guaranteed"
     This function does not check whether the start and end dates of each sample
@@ -600,8 +389,7 @@ function ObservationRecipe.seasonally_aligned_yearly_sample_date_ranges(
 )
     dates = ClimaAnalysis.dates(var)
     issorted(dates) || error("$dates is not sorted")
-    seasonal_years =
-        (year for (_, year) in ClimaAnalysis.Utils.find_season_and_year.(dates))
+    seasonal_years = (year for (_, year) in find_season_and_year.(dates))
     prev_year, seasonal_years... = seasonal_years
     first_date, dates... = dates
     date_ranges = typeof(dates)[[first_date, first_date]]
@@ -617,138 +405,26 @@ function ObservationRecipe.seasonally_aligned_yearly_sample_date_ranges(
 end
 
 """
-    change_data_type(var::OutputVar, data_type)
+    _flat_lat_weights(all_metadata; min_cosd_lat = 0.1)
 
-Return a `OutputVar` with `data` of type `data_type`.
-
-This is useful if you want to make covariance matrix whose element type is
-`data_type`.
+Return the latitude weights `1 / max(cosd(lat), min_cosd_lat)`, flattened and
+concatenated to match `all_metadata`, an iterable of
+`ClimaAnalysis.Var.Metadata`.
 """
-function ObservationRecipe.change_data_type(var::OutputVar, data_type)
-    return ClimaAnalysis.remake(var, data = data_type.(var.data))
-end
-
-"""
-    _stacked_samples(vars::Iterable{OutputVar}, sample_date_ranges, dims)
-
-Make a vector of stacked samples from multiple `OutputVar`s and an iterable of
-2-element iterables of dates.
-
-Each sample corresponds to a single minibatch and the sample is stacked, because
-it may contain multiple variables.
-"""
-function _stacked_samples(vars, sample_date_ranges, dims)
-    return map(sample_date_ranges) do (sample_start_date, sample_end_date)
-        vcat(
-            (
-                ClimaAnalysis.flatten(
-                    ClimaAnalysis.window(
-                        var,
-                        "time",
-                        left = sample_start_date,
-                        right = sample_end_date,
-                    );
-                    dims,
-                ).data for var in vars
-            )...,
-        )
-    end
-end
-
-"""
-    _metadata_for_stacked_sample(vars, sample_date_ranges, dims)
-
-Get metadata for a single stacked sample.
-
-Since this is metadata from only a single stacked sample, you cannot use the
-metadata for time information as the time information differs for each sample.
-"""
-function _metadata_for_stacked_sample(vars, sample_date_ranges, dims)
-    sample_start_date, sample_end_date = first(sample_date_ranges)
-    metadata = []
-    for var in vars
-        md =
+function _flat_lat_weights(all_metadata; min_cosd_lat = 0.1)
+    parts = Vector[]
+    for metadata in all_metadata
+        data_length = ClimaAnalysis.flattened_length(metadata)
+        var = ClimaAnalysis.unflatten(metadata, ones(data_length))
+        push!(
+            parts,
             ClimaAnalysis.flatten(
-                ClimaAnalysis.window(
-                    var,
-                    "time",
-                    left = sample_start_date,
-                    right = sample_end_date,
-                );
-                dims,
-            ).metadata
-        push!(metadata, md)
-    end
-    return metadata
-end
-
-"""
-    group_and_reduce_by(var::OutputVar, dim_name, group_by, reduce_by)
-
-Group the dimension `dim_name` using `group_by` and apply the reduction
-`reduce_by` along the dimension.
-
-The first element in each group is used as the dimension of the resulting
-`OutputVar`.
-
-Only the short name, long name, units, and start date are kept. All other
-attributes are discarded in the process.
-
-The function `group_by` takes in a vector of values for a dimension and returns
-a vector of vectors of values of the dimension. The function `reduce_by` must be
-of the form `f(A; dims)`, where `A` is a slice of `var.data` and `dims` is the
-index of `A` to reduce against and return the reduction over the `dims`
-dimension.
-
-Note `group_by` does not need to partition the values of the dimension. For
-example, the `group_by` function can be `group_by(dim) = [[first(dim)]]`, which
-return the first slice of the `OutputVar`.
-"""
-function group_and_reduce_by(var::OutputVar, dim_name, group_by, reduce_by)
-    dim_name_in_var =
-        ClimaAnalysis.Var.find_corresponding_dim_name_in_var(dim_name, var)
-    dim_idx = var.dim2index[dim_name_in_var]
-
-    # Group by
-    dim_vals_groups = group_by(var.dims[dim_name_in_var])
-    dim_indices_groups =
-        indexin.(dim_vals_groups, Ref(var.dims[dim_name_in_var]))
-    data_groups = map(dim_indices_groups) do dim_indices
-        index_tuple = ntuple(
-            idx -> idx == dim_idx ? dim_indices : Colon(),
-            ndims(var.data),
+                _lat_weights_var(var; min_cosd_lat),
+                metadata,
+            ).data,
         )
-        view(var.data, index_tuple...)
     end
-
-    # Reduce by and concat
-    ret_data = cat(reduce_by.(data_groups, dims = dim_idx)..., dims = dim_idx)
-
-    # Get the elements for constructing the new dimension
-    ret_dim_indices = [
-        first(dim_indices) for
-        dim_indices in dim_indices_groups if !isempty(dim_indices)
-    ]
-
-    # New dimension to return
-    dim = var.dims[dim_name_in_var][ret_dim_indices]
-
-    # Make new dimensions for OutputVar
-    ret_dims = deepcopy(var.dims)
-    ret_dims[dim_name_in_var] = dim
-
-    # Keep short name, long name, units, and start_date and discard the rest
-    keep_attribs = ("long_name", "short_name", "units", "start_date")
-    ret_attribs = Dict(
-        attrib => var.attributes[attrib] for
-        attrib in keep_attribs if attrib in keys(var.attributes)
-    )
-    return ClimaAnalysis.remake(
-        var,
-        attributes = ret_attribs,
-        data = ret_data,
-        dims = ret_dims,
-    )
+    return reduce(vcat, parts)
 end
 
 """
@@ -800,7 +476,7 @@ function ObservationRecipe.reconstruct_g(
     obs_series = EKP.get_observation_series(ekp)
     metadata = ClimaCalibrate.get_metadata_for_nth_iteration(obs_series, it)
     all(m isa ClimaAnalysis.Var.Metadata for m in metadata) || error(
-        "Getting the short names from an observation is only supported with metadata from ClimaAnalysis",
+        "Reconstructing g is only possible when the metadata are all ClimaAnalysis.Var.Metadata",
     )
 
     g_ens = EKP.get_g(ekp, it)
@@ -814,13 +490,9 @@ function ObservationRecipe.reconstruct_g(
     )
 
     # Reconstruct each OutputVar for every ensemble member (column of g_ens)
-    minibatch_indices =
-        ObservationRecipe._get_minibatch_indices_for_nth_iteration(
-            obs_series,
-            it,
-        )
+    ranges = _get_indices_of_metadata(metadata)
     vars_per_ens = [
-        map(metadata, minibatch_indices) do m, range
+        map(metadata, ranges) do m, range
             ClimaAnalysis.unflatten(m, g_ens[range, col])
         end for col in 1:num_cols
     ]
@@ -840,7 +512,7 @@ function ObservationRecipe.reconstruct_g_mean(
     obs_series = EKP.get_observation_series(ekp)
     metadata = ClimaCalibrate.get_metadata_for_nth_iteration(obs_series, it)
     all(m isa ClimaAnalysis.Var.Metadata for m in metadata) || error(
-        "Getting the short names from an observation is only supported with metadata from ClimaAnalysis",
+        "Reconstructing g_mean is only possible when the metadata are all ClimaAnalysis.Var.Metadata",
     )
 
     g_mean = EKP.get_g_mean(ekp, it)
@@ -852,16 +524,7 @@ function ObservationRecipe.reconstruct_g_mean(
         "Length of g_mean is not the same as the length of all the metadata",
     )
 
-    # Reconstruct each OutputVar from the metadata
-    minibatch_indices =
-        ObservationRecipe._get_minibatch_indices_for_nth_iteration(
-            obs_series,
-            it,
-        )
-    vars = map(metadata, minibatch_indices) do m, range
-        ClimaAnalysis.unflatten(m, g_mean[range])
-    end
-    return vars
+    return _reconstruct_vars(g_mean, metadata)
 end
 
 """
@@ -897,13 +560,7 @@ function ObservationRecipe.reconstruct_diag_cov(obs::EKP.Observation)
     # the indexing a bit more difficult
     cov_diags = mapreduce(cov -> view(cov, diagind(cov)), vcat, covs)
 
-    vars = OutputVar[]
-    all_indices = _get_indices_of_metadata(all_metadata)
-    for (metadata, indices) in zip(all_metadata, all_indices)
-        var = ClimaAnalysis.unflatten(metadata, view(cov_diags, indices))
-        push!(vars, var)
-    end
-    return vars
+    return _reconstruct_vars(cov_diags, all_metadata)
 end
 
 """
@@ -916,13 +573,7 @@ function ObservationRecipe.reconstruct_vars(obs::EKP.Observation)
     samples = EKP.get_samples(obs)
     stacked_sample = reduce(vcat, samples)
 
-    vars = OutputVar[]
-    all_indices = _get_indices_of_metadata(all_metadata)
-    for (metadata, indices) in zip(all_metadata, all_indices)
-        var = ClimaAnalysis.unflatten(metadata, view(stacked_sample, indices))
-        push!(vars, var)
-    end
-    return vars
+    return _reconstruct_vars(stacked_sample, all_metadata)
 end
 
 """
@@ -942,27 +593,4 @@ function ObservationRecipe._get_minibatch_indices_for_nth_iteration(
     all_metadata = ClimaCalibrate.get_metadata_for_nth_iteration(obs_series, N)
     minibatch_indices = _get_indices_of_metadata(all_metadata)
     return minibatch_indices
-end
-
-"""
-    _get_indices_of_metadata(metadata::Iterable{ClimaAnalysis.Var.Metadata})
-
-For a vector of `ClimaAnalysis.Var.Metadata`, return a list of ranges for
-indexing.
-
-This is useful when you have a vector created from the concatenation of
-multiple flattened `OutputVar`s. The returned ranges let you extract the slice
-that belongs to each metadata entry and pass it to `ClimaAnalysis.unflatten` to
-reconstruct the original `OutputVar`.
-"""
-function _get_indices_of_metadata(metadata)
-    ranges = UnitRange{Int}[]
-    index = 1
-    for md in metadata
-        data_size = ClimaAnalysis.flattened_length(md)
-        start_idx = index
-        index += data_size
-        push!(ranges, start_idx:(start_idx + data_size - 1))
-    end
-    return ranges
 end

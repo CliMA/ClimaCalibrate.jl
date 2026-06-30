@@ -169,9 +169,16 @@ function Checker.check(
             metadata,
         )
         if ClimaAnalysis.conventional_dim_name(var_dim_name) != "time"
-            same_dim_values = all(
-                isapprox(var.dims[var_dim_name], metadata.dims[md_dim_name]),
-            )
+            same_length =
+                length(var.dims[var_dim_name]) ==
+                length(metadata.dims[md_dim_name])
+            if !same_length
+                verbose &&
+                    @info "Length of dimension ($var_dim_name) in OutputVar ($(var.dims[var_dim_name])) is not the same as length of dimension in metadata ($(metadata.dims[md_dim_name])))"
+                return false
+            end
+            same_dim_values =
+                isapprox(var.dims[var_dim_name], metadata.dims[md_dim_name])
             if !same_dim_values
                 verbose &&
                     @info "Values of dimension ($var_dim_name) in OutputVar ($(var.dims[var_dim_name])) is not the same as values of dimension in metadata ($(metadata.dims[md_dim_name])))"

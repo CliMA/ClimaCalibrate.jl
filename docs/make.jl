@@ -39,6 +39,7 @@ makedocs(
         "Backends" => "backends.md",
         "Submission Scripts" => "submit_scripts.md",
         "Observations" => "observations.md",
+        "Sample Builder" => "sample_builder.md",
         "Observation Recipes" => "observation_recipe.md",
         "G Ensemble Builder" => "ensemble_builder.md",
         "Visualization" => "visualization.md",

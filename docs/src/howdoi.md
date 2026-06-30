@@ -26,7 +26,7 @@ import ClimaAnalysis.Template:
     one_to_n_data,
     initialize
 import ClimaCalibrate
-import ClimaCalibrate: ObservationRecipe, EnsembleBuilder
+import ClimaCalibrate: ObservationRecipe, EnsembleBuilder, SampleBuilder
 
 lat = [-90.0, -30.0, 30.0, 90.0]
 lon = [-60.0, -30.0, 0.0, 30.0, 60.0]
@@ -51,12 +51,15 @@ covar_estimator = ObservationRecipe.ScalarCovariance(; scalar = 1.0)
 
 start_date = Dates.DateTime(2007, 12)
 end_date = start_date + Dates.Second(time[end])
-obs = ObservationRecipe.observation(
-    covar_estimator,
-    (var, neg_var),
-    start_date,
-    end_date,
+osc = SampleBuilder.choose_obs(
+    SampleBuilder.build_samples_by_times(
+        [var, neg_var],
+        [(start_date, end_date)];
+        FT = Float64,
+    ),
+    1,
 )
+obs = ObservationRecipe.observation(covar_estimator, osc)
 
 obs_series = EKP.ObservationSeries(
     Dict(
@@ -163,3 +166,17 @@ ObservationRecipe.reconstruct_diag_cov(obs)
 
 nothing # hide
 ```
+
+# How do I handle `NaN`s in the `OutputVar`s so that there are no `NaN`s in the sample and covariance matrix?
+
+`NaN`s should be handled when preprocessing the data. In some cases,
+there will be `NaN`s in the data (e.g. calibrating with data that is valid only
+over land). In these cases, the `SampleBuilder` module automatically removes
+`NaN`s from the data when building the samples, since `ClimaAnalysis.flatten`
+drops `NaN`s while flattening each `OutputVar`. It is important to ensure that
+across the time slices, the `NaN`s appear in the same coordinates of the
+non-temporal dimensions. For example, if the quantity is defined over the
+dimensions longitude, latitude, and time, then any slice of the data at a
+particular longitude and latitude should either only contain `NaN`s or no `NaN`s
+at all. The `SampleBuilder` module checks that the dropped coordinates match
+across samples and errors otherwise.

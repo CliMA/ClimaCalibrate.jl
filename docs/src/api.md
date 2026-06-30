@@ -110,6 +110,23 @@ ClimaCalibrate.EKPUtils.get_metadata_for_nth_iteration
 ClimaCalibrate.EKPUtils.g_ens_matrix
 ```
 
+## Sample Builder Interface
+
+```@docs
+ClimaCalibrateClimaAnalysisExt.SampleCollection
+ClimaCalibrate.SampleBuilder.build_samples
+ClimaCalibrate.SampleBuilder.build_samples_by_times
+ClimaCalibrate.SampleBuilder.num_samples
+ClimaCalibrate.SampleBuilder.reconstruct_col
+ClimaCalibrateClimaAnalysisExt.ObservedSampleCollection
+ClimaCalibrate.SampleBuilder.choose_obs
+ClimaCalibrate.SampleBuilder.reconstruct_obs
+ClimaCalibrate.SampleBuilder.get_obs
+ClimaCalibrate.SampleBuilder.get_obs_metadata
+ClimaCalibrate.SampleBuilder.get_samples
+ClimaCalibrate.SampleBuilder.get_metadata
+```
+
 ## Observation Recipe Interface
 
 ```@docs
@@ -119,7 +136,7 @@ ClimaCalibrate.ObservationRecipe.ScalarCovariance()
 ClimaCalibrate.ObservationRecipe.SeasonalDiagonalCovariance
 ClimaCalibrate.ObservationRecipe.SeasonalDiagonalCovariance()
 ClimaCalibrate.ObservationRecipe.SVDplusDCovariance
-ClimaCalibrate.ObservationRecipe.SVDplusDCovariance(sample_dates)
+ClimaCalibrate.ObservationRecipe.SVDplusDCovariance()
 ClimaCalibrate.ObservationRecipe.QuantileRegularization
 ClimaCalibrate.ObservationRecipe.covariance
 ClimaCalibrate.ObservationRecipe.observation
@@ -130,7 +147,6 @@ ClimaCalibrate.ObservationRecipe.reconstruct_g_mean_final
 ClimaCalibrate.ObservationRecipe.reconstruct_diag_cov
 ClimaCalibrate.ObservationRecipe.reconstruct_vars
 ClimaCalibrate.ObservationRecipe.seasonally_aligned_yearly_sample_date_ranges
-ClimaCalibrate.ObservationRecipe.change_data_type
 ```
 
 ## SVD Residual Analysis

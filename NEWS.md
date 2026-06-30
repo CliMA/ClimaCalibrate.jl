@@ -13,6 +13,31 @@ main
 - Add `ClimaCalibrateMakie` extension for plotting ensemble members, the mean
   forward map evaluation, and the observations
   [#331](https://github.com/CliMA/ClimaCalibrate.jl/pull/331)
+- Add the `SampleBuilder` module and refactor `ObservationRecipe`
+  [#334](https://github.com/CliMA/ClimaCalibrate.jl/pull/334)
+  - The `SampleBuilder` module handles transforming one or more
+    `ClimaAnalysis.OutputVar`s into a matrix of samples with metadata.
+  - Building an observation is now a two-step process: use `SampleBuilder` to
+    turn `ClimaAnalysis.OutputVar`s into an `ObservedSampleCollection`, then
+    pass that to `ObservationRecipe` to estimate the covariance and build the
+    `EKP.Observation`.
+  - **Breaking**: `ObservationRecipe.observation` and
+    `ObservationRecipe.covariance` now take an `ObservedSampleCollection` (e.g
+    `observation(covar_estimator, osc)`) instead of
+    `(covar_estimator, vars, start_date, end_date)`. The `dims` keyword (flatten
+    order) is moved to `SampleBuilder.generate_samples`.
+  - **Breaking**: `SVDplusDCovariance` no longer takes `sample_date_ranges`.
+    Instead, you can window the time series into samples with
+    `SampleBuilder.generate_samples_by_times`.
+  - **Breaking**: `SeasonalDiagonalCovariance` now estimates the variance across
+    the sample columns and requires at least two samples. A single multi-year
+    `OutputVar` is no longer accepted as one sample; split it into one sample
+    per year with `generate_samples_by_times`. The `ignore_nan` keyword was
+    removed (`NaN`s are always ignored).
+  - **Breaking**: removed `ObservationRecipe.change_data_type`. The covariance
+    inherits its element type from the samples, so set it with the `FT` keyword
+    to `generate_samples`/`generate_samples_by_times` (default `Float32`); pass
+    `FT = Float64` if you need `Float64`.
 
 v0.3.1
 -------

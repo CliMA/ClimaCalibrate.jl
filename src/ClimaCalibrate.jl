@@ -16,6 +16,7 @@ include("backend.jl")
 include("calibration.jl")
 @reexport using .Calibration
 
+include("sample_builder.jl")
 include("observation_recipe.jl")
 include("ensemble_builder.jl")
 include("checkers.jl")

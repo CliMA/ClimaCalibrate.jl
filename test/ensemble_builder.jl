@@ -2,6 +2,7 @@ using Test
 import Dates
 import ClimaAnalysis
 import ClimaCalibrate
+import ClimaCalibrate.SampleBuilder
 import ClimaCalibrate.ObservationRecipe
 import ClimaCalibrate.EnsembleBuilder
 import ClimaCalibrate.Checker
@@ -15,8 +16,8 @@ import NaNStatistics: nanvar, nanmean
 import EnsembleKalmanProcesses as EKP
 using EnsembleKalmanProcesses.ParameterDistributions
 
-# Since functions not defined in ext are not exported, we need to access
-# them like this
+# Since functions defined in ext are not exported, we need to access them like
+# this
 ext = Base.get_extension(ClimaCalibrate, :ClimaCalibrateClimaAnalysisExt)
 
 import ClimaAnalysis.Template:
@@ -148,6 +149,25 @@ import ClimaAnalysis.Template:
         dim_values_checker,
         date_var1,
         make_metadata(diff_dates_var),
+        verbose = true,
+    )
+
+    # Check length of dimensions
+    diff_length_lat = [-80.0]
+    diff_lat_length_var =
+        TemplateVar() |>
+        add_dim("lat", diff_length_lat, units = "degrees_west") |>
+        add_attribs(short_name = "hey") |>
+        initialize
+    @test !Checker.check(
+        dim_values_checker,
+        var,
+        make_metadata(diff_lat_length_var),
+    )
+    @test_logs (:info, r"is not the same as length of dimension") Checker.check(
+        dim_values_checker,
+        var,
+        make_metadata(diff_lat_length_var),
         verbose = true,
     )
 
@@ -333,7 +353,8 @@ end
 
     covar_estimator = ObservationRecipe.ScalarCovariance()
 
-    obs_vec = [ObservationRecipe.observation(covar_estimator, lon_var)]
+    osc = SampleBuilder.choose_obs(SampleBuilder.build_samples(lon_var), 1)
+    obs_vec = [ObservationRecipe.observation(covar_estimator, osc)]
     obs_series = EKP.ObservationSeries(
         Dict(
             "observations" => obs_vec,
@@ -403,16 +424,21 @@ end
 
     covar_estimator = ObservationRecipe.SeasonalDiagonalCovariance()
 
+    sample_date_ranges = [
+        (Dates.DateTime(i, 12, 1), Dates.DateTime(i + 1, 9, 1)) for
+        i in 2007:2009
+    ]
     obs_vec = [
         ObservationRecipe.observation(
             covar_estimator,
-            vars,
-            start_date,
-            end_date,
-        ) for (vars, start_date, end_date) in [
-            ((time_var, lon_var), "2007-12-1", "2008-9-1"),
-            ((lon_var, time_var), "2008-12-1", "2009-9-1"),
-            ((time_var,), "2009-12-1", "2010-9-1"),
+            SampleBuilder.choose_obs(
+                SampleBuilder.build_samples_by_times(vars, sample_date_ranges),
+                col,
+            ),
+        ) for (vars, col) in [
+            ([time_var, lon_var], 1),
+            ([lon_var, time_var], 2),
+            ([time_var], 3),
         ]
     ]
     obs_series = EKP.ObservationSeries(
@@ -585,12 +611,20 @@ end
 
     covar_estimator = ObservationRecipe.SeasonalDiagonalCovariance()
 
+    sample_date_ranges = [
+        (Dates.DateTime(i, 12, 1), Dates.DateTime(i + 1, 9, 1)) for
+        i in 2007:2009
+    ]
     obs_vec = [
         ObservationRecipe.observation(
             covar_estimator,
-            (time_var, lon_var),
-            "2007-12-1",
-            "2008-9-1",
+            SampleBuilder.choose_obs(
+                SampleBuilder.build_samples_by_times(
+                    [time_var, lon_var],
+                    sample_date_ranges,
+                ),
+                1,
+            ),
         ),
     ]
     obs_series = EKP.ObservationSeries(
@@ -634,7 +668,7 @@ end
     time =
         ClimaAnalysis.Utils.date_to_time.(
             Dates.DateTime(2007, 12),
-            [Dates.DateTime(2007, 12) + Dates.Month(3 * i) for i in 0:4],
+            [Dates.DateTime(2007, 12) + Dates.Month(3 * i) for i in 0:7],
         )
     time_var =
         TemplateVar() |>
@@ -643,12 +677,20 @@ end
         one_to_n_data() |>
         initialize
     covar_estimator = ObservationRecipe.SeasonalDiagonalCovariance()
+    sample_date_ranges = [
+        (Dates.DateTime(i, 12, 1), Dates.DateTime(i + 1, 9, 1)) for
+        i in 2007:2008
+    ]
     obs_vec = [
         ObservationRecipe.observation(
             covar_estimator,
-            time_var,
-            "2007-12-1",
-            "2008-9-1",
+            SampleBuilder.choose_obs(
+                SampleBuilder.build_samples_by_times(
+                    [time_var],
+                    sample_date_ranges,
+                ),
+                1,
+            ),
         ),
     ]
     obs_series = EKP.ObservationSeries(

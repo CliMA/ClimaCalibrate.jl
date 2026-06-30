@@ -60,7 +60,7 @@ import ClimaAnalysis.Template:
     one_to_n_data,
     initialize
 import ClimaCalibrate
-import ClimaCalibrate: ObservationRecipe, EnsembleBuilder
+import ClimaCalibrate: ObservationRecipe, EnsembleBuilder, SampleBuilder
 
 lat = [-90.0, -30.0, 30.0, 90.0]
 lon = [-60.0, -30.0, 0.0, 30.0, 60.0]
@@ -85,8 +85,15 @@ covar_estimator = ObservationRecipe.ScalarCovariance(; scalar = 1.0)
 
 start_date = Dates.DateTime(2007, 12)
 end_date = start_date + Dates.Second(time[end])
-obs =
-    ObservationRecipe.observation(covar_estimator, (var,), start_date, end_date)
+osc = SampleBuilder.choose_obs(
+    SampleBuilder.build_samples_by_times(
+        [var],
+        [(start_date, end_date)];
+        FT = Float64,
+    ),
+    1,
+)
+obs = ObservationRecipe.observation(covar_estimator, osc)
 
 obs_series = EKP.ObservationSeries(
     Dict(
