@@ -33,11 +33,10 @@ import ClimaAnalysis.Template:
 
 @testset "Utils" begin
     @testset "Dates in var" begin
-        time =
-            ClimaAnalysis.Utils.date_to_time.(
-                Dates.DateTime(2007, 12),
-                [Dates.DateTime(2007, 12) + Dates.Month(i) for i in 0:3],
-            )
+        time = ClimaAnalysis.Utils.date_to_time.(
+            Dates.DateTime(2007, 12),
+            [Dates.DateTime(2007, 12) + Dates.Month(i) for i in 0:3],
+        )
         var =
             TemplateVar() |>
             add_dim("time", time, units = "s") |>
@@ -102,11 +101,10 @@ import ClimaAnalysis.Template:
             [Dates.DateTime(2015, 1, 13), Dates.DateTime(2018, 2, 13)],
         )
 
-        seconds =
-            ClimaAnalysis.Utils.date_to_time.(
-                Dates.DateTime(2015, 1, 13),
-                dates,
-            )
+        seconds = ClimaAnalysis.Utils.date_to_time.(
+            Dates.DateTime(2015, 1, 13),
+            dates,
+        )
         expected_seconds = [
             ClimaAnalysis.Utils.date_to_time.(
                 Dates.DateTime(2015, 1, 13),
@@ -157,11 +155,10 @@ import ClimaAnalysis.Template:
 end
 
 @testset "Seasonally aligned year sample dates" begin
-    time =
-        ClimaAnalysis.Utils.date_to_time.(
-            Dates.DateTime(2007, 12),
-            [Dates.DateTime(2007, 12) + Dates.Month(i) for i in 0:13],
-        )
+    time = ClimaAnalysis.Utils.date_to_time.(
+        Dates.DateTime(2007, 12),
+        [Dates.DateTime(2007, 12) + Dates.Month(i) for i in 0:13],
+    )
     var =
         TemplateVar() |>
         add_dim("time", time, units = "s") |>
@@ -187,11 +184,10 @@ end
     ]
 
     # Time dimension with a single element
-    time =
-        ClimaAnalysis.Utils.date_to_time.(
-            Dates.DateTime(2007, 12),
-            [Dates.DateTime(2007, 12)],
-        )
+    time = ClimaAnalysis.Utils.date_to_time.(
+        Dates.DateTime(2007, 12),
+        [Dates.DateTime(2007, 12)],
+    )
     var =
         TemplateVar() |>
         add_dim("time", time, units = "s") |>
@@ -211,11 +207,10 @@ end
     ]]
 
     # Error handling
-    time =
-        ClimaAnalysis.Utils.date_to_time.(
-            Dates.DateTime(2007, 12),
-            [Dates.DateTime(2008, 12), Dates.DateTime(2007, 12)],
-        )
+    time = ClimaAnalysis.Utils.date_to_time.(
+        Dates.DateTime(2007, 12),
+        [Dates.DateTime(2008, 12), Dates.DateTime(2007, 12)],
+    )
     var =
         TemplateVar() |>
         add_dim("time", time, units = "s") |>
@@ -280,11 +275,10 @@ end
     # Seasonal averages across time
     lat = [-90.0, -30.0, 30.0, 90.0]
     lon = [-60.0, -30.0, 0.0, 30.0, 60.0]
-    time =
-        ClimaAnalysis.Utils.date_to_time.(
-            Dates.DateTime(2008),
-            [Dates.DateTime(2008, i) for i in 1:12],
-        )
+    time = ClimaAnalysis.Utils.date_to_time.(
+        Dates.DateTime(2008),
+        [Dates.DateTime(2008, i) for i in 1:12],
+    )
     var =
         TemplateVar() |>
         add_dim("time", time, units = "s") |>
@@ -329,11 +323,10 @@ end
 @testset "Stacked samples" begin
     lat = [-90.0, -45.0, -30.0, 0.0, 30.0, 45.0, 90.0]
     lon = [-60.0, -30.0, 0.0, 30.0, 60.0]
-    time =
-        ClimaAnalysis.Utils.date_to_time.(
-            Dates.DateTime(2007, 12),
-            [Dates.DateTime(2007, 12) + Dates.Month(i) for i in 0:35],
-        )
+    time = ClimaAnalysis.Utils.date_to_time.(
+        Dates.DateTime(2007, 12),
+        [Dates.DateTime(2007, 12) + Dates.Month(i) for i in 0:35],
+    )
     var =
         TemplateVar() |>
         add_dim("time", time, units = "s") |>
@@ -490,11 +483,10 @@ end
 @testset "ScalarCovariance" begin
     lat = [-90.0, -30.0, 30.0, 90.0]
     lon = [-60.0, -30.0, 0.0, 30.0, 60.0]
-    time =
-        ClimaAnalysis.Utils.date_to_time.(
-            Dates.DateTime(2007, 12),
-            [Dates.DateTime(2007, 12) + Dates.Month(i) for i in 0:35],
-        )
+    time = ClimaAnalysis.Utils.date_to_time.(
+        Dates.DateTime(2007, 12),
+        [Dates.DateTime(2007, 12) + Dates.Month(i) for i in 0:35],
+    )
     var =
         TemplateVar() |>
         add_dim("time", time, units = "s") |>
@@ -630,20 +622,17 @@ end
     scalar_covar = ObservationRecipe.covariance(covar_estimator, var)
     @test scalar_covar ==
           10.0 .* Diagonal(
-        ClimaAnalysis.flatten(
-            ext._lat_weights_var(var, min_cosd_lat = 0.2),
-        ).data,
+        ClimaAnalysis.flatten(ext._lat_weights_var(var, min_cosd_lat = 0.2)).data,
     )
 end
 
 @testset "Latitude weights to matrix of samples" begin
     lat = [-90.0, -30.0, 30.0, 90.0]
     lon = [-60.0, -30.0, 0.0, 30.0, 60.0]
-    time =
-        ClimaAnalysis.Utils.date_to_time.(
-            Dates.DateTime(2007, 12),
-            [Dates.DateTime(i, 12, 1) for i in 2007:2009],
-        )
+    time = ClimaAnalysis.Utils.date_to_time.(
+        Dates.DateTime(2007, 12),
+        [Dates.DateTime(i, 12, 1) for i in 2007:2009],
+    )
     var =
         TemplateVar() |>
         add_dim("time", time, units = "s") |>
@@ -677,12 +666,11 @@ end
         min_cosd_lat = 0.15,
     )
     time_slice = ClimaAnalysis.slice(var, time = Dates.DateTime(2007, 12, 1))
-    lat_weights_per_column =
-        sqrt.(
-            ClimaAnalysis.flatten(
-                ext._lat_weights_var(time_slice, min_cosd_lat = 0.15),
-            ).data,
-        )
+    lat_weights_per_column = sqrt.(
+        ClimaAnalysis.flatten(
+            ext._lat_weights_var(time_slice, min_cosd_lat = 0.15),
+        ).data,
+    )
     lat_weights_per_column =
         reshape(lat_weights_per_column, length(lat_weights_per_column), 1)
     @test isequal(
@@ -694,11 +682,10 @@ end
 @testset "SVDplusDCovariance" begin
     lat = [-90.0, -30.0, 30.0, 90.0]
     lon = [-60.0, -30.0, 0.0, 30.0, 60.0]
-    time =
-        ClimaAnalysis.Utils.date_to_time.(
-            Dates.DateTime(2007, 12),
-            [Dates.DateTime(2007, 12) + Dates.Month(i) for i in 0:35],
-        )
+    time = ClimaAnalysis.Utils.date_to_time.(
+        Dates.DateTime(2007, 12),
+        [Dates.DateTime(2007, 12) + Dates.Month(i) for i in 0:35],
+    )
     var =
         TemplateVar() |>
         add_dim("time", time, units = "s") |>
@@ -824,10 +811,7 @@ end
         return U * Diagonal(S) * V'
     end
     @test any(
-        .!isapprox.(
-            reconstruct(svd_plus_d_covar_with_lat_weights.svd_cov),
-            reconstruct(svd_plus_d_covar_with_no_lat_weights.svd_cov),
-        ),
+        .!isapprox.(reconstruct(svd_plus_d_covar_with_lat_weights.svd_cov), reconstruct(svd_plus_d_covar_with_no_lat_weights.svd_cov)),
     )
 
     # Test rank
@@ -876,11 +860,10 @@ end
     end
 
     # Error handling
-    time =
-        ClimaAnalysis.Utils.date_to_time.(
-            Dates.DateTime(2007, 12),
-            [Dates.DateTime(2007, 12) + Dates.Month(i) for i in 0:2],
-        )
+    time = ClimaAnalysis.Utils.date_to_time.(
+        Dates.DateTime(2007, 12),
+        [Dates.DateTime(2007, 12) + Dates.Month(i) for i in 0:2],
+    )
     var =
         TemplateVar() |>
         add_dim("time", time, units = "s") |>
@@ -962,11 +945,10 @@ end
     # Single OutputVar
     lat = [-90.0, -30.0, 30.0, 90.0]
     lon = [-60.0, -30.0, 0.0, 30.0, 60.0]
-    time =
-        ClimaAnalysis.Utils.date_to_time.(
-            Dates.DateTime(2007, 12),
-            [Dates.DateTime(2007, 12) + Dates.Month(i) for i in 0:35],
-        )
+    time = ClimaAnalysis.Utils.date_to_time.(
+        Dates.DateTime(2007, 12),
+        [Dates.DateTime(2007, 12) + Dates.Month(i) for i in 0:35],
+    )
     var =
         TemplateVar() |>
         add_dim("time", time, units = "s") |>
@@ -1110,11 +1092,10 @@ end
 end
 
 @testset "Seasonal diagonal covariance" begin
-    time =
-        ClimaAnalysis.Utils.date_to_time.(
-            Dates.DateTime(2007, 12),
-            [Dates.DateTime(2007, 12) + Dates.Month(3 * i) for i in 0:11],
-        )
+    time = ClimaAnalysis.Utils.date_to_time.(
+        Dates.DateTime(2007, 12),
+        [Dates.DateTime(2007, 12) + Dates.Month(3 * i) for i in 0:11],
+    )
     data = [1.0, 2.0, 3.0, 5.0, 8.0, 13.0, 21.0, 34.0, 55.0, 89.0, 144.0, NaN]
     DJF = [data[i] for i in 1:4:length(data)]
     MAM = [data[i] for i in 2:4:length(data)]
@@ -1184,11 +1165,10 @@ end
 
     # Enable lat weights, but use default settings for everything else
     lats = [-90.0, -85.0, -20.0, 0.0, 20.0, 85.0, 90.0]
-    time1 =
-        ClimaAnalysis.Utils.date_to_time.(
-            Dates.DateTime(2007, 12),
-            [Dates.DateTime(2007, 12) + Dates.Year(i) for i in 0:1],
-        )
+    time1 = ClimaAnalysis.Utils.date_to_time.(
+        Dates.DateTime(2007, 12),
+        [Dates.DateTime(2007, 12) + Dates.Year(i) for i in 0:1],
+    )
     data = ones(Float64, 2, 7)
     data[2, :] .*= 2
     lat_var =
@@ -1264,11 +1244,10 @@ end
     @test eltype(seasonal_covariance) == Float32
 
     # Error handling
-    time =
-        ClimaAnalysis.Utils.date_to_time.(
-            Dates.DateTime(2007, 12),
-            [Dates.DateTime(2007, 12) + Dates.Month(i) for i in 0:2],
-        )
+    time = ClimaAnalysis.Utils.date_to_time.(
+        Dates.DateTime(2007, 12),
+        [Dates.DateTime(2007, 12) + Dates.Month(i) for i in 0:2],
+    )
     var =
         TemplateVar() |>
         add_dim("time", time, units = "s") |>
@@ -1310,11 +1289,10 @@ end
     lon = [-60.0, -30.0, 0.0, 30.0, 60.0]
     x = [1.0, 2.0]
     y = [3.0]
-    time =
-        ClimaAnalysis.Utils.date_to_time.(
-            Dates.DateTime(2007, 12),
-            [Dates.DateTime(2007, 12) + Dates.Month(i) for i in 0:35],
-        )
+    time = ClimaAnalysis.Utils.date_to_time.(
+        Dates.DateTime(2007, 12),
+        [Dates.DateTime(2007, 12) + Dates.Month(i) for i in 0:35],
+    )
     var =
         TemplateVar() |>
         add_dim("time", time, units = "s") |>
@@ -1369,10 +1347,7 @@ end
     data1 =
         ClimaAnalysis.flatten(window_dates(var); dims = ext.FLATTENED_DIMS).data
     data2 =
-        ClimaAnalysis.flatten(
-            window_dates(neg_var);
-            dims = ext.FLATTENED_DIMS,
-        ).data
+        ClimaAnalysis.flatten(window_dates(neg_var); dims = ext.FLATTENED_DIMS).data
 
     flattened_data = vcat(data1, data2)
     @test obs.samples[1] == flattened_data
@@ -1493,11 +1468,10 @@ end
 
 @testset "Short names of observation" begin
     if pkgversion(EnsembleKalmanProcesses) > v"2.4.2"
-        time =
-            ClimaAnalysis.Utils.date_to_time.(
-                Dates.DateTime(2007, 12),
-                [Dates.DateTime(2007, 12) + Dates.Month(i) for i in 0:2],
-            )
+        time = ClimaAnalysis.Utils.date_to_time.(
+            Dates.DateTime(2007, 12),
+            [Dates.DateTime(2007, 12) + Dates.Month(i) for i in 0:2],
+        )
         var1 =
             TemplateVar() |>
             add_dim("time", time, units = "s") |>
@@ -1532,11 +1506,10 @@ end
 
 @testset "Get information about metadata from nth iteration" begin
     pkgversion(EnsembleKalmanProcesses) > v"2.4.3" || return
-    time =
-        ClimaAnalysis.Utils.date_to_time.(
-            Dates.DateTime(2007, 12),
-            [Dates.DateTime(2007, 12) + Dates.Month(3 * i) for i in 0:47],
-        )
+    time = ClimaAnalysis.Utils.date_to_time.(
+        Dates.DateTime(2007, 12),
+        [Dates.DateTime(2007, 12) + Dates.Month(3 * i) for i in 0:47],
+    )
     time_var =
         TemplateVar() |>
         add_dim("time", time, units = "s") |>
@@ -1649,11 +1622,10 @@ end
 end
 
 @testset "Reconstruct g and g mean" begin
-    time =
-        ClimaAnalysis.Utils.date_to_time.(
-            Dates.DateTime(2007, 12),
-            [Dates.DateTime(2007, 12) + Dates.Month(3 * i) for i in 0:47],
-        )
+    time = ClimaAnalysis.Utils.date_to_time.(
+        Dates.DateTime(2007, 12),
+        [Dates.DateTime(2007, 12) + Dates.Month(3 * i) for i in 0:47],
+    )
     time_var =
         TemplateVar() |>
         add_dim("time", time, units = "s") |>
@@ -1684,18 +1656,10 @@ end
         ClimaAnalysis.window(var, "time", left = start_date, right = end_date)
 
     time_var_length = length(
-        trim_var(
-            time_var,
-            Dates.DateTime(2007, 12),
-            Dates.DateTime(2008, 9),
-        ).data,
+        trim_var(time_var, Dates.DateTime(2007, 12), Dates.DateTime(2008, 9)).data,
     )
     lon_var_length = length(
-        trim_var(
-            lon_var,
-            Dates.DateTime(2007, 12),
-            Dates.DateTime(2008, 9),
-        ).data,
+        trim_var(lon_var, Dates.DateTime(2007, 12), Dates.DateTime(2008, 9)).data,
     )
 
     covar_estimator = ObservationRecipe.ScalarCovariance()
@@ -1765,11 +1729,10 @@ end
     if pkgversion(EnsembleKalmanProcesses) > v"2.4.3"
         # Test with a two OutputVars and two iterations with a single
         # observation (no observation series)
-        time =
-            ClimaAnalysis.Utils.date_to_time.(
-                Dates.DateTime(2007, 12),
-                [Dates.DateTime(2007, 12) + Dates.Month(3 * i) for i in 0:47],
-            )
+        time = ClimaAnalysis.Utils.date_to_time.(
+            Dates.DateTime(2007, 12),
+            [Dates.DateTime(2007, 12) + Dates.Month(3 * i) for i in 0:47],
+        )
         time_var =
             TemplateVar() |>
             add_dim("time", time, units = "s") |>
@@ -1984,11 +1947,10 @@ end
 end
 
 @testset "Reconstruct diagonal of covariance and OutputVars from observations" begin
-    time =
-        ClimaAnalysis.Utils.date_to_time.(
-            Dates.DateTime(2007, 12),
-            [Dates.DateTime(2007, 12) + Dates.Month(3 * i) for i in 0:47],
-        )
+    time = ClimaAnalysis.Utils.date_to_time.(
+        Dates.DateTime(2007, 12),
+        [Dates.DateTime(2007, 12) + Dates.Month(3 * i) for i in 0:47],
+    )
     time_var =
         TemplateVar() |>
         add_dim("time", time, units = "s") |>

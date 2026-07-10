@@ -367,11 +367,10 @@ end
 @testset "Use GEnsembleBuilder for a fake calibration" begin
     pkgversion(EnsembleKalmanProcesses) > v"2.4.3" || return
 
-    time =
-        ClimaAnalysis.Utils.date_to_time.(
-            Dates.DateTime(2007, 12),
-            [Dates.DateTime(2007, 12) + Dates.Month(3 * i) for i in 0:11],
-        )
+    time = ClimaAnalysis.Utils.date_to_time.(
+        Dates.DateTime(2007, 12),
+        [Dates.DateTime(2007, 12) + Dates.Month(3 * i) for i in 0:11],
+    )
     time_var =
         TemplateVar() |>
         add_dim("time", time, units = "s") |>
@@ -558,11 +557,10 @@ end
 end
 
 @testset "Utilities functions" begin
-    time =
-        ClimaAnalysis.Utils.date_to_time.(
-            Dates.DateTime(2007, 12),
-            [Dates.DateTime(2007, 12) + Dates.Month(3 * i) for i in 0:11],
-        )
+    time = ClimaAnalysis.Utils.date_to_time.(
+        Dates.DateTime(2007, 12),
+        [Dates.DateTime(2007, 12) + Dates.Month(3 * i) for i in 0:11],
+    )
     time_var =
         TemplateVar() |>
         add_dim("time", time, units = "s") |>
@@ -631,11 +629,10 @@ end
 end
 
 @testset "Error handling when constructing GEnsembleBuilder" begin
-    time =
-        ClimaAnalysis.Utils.date_to_time.(
-            Dates.DateTime(2007, 12),
-            [Dates.DateTime(2007, 12) + Dates.Month(3 * i) for i in 0:4],
-        )
+    time = ClimaAnalysis.Utils.date_to_time.(
+        Dates.DateTime(2007, 12),
+        [Dates.DateTime(2007, 12) + Dates.Month(3 * i) for i in 0:4],
+    )
     time_var =
         TemplateVar() |>
         add_dim("time", time, units = "s") |>

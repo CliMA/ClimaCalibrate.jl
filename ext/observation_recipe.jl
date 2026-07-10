@@ -93,14 +93,13 @@ function _covariance(
         diag_cov .*= covar_estimator.scalar
 
         if covar_estimator.use_latitude_weights
-            flattened_lat_weights =
-                ClimaAnalysis.flatten(
-                    _lat_weights_var(
-                        var,
-                        min_cosd_lat = covar_estimator.min_cosd_lat,
-                    );
-                    dims,
-                ).data
+            flattened_lat_weights = ClimaAnalysis.flatten(
+                _lat_weights_var(
+                    var,
+                    min_cosd_lat = covar_estimator.min_cosd_lat,
+                );
+                dims,
+            ).data
             diag_cov .*= flattened_lat_weights
         end
         diag_cov
@@ -195,14 +194,13 @@ function ObservationRecipe.covariance(
 
         # Add latitude weights
         if covar_estimator.use_latitude_weights
-            flattened_lat_weights =
-                ClimaAnalysis.flatten(
-                    _lat_weights_var(
-                        seasonal_variance_var,
-                        min_cosd_lat = covar_estimator.min_cosd_lat,
-                    );
-                    dims,
-                ).data
+            flattened_lat_weights = ClimaAnalysis.flatten(
+                _lat_weights_var(
+                    seasonal_variance_var,
+                    min_cosd_lat = covar_estimator.min_cosd_lat,
+                );
+                dims,
+            ).data
             diag_cov .*= flattened_lat_weights
         end
         diag_cov
@@ -667,16 +665,15 @@ function _metadata_for_stacked_sample(vars, sample_date_ranges, dims)
     sample_start_date, sample_end_date = first(sample_date_ranges)
     metadata = []
     for var in vars
-        md =
-            ClimaAnalysis.flatten(
-                ClimaAnalysis.window(
-                    var,
-                    "time",
-                    left = sample_start_date,
-                    right = sample_end_date,
-                );
-                dims,
-            ).metadata
+        md = ClimaAnalysis.flatten(
+            ClimaAnalysis.window(
+                var,
+                "time",
+                left = sample_start_date,
+                right = sample_end_date,
+            );
+            dims,
+        ).metadata
         push!(metadata, md)
     end
     return metadata

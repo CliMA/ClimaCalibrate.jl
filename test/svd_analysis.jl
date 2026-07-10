@@ -156,11 +156,10 @@ end
     # on an EKP object
     lat = [-90.0, -30.0, 30.0, 90.0]
     lon = [-60.0, -30.0, 0.0, 30.0, 60.0]
-    time =
-        ClimaAnalysis.Utils.date_to_time.(
-            Dates.DateTime(2007, 12),
-            [Dates.DateTime(2007, 12) + Dates.Month(i) for i in 0:35],
-        )
+    time = ClimaAnalysis.Utils.date_to_time.(
+        Dates.DateTime(2007, 12),
+        [Dates.DateTime(2007, 12) + Dates.Month(i) for i in 0:35],
+    )
     var =
         TemplateVar() |>
         add_dim("time", time, units = "s") |>
