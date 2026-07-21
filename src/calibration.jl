@@ -419,22 +419,21 @@ function run_iteration(
             # No workers in the pool. With asynchronous submission this is
             # expected early on. Only error if the pool stays empty with no
             # workers initializing, none running, and no progress for longer
-            # than EMPTY_POOL_TIMEOUT. Reset the timer while models are running
-            # or workers are initializing, since those will replenish the pool.
+            # than the backend's `empty_pool_timeout`. Reset the timer while
+            # models are running or workers are initializing, since those will
+            # replenish the pool.
             if inflight[] > 0 || Backend.n_initializing_workers() > 0
                 t_last_available = time()
             end
             t_empty = time() - t_last_available
             if inflight[] == 0 &&
                Backend.n_initializing_workers() == 0 &&
-               t_empty > Backend.EMPTY_POOL_TIMEOUT
-                throw(
-                    ErrorException(
-                        "No workers available for $(round(Int, t_empty))s \
-                        (timeout $(Backend.EMPTY_POOL_TIMEOUT)s) with no workers \
-                        initializing or running. Ensure workers were submitted \
-                        (e.g. with `add_workers`) and are able to start.",
-                    ),
+               t_empty > backend.empty_pool_timeout
+                error(
+                    "No workers available for $(round(Int, t_empty))s \
+                    (timeout $(backend.empty_pool_timeout)s) with no workers \
+                    initializing or running. Ensure workers were submitted \
+                    (e.g. with `add_workers`) and are able to start.",
                 )
             end
             @debug "No workers available"

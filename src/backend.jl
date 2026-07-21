@@ -69,6 +69,15 @@ The default failure rate used by the `WorkerBackend`.
 const DEFAULT_FAILURE_RATE = 0.5
 
 """
+    EMPTY_POOL_TIMEOUT
+
+The default number of seconds a `WorkerBackend` iteration will wait on an empty
+worker pool before erroring, so an asynchronous calibration cannot hang forever
+when no workers ever start.
+"""
+const EMPTY_POOL_TIMEOUT = 7200
+
+"""
     WorkerBackend
 
 Used to run calibrations on Distributed.jl's workers.
@@ -80,11 +89,15 @@ cluster, see [`PBSManager`](@ref).
   fail before an iteration is stopped. The default is
   $DEFAULT_FAILURE_RATE.
 - `worker_pool`: A worker pool created from the workers available.
+- `empty_pool_timeout::Int`: How long (in seconds) an iteration will wait on an
+  empty worker pool before erroring, so an asynchronous calibration cannot hang
+  forever when no workers ever start. Defaults to `$EMPTY_POOL_TIMEOUT`.
 """
 Base.@kwdef struct WorkerBackend{WORKERPOOL <: Distributed.WorkerPool} <:
                    AbstractBackend
     failure_rate::Float64 = DEFAULT_FAILURE_RATE
     worker_pool::WORKERPOOL = default_worker_pool()
+    empty_pool_timeout::Int = EMPTY_POOL_TIMEOUT
 end
 
 """

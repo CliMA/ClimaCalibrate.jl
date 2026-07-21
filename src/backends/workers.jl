@@ -37,17 +37,12 @@ when they start. Used as the default pool for [`WorkerBackend`](@ref).
 """
 const GLOBAL_WORKER_POOL = WorkerPool()
 
-# Guards mutation of GLOBAL_WORKER_POOL, INITIALIZING, and WORKER_SETUP.
+# Guards mutation of GLOBAL_WORKER_POOL, INITIALIZING_WORKERS, and WORKER_SETUP.
 const POOL_LOCK = ReentrantLock()
 
 # Workers that have connected but are still loading code: present in `workers()`
 # but not yet schedulable. Keeps `default_worker_pool` from pooling them early.
-const INITIALIZING = Set{Int}()
-
-# Generous bound (seconds) on how long a calibration will wait on an empty
-# worker pool before erroring, so an asynchronous calibration cannot hang
-# forever when no workers ever start.
-const EMPTY_POOL_TIMEOUT = 7200
+const INITIALIZING_WORKERS = Set{Int}()
 
 """
     n_initializing_workers()
@@ -57,7 +52,7 @@ yet in the pool). Used to distinguish "workers are on the way" from "no workers
 are coming".
 """
 n_initializing_workers() = lock(POOL_LOCK) do
-    length(INITIALIZING)
+    length(INITIALIZING_WORKERS)
 end
 
 """
@@ -67,14 +62,14 @@ Return the process-wide `GLOBAL_WORKER_POOL`.
 
 Cluster workers add themselves via the `:register` hook. Workers added by other
 means (e.g. plain `addprocs`/`LocalManager` or pre-existing workers) are
-reconciled into the pool here. Workers still loading code (in `INITIALIZING`)
+reconciled into the pool here. Workers still loading code (in `INITIALIZING_WORKERS`)
 are skipped so they are not scheduled before they are ready.
 """
 function default_worker_pool()
     lock(POOL_LOCK) do
         for id in workers()
-            id == 1 && continue
-            id in INITIALIZING && continue
+            id == 1 && continue  # id 1 is the main process, not a worker
+            id in INITIALIZING_WORKERS && continue
             id in GLOBAL_WORKER_POOL.workers || push!(GLOBAL_WORKER_POOL, id)
         end
     end
@@ -86,7 +81,7 @@ end
 #
 # `@everywhere` only runs on workers that exist when it is called, so workers
 # that join later (asynchronously) would not have the model code. Instead, we
-# record setup expressions on the master and replay them on each worker as it
+# record setup expressions on the main process and replay them on each worker as it
 # joins (see `initialize_worker`). `@worker_setup` is a drop-in replacement for
 # `@everywhere` that both applies now and persists for future workers.
 # ----------------------------------------------------------------------------
@@ -96,7 +91,7 @@ const WORKER_SETUP = Expr[]
 
 # Reimplementation of Distributed's internal `extract_imports`: pull out
 # `using`/`import` statements so they can be run locally first (to precompile
-# once on the master rather than racing across joining workers).
+# once on the main process rather than racing across joining workers).
 _extract_imports!(imports, x) = imports
 function _extract_imports!(imports, ex::Expr)
     if Meta.isexpr(ex, (:import, :using))
@@ -126,7 +121,7 @@ function register_worker_setup!(ex::Expr, source_path)
     lock(POOL_LOCK) do
         push!(WORKER_SETUP, wrapped)
     end
-    # Apply to processes that already exist (master + connected workers).
+    # Apply to processes that already exist (main process + connected workers).
     Distributed.remotecall_eval(Main, procs(), wrapped)
     return nothing
 end
@@ -135,11 +130,14 @@ end
     @worker_setup expr
 
 Like `Distributed.@everywhere`, but the expression is also recorded and replayed
-on any worker that joins later. Use this instead of `@everywhere` to load model
-code for an asynchronous [`WorkerBackend`](@ref) calibration, where workers may
-join after the calibration has started.
+on any worker that joins later.
 
-`using`/`import` statements run on the master first (to precompile once), and
+!!! warning
+    Use `@worker_setup`, not `@everywhere`, to set up workers for a
+    `WorkerBackend`. Workers join asynchronously, and `@everywhere` skips any
+    that connect after it runs, leaving them without the model code.
+
+`using`/`import` statements run on the main process first (to precompile once), and
 the current source path is propagated so relative `include` works on workers.
 As with `@everywhere`, local variables must be interpolated with `\$`.
 """
@@ -166,7 +164,7 @@ pooled.
 """
 function initialize_worker(id)
     lock(POOL_LOCK) do
-        push!(INITIALIZING, id)
+        push!(INITIALIZING_WORKERS, id)
     end
     try
         Distributed.remotecall_wait(cd, id, pwd())
@@ -190,7 +188,7 @@ function initialize_worker(id)
         @warn "Worker $id failed to initialize; not added to pool" exception = e
     finally
         lock(POOL_LOCK) do
-            delete!(INITIALIZING, id)
+            delete!(INITIALIZING_WORKERS, id)
         end
     end
     return nothing
@@ -199,14 +197,19 @@ end
 """
     remove_worker_from_pool(id)
 
-Remove worker `id` from `GLOBAL_WORKER_POOL`. Called when a worker
-deregisters (e.g. walltime expiry or crash). Any stale entry left in the pool's
-channel is filtered out at `take!` time.
+Remove worker `id` from `GLOBAL_WORKER_POOL`. Called when a worker deregisters
+(e.g. walltime expiry or crash).
+
+A `Distributed.WorkerPool` holds its workers both in a `Set` and in an internal
+`Channel` that `take!` draws from. This only removes `id` from the `Set`, so a
+copy of `id` may still sit in the channel. That copy is harmless because
+`WorkerPool`'s `take!` discards any id that is no longer a live process before
+returning one.
 """
 function remove_worker_from_pool(id)
     lock(POOL_LOCK) do
         delete!(GLOBAL_WORKER_POOL.workers, id)
-        delete!(INITIALIZING, id)
+        delete!(INITIALIZING_WORKERS, id)
     end
     return nothing
 end
@@ -224,7 +227,9 @@ end
 # Ensures the teardown `atexit` hook is registered at most once per session.
 const ATEXIT_HOOK_REGISTERED = Ref(false)
 
-# Run `cmd`, discarding its output.
+# Run `cmd`, discarding its output. Used for the scheduler cancellation commands
+# below (`scancel`/`qdel`); this only silences those commands' own output and has
+# no effect on forward-model logs, which workers write via `set_worker_logger`.
 _run_quiet(cmd) = run(pipeline(cmd; stdout = devnull, stderr = devnull))
 
 # Ids of this session's PBS jobs, matched by the shared job name via `qselect`.
