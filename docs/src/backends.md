@@ -30,10 +30,11 @@ computing environments.
     - [`GCPBackend`](@ref): CliMA's Google cloud platform.
 
 !!! note "What are the differences between the `WorkerBackend` and the HPC cluster backends?"
-    Both distribute ensemble members across a cluster, but in different ways. The
-    `WorkerBackend` keeps a pool of long-lived Julia workers and dispatches
-    forward-model runs to them, so each worker precompiles once and reuses that
-    code across all iterations. The HPC cluster backends instead submit a
+    The main difference between the two backends is how the work of the ensemble
+    members is distributed. The `WorkerBackend` keeps a pool of long-lived Julia
+    workers and dispatches forward-model runs to them, so each worker precompiles
+    once and reuses that code across all iterations. The HPC cluster backends
+    instead submit a
     separate scheduler job for every ensemble member on every iteration; each job
     starts a fresh Julia process and precompiles again, but the jobs are
     independent, so an iteration makes progress as soon as any member is

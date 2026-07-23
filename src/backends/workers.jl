@@ -132,7 +132,7 @@ end
 Like `Distributed.@everywhere`, but the expression is also recorded and replayed
 on any worker that joins later.
 
-!!! warning
+!!! tip
     Use `@worker_setup`, not `@everywhere`, to set up workers for a
     `WorkerBackend`. Workers join asynchronously, and `@everywhere` skips any
     that connect after it runs, leaving them without the model code.
@@ -145,8 +145,10 @@ macro worker_setup(ex)
     imps = _extract_imports(ex)
     return quote
         $(isempty(imps) ? nothing : Expr(:toplevel, map(esc, imps)...))
+        # `esc(Expr(:quote, ex))` (rather than `QuoteNode(ex)`) so that `$`
+        # interpolations are resolved in the caller's scope
         $(register_worker_setup!)(
-            $(QuoteNode(ex)),
+            $(esc(Expr(:quote, ex))),
             get(task_local_storage(), :SOURCE_PATH, nothing),
         )
     end

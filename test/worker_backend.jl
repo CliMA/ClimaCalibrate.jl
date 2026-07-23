@@ -12,7 +12,7 @@ include(
     ),
 )
 
-nprocs = 5
+nprocs = 3
 # Submit workers asynchronously: each worker is an individual allocation that
 # adds itself to the global pool once started. The calibration begins with an
 # empty pool and picks up workers as they join
