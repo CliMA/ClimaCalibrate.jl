@@ -740,7 +740,8 @@ default_gpu_kwargs(::PBSManager) = (;
     backend_worker_kwargs(get_backend())...,
 )
 
-backend_worker_kwargs(::Type{DerechoBackend}) = (; q = "main", A = "UCIT0011")
+backend_worker_kwargs(::Type{DerechoBackend}) =
+    (; q = "main@desched1", A = "UCIT0011")
 backend_worker_kwargs(::Type{GCPBackend}) = (; partition = "a3")
 backend_worker_kwargs(::Type{<:AbstractBackend}) = (;)
 

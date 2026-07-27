@@ -37,7 +37,7 @@ end
     p = addprocs(
         ClimaCalibrate.PBSManager(2),
         o = out_file,
-        q = "main",
+        q = "main@desched1",
         A = "UCIT0011",
         l_select = "1:ncpus=1:ngpus=1",
         l_walltime = "00:05:00",
