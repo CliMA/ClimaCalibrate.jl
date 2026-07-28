@@ -55,6 +55,9 @@ ClimaCalibrate.get_backend
 ClimaCalibrate.SlurmManager
 ClimaCalibrate.PBSManager
 ClimaCalibrate.add_workers
+ClimaCalibrate.@worker_setup
+ClimaCalibrate.default_worker_pool
+ClimaCalibrate.cancel_worker_jobs
 ClimaCalibrate.set_worker_logger
 ClimaCalibrate.set_worker_loggers
 ClimaCalibrate.map_remotecall_fetch

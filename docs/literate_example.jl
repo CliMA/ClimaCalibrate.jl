@@ -191,12 +191,24 @@ observations = Vector{Float64}(undef, 1)
 observations .= process_member_data(SimDir(simulation.output_dir))
 
 # Now we are ready to run our calibration, putting it all together using the
-# `calibrate` function. The `WorkerBackend` will automatically use all workers
-# available to the main Julia process.
+# `calibrate` function. The `WorkerBackend` distributes ensemble members across
+# the workers added above, so you would use it once you have added workers:
+#
+# ```julia
+# eki = CAL.calibrate(
+#     CAL.WorkerBackend(),
+#     ekp,
+#     RadiativeFluxModelInterface(),
+#     n_iterations,
+#     prior,
+#     output_dir,
+# )
+# ```
+#
 # Other backends are available for forward models that can't use workers or need
-# to be parallelized internally.
-# The simplest backend is the `JuliaBackend`, which runs all ensemble members
-# sequentially and does not require `Distributed.jl`.
+# to be parallelized internally. Since this example runs without workers, we use
+# the `JuliaBackend`, which runs all ensemble members sequentially and does not
+# require `Distributed.jl`.
 # For more information, see the [`Backends`](https://clima.github.io/ClimaCalibrate.jl/dev/backends/)
 # page.
 user_initial_ensemble = EKP.construct_initial_ensemble(prior, ensemble_size)
@@ -208,7 +220,7 @@ ekp = EKP.EnsembleKalmanProcess(
     EKP.default_options_dict(EKP.Inversion()),
 )
 eki = CAL.calibrate(
-    CAL.WorkerBackend(),
+    CAL.JuliaBackend(),
     ekp,
     RadiativeFluxModelInterface(),
     n_iterations,

@@ -133,7 +133,7 @@ provided will be ignored.
 ## Defaults
 
 The default directives are
-- `queue`: "main",
+- `queue`: "main@desched1",
 - `ntasks`: 1,
 - `cpus_per_task`: 1,
 - `gpus_per_task`: 0,
@@ -180,7 +180,7 @@ function PBSConfig(;
     # Add default directives
     # queue and job_priority are specific to Derecho, but we only support
     # Derecho right now
-    get!(directives, :queue, "main")
+    get!(directives, :queue, "main@desched1")
     get!(directives, :ntasks, 1)
     get!(directives, :cpus_per_task, 1)
     get!(directives, :gpus_per_task, 0)

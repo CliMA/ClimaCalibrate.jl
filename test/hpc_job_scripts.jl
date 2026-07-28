@@ -104,7 +104,7 @@ end
 #!/bin/bash
 #PBS -j oe
 #PBS -A UCIT0011
-#PBS -q main
+#PBS -q main@desched1
 #PBS -l job_priority=regular
 #PBS -l walltime=$(ClimaCalibrate.Backend.format_pbs_time(time_limit))
 #PBS -l select=$ntasks:ncpus=$cpus_per_task:ngpus=$gpus_per_task:mpiprocs=1

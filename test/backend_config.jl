@@ -70,7 +70,7 @@ end
 
     @test collect(config.directives) == [
         :time => "00:01:00",
-        :queue => "main",
+        :queue => "main@desched1",
         :ntasks => 1,
         :cpus_per_task => 1,
         :gpus_per_task => 0,
