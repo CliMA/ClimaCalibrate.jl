@@ -80,3 +80,21 @@ end
         rm("$out_file-$i.out")
     end
 end
+
+@testset "PBSManager - two workers per node" begin
+    # Two workers in one allocation. Each worker must see its own
+    # GPU index and join the pool like an individually-submitted worker.
+    p = add_workers_and_wait(2; time = 10, device = :gpu, workers_per_node = 2)
+    @test length(p) == 2
+    @test workers() == p
+
+    visible = map(p) do w
+        Distributed.remotecall_fetch(() -> get(ENV, "CUDA_VISIBLE_DEVICES", ""), w)
+    end
+    @test sort(visible) == ["0", "1"]
+
+    @test ClimaCalibrate.map_remotecall_fetch(myid) == p
+
+    rmprocs(p)
+    @test nprocs() == 1
+end

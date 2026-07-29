@@ -9,6 +9,7 @@ using SafeTestsets
 @safetestset "Julia backend" begin include("julia_backend.jl") end
 @safetestset "HPC config" begin include("backend_config.jl") end
 @safetestset "HPC job scripts" begin include("hpc_job_scripts.jl") end
+@safetestset "Workers per node" begin include("workers_per_node.jl") end
 @safetestset "Observation recipe" begin include("observation_recipe.jl") end
 @safetestset "Ensemble builder" begin include("ensemble_builder.jl") end
 @safetestset "SVD analysis" begin include("svd_analysis.jl") end

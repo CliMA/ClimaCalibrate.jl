@@ -332,12 +332,82 @@ function Distributed.manage(
     return nothing
 end
 
-# Main SlurmManager function, adapted from the unmaintained ClusterManagers.jl
+# Where a worker's startup output goes, default to a temp dir
+function default_worker_output_base(params, exehome, jobname)
+    haskey(params, :o) && return params[:o]
+    haskey(params, :output) && return params[:output]
+    return joinpath(mktempdir(exehome; prefix = ".julia_worker_"), jobname)
+end
+
+"""
+    submit_workers!(instances_arr, launch_condition; single_cmd, multi_worker_cmd, kwargs...)
+
+Submit `ntasks` workers and fill `instances_arr` as they connect. Shared by the
+Slurm and PBS `launch` methods.
+
+When `workers_per_node == 1`, each worker is submitted on its own with
+`single_cmd(output_file)`. Otherwise the workers are grouped into allocations of
+`workers_per_node` and each allocation is submitted with
+`multi_worker_cmd(log_file, script_file)`, where the script runs its workers as
+background processes (see `multi_worker_script`). Worker output files are named
+from `output_base`.
+"""
+function submit_workers!(
+    instances_arr,
+    launch_condition;
+    ntasks,
+    workers_per_node,
+    output_base,
+    exename,
+    exeflags,
+    env,
+    single_cmd,
+    multi_worker_cmd,
+)
+    pids = []
+    output_files = String[]
+    if workers_per_node == 1
+        # One allocation per worker, so they schedule independently.
+        for i in 1:ntasks
+            output_path = "$output_base-$i.out"
+            cmd = single_cmd(output_path)
+            @info "Starting worker job [$i/$ntasks]: $cmd"
+            push!(pids, open(addenv(cmd, env)))
+            push!(output_files, output_path)
+        end
+    else
+        # Pack several workers into one allocation, one per GPU.
+        counts = workers_per_allocation(ntasks, workers_per_node)
+        njobs = length(counts)
+        for (j, nworkers) in enumerate(counts)
+            worker_outputs =
+                [abspath("$output_base-$j-$g.out") for g in 1:nworkers]
+            script_path = "$output_base-multiworker-$j.sh"
+            write(
+                script_path,
+                multi_worker_script(exename, exeflags, worker_outputs),
+            )
+            chmod(script_path, 0o700)
+            cmd = multi_worker_cmd("$output_base-job$j.log", script_path)
+            @info "Starting worker job [$j/$njobs] with $nworkers workers per node: $cmd"
+            pid = open(addenv(cmd, env))
+            append!(pids, fill(pid, nworkers))
+            append!(output_files, worker_outputs)
+        end
+    end
+    return poll_files_for_worker_startup(
+        output_files,
+        pids,
+        instances_arr,
+        launch_condition,
+    )
+end
+
 function Distributed.launch(
     sm::SlurmManager,
     params::Dict,
     instances_arr::Array,
-    c::Condition,
+    launch_condition::Condition,
 )
     # Ensure submitted jobs are cancelled if the main process exits.
     ensure_worker_atexit_hook!()
@@ -347,31 +417,28 @@ function Distributed.launch(
     exeflags = params[:exeflags]
     env = Dict{String, String}(params[:env])
     propagate_env_vars!(env)
-
     worker_args = parse_slurm_worker_params(params)
-    # Get job file location from parameter dictionary
-    job_directory = setup_job_directory(exehome, params)
-
     jobname = worker_jobname()
-    submission_time = (trunc(Int, Base.time() * 10))
-    output_base =
-        get(params, :o, get(params, :output, ".$jobname-$submission_time"))
+    output_base = default_worker_output_base(params, exehome, jobname)
 
-    ntasks = sm.ntasks
-    # Submit each worker as an individual single-task allocation so they can be
-    # scheduled independently
-    pids = []
-    output_files = String[]
-    for i in 1:ntasks
-        output_path = "$output_base-$i.out"
-        srun_cmd = `srun -J $jobname -n 1 -D $exehome $worker_args -o $output_path -- $exename $exeflags $(worker_cookie_arg())`
-        @info "Starting SLURM job $jobname [$i/$ntasks]: $srun_cmd"
-        push!(pids, open(addenv(srun_cmd, env)))
-        push!(output_files, output_path)
-    end
-
-    poll_files_for_worker_startup(output_files, pids, instances_arr, c)
+    base = `srun -J $jobname -n 1 -D $exehome $worker_args`
+    return submit_workers!(
+        instances_arr,
+        launch_condition;
+        ntasks = sm.ntasks,
+        workers_per_node = get(params, :workers_per_node, 1),
+        output_base,
+        exename,
+        exeflags,
+        env,
+        single_cmd = output ->
+            `$base -o $output -- $exename $exeflags $(worker_cookie_arg())`,
+        multi_worker_cmd = (log, script) -> `$base -o $log -- bash $script`,
+    )
 end
+
+workers_per_allocation(ntasks, max_per_node) =
+    [min(max_per_node, ntasks - i) for i in 0:max_per_node:(ntasks - 1)]
 
 """
     parse_slurm_worker_params(params::Dict)
@@ -382,8 +449,9 @@ Uses all keys that are not in `Distributed.default_addprocs_params()`.
 """
 function parse_slurm_worker_params(params::Dict)
     stdkeys = keys(Distributed.default_addprocs_params())
+    excepted_keys = (:job_file_loc, :workers_per_node)
     worker_params =
-        filter(x -> (!(x[1] in stdkeys) && x[1] != :job_file_loc), params)
+        filter(x -> !(x[1] in stdkeys || x[1] in excepted_keys), params)
     worker_args = []
 
     for (k, v) in worker_params
@@ -409,12 +477,6 @@ end
 
 worker_jobname() = "julia-$(getpid())"
 
-function setup_job_directory(exehome::String, params::Dict)
-    job_directory = joinpath(exehome, get(params, :job_file_loc, "."))
-    !isdir(job_directory) && mkdir(job_directory)
-    return job_directory
-end
-
 function add_default_worker_params(params)
     default_params = Distributed.default_addprocs_params()
     params = merge(default_params, Dict{Symbol, Any}(params))
@@ -435,14 +497,17 @@ function propagate_env_vars!(env)
     end
 end
 
-# Poll one output file per individually-submitted job, pushing each worker's
-# `WorkerConfig` as it appears. Each job runs a single task, so each file
-# produces exactly one worker.
-#
-# Tolerant of partial success: a job whose launch process errors, or that never
-# starts within the polling window, is logged and skipped so that workers which
-# did start remain usable. Throws only if no workers start at all.
-function poll_files_for_worker_startup(output_files, pids, instances_arr, c)
+# Poll one output file per worker, pushing each worker's `WorkerConfig` as it
+# appears. `pids[i]` is the launch process that owns `output_files[i]`.
+# Tolerant of partial success: a worker whose launch process errors, or that
+# never starts within the polling window, is logged and skipped so that workers
+# which did start remain usable. Throws only if no workers start at all.
+function poll_files_for_worker_startup(
+    output_files,
+    pids,
+    instances_arr,
+    launch_condition,
+)
     @assert length(output_files) == length(pids)
     ntasks = length(output_files)
     t_start = time()
@@ -450,8 +515,8 @@ function poll_files_for_worker_startup(output_files, pids, instances_arr, c)
     julia_worker_regex = r"([\w]+):([\d]+)#(\d{1,3}.\d{1,3}.\d{1,3}.\d{1,3})"
     retry_delays = ExponentialBackOff(720, 1.0, 30.0, 1.5, 0.1)
     t_waited = 0
-    registered = Set{Int}()   # indices of jobs whose worker has registered
-    failed = Set{Int}()       # indices of jobs whose launch process errored
+    registered = Set{Int}()   # indices of workers that have registered
+    failed = Set{Int}()       # indices of workers whose launch process errored
 
     for retry_delay in [0.0, retry_delays...]
         t_waited = round(Int, time() - t_start)
@@ -459,7 +524,7 @@ function poll_files_for_worker_startup(output_files, pids, instances_arr, c)
             (i in registered || i in failed) && continue
             pid = pids[i]
             if process_exited(pid) && pid.exitcode != 0
-                @warn "Worker launch process for job $i/$ntasks exited with code $(pid.exitcode); skipping. Check the job scheduler output."
+                @warn "Launch process for worker $i/$ntasks exited with code $(pid.exitcode); skipping. Check the job scheduler output."
                 push!(failed, i)
                 continue
             end
@@ -473,8 +538,8 @@ function poll_files_for_worker_startup(output_files, pids, instances_arr, c)
                         config = worker_config(re_match, pid)
                         push!(registered, i)
                         push!(instances_arr, config)
-                        @info "Worker ready after $(t_waited)s on host $(config.host), port $(config.port) (job $i/$ntasks)"
-                        notify(c)
+                        @info "Worker ready after $(t_waited)s on host $(config.host), port $(config.port) (worker $i/$ntasks)"
+                        notify(launch_condition)
                         break
                     end
                 end
@@ -489,7 +554,7 @@ function poll_files_for_worker_startup(output_files, pids, instances_arr, c)
     nregistered = length(registered)
     if nregistered < ntasks
         not_ready = sort(collect(setdiff(Set(1:ntasks), registered)))
-        @warn "After $t_waited s, $nregistered/$ntasks workers started. Jobs not ready: $not_ready. Continuing with available workers."
+        @warn "After $t_waited s, $nregistered/$ntasks workers started. Workers not ready: $not_ready. Continuing with available workers."
     end
     if nregistered == 0
         throw(
@@ -549,7 +614,7 @@ function Distributed.launch(
     pm::PBSManager,
     params::Dict,
     instances_arr::Array,
-    c::Condition,
+    launch_condition::Condition,
 )
     # Ensure submitted jobs are cancelled if the main process exits.
     ensure_worker_atexit_hook!()
@@ -562,30 +627,60 @@ function Distributed.launch(
     propagate_env_vars!(env)
 
     worker_args = parse_pbs_worker_params(params)
-    job_directory = setup_job_directory(exehome, params)
     jobname = worker_jobname()
-    submission_time = (trunc(Int, Base.time() * 10))
-    output_base = get(params, :o, ".$jobname-$submission_time")
+    # PBS rejects `/tmp` for `-o`, so the temp-dir default must be on the shared
+    # working filesystem under `exehome` (which it is).
+    output_base = default_worker_output_base(params, exehome, jobname)
 
-    ntasks = pm.ntasks
-    # Submit each worker as an individual single-resource allocation (no `-J`
-    # job array) so they can be scheduled and join the pool independently.
-    #= qsub options:
-        -V: inherit environment variables
-        -N: job name
-        -j oe: Send the output and error streams to the same file
-        -o: output file =#
-    pids = []
-    output_files = String[]
-    for i in 1:ntasks
-        output_path = "$output_base-$i.out"
-        qsub_cmd = `qsub -V -N $jobname -j oe $worker_args -o $output_path -- $exename $exeflags $(worker_cookie_arg())`
-        @info "Starting PBS job $jobname [$i/$ntasks]: $qsub_cmd"
-        push!(pids, open(addenv(qsub_cmd, env)))
-        push!(output_files, output_path)
+    # qsub: -V inherit env, -N job name, -j oe merge stdout/stderr, -o output.
+    base = `qsub -V -N $jobname -j oe $worker_args`
+    return submit_workers!(
+        instances_arr,
+        launch_condition;
+        ntasks = pm.ntasks,
+        workers_per_node = get(params, :workers_per_node, 1),
+        output_base,
+        exename,
+        exeflags,
+        env,
+        single_cmd = output ->
+            `$base -o $output -- $exename $exeflags $(worker_cookie_arg())`,
+        multi_worker_cmd = (log, script) -> `$base -o $log $script`,
+    )
+end
+
+# Quote `s` for bash. Wrap the entire string in single quotes and replace every
+# existing single quote ' with its escaped version '\''
+shell_quote(s) = "'" * replace(string(s), "'" => "'\\''") * "'"
+
+"""
+    multi_worker_script(exename, exeflags, worker_outputs)
+
+Bash script that starts one Julia worker process per entry of
+`worker_outputs` on a single node. Worker `g` sees only GPU `g - 1` through
+`CUDA_VISIBLE_DEVICES` (harmless on CPU nodes) and redirects its output to
+`worker_outputs[g]`, where the master polls for the `julia_worker` startup
+line. The script waits on all workers so the allocation stays alive while
+any of them runs.
+"""
+function multi_worker_script(exename, exeflags, worker_outputs)
+    worker_cmd = join(
+        shell_quote.([
+            string(exename),
+            exeflags.exec...,
+            "--worker=$(worker_cookie())",
+        ]),
+        ' ',
+    )
+    lines = ["#!/bin/bash"]
+    for (g, output) in enumerate(worker_outputs)
+        push!(
+            lines,
+            "CUDA_VISIBLE_DEVICES=$(g - 1) $worker_cmd > $(shell_quote(output)) 2>&1 &",
+        )
     end
-
-    poll_files_for_worker_startup(output_files, pids, instances_arr, c)
+    push!(lines, "wait")
+    return join(lines, "\n") * "\n"
 end
 
 """
@@ -599,7 +694,7 @@ l_walltime = "00:10:00" is transformed into `-l walltime=00:10:00`.
 """
 function parse_pbs_worker_params(params::Dict)
     stdkeys = keys(Distributed.default_addprocs_params())
-    excepted_keys = (:job_file_loc,)
+    excepted_keys = (:job_file_loc, :workers_per_node)
     worker_params =
         filter(x -> !(x[1] in stdkeys || x[1] in excepted_keys), params)
     worker_args = []
@@ -740,6 +835,16 @@ default_gpu_kwargs(::PBSManager) = (;
     backend_worker_kwargs(get_backend())...,
 )
 
+# Resources for one allocation of `n` workers. The workers run as `n` background
+# processes in a single task, so that task needs all `n` workers' resources.
+allocation_resource_kwargs(::PBSManager, device, n) = Dict{Symbol, Any}(
+    :l_select => device == :gpu ? "ngpus=$n:ncpus=$(4n)" : "ncpus=$n",
+)
+allocation_resource_kwargs(::SlurmManager, device, n) =
+    device == :gpu ?
+    Dict{Symbol, Any}(:gpus_per_task => n, :cpus_per_task => 4n) :
+    Dict{Symbol, Any}(:cpus_per_task => n)
+
 backend_worker_kwargs(::Type{DerechoBackend}) =
     (; q = "main@desched1", A = "UCIT0011")
 backend_worker_kwargs(::Type{GCPBackend}) = (; partition = "a3")
@@ -793,6 +898,7 @@ that workers joining later are initialized correctly.
   * `:local`: Force use of local processing (standard `addprocs`)
 - `time::Int = DEFAULT_WALLTIME`: Walltime in minutes, will be formatted
   appropriately for the cluster system
+- `workers_per_node::Int = 1`: Number of workers to run per node.
 - `kwargs`: Other kwargs can be passed directly through to `addprocs`.
 """
 function add_workers(
@@ -810,6 +916,8 @@ end
 function _add_workers(nworkers; device, cluster, time, kwargs...)
     if cluster == :local || (cluster == :auto && !is_cluster_environment())
         @info "Using local processing mode, adding $nworkers worker$(nworkers == 1 ? "" : "s")"
+        get(kwargs, :workers_per_node, 1) > 1 &&
+            throw(ArgumentError("workers_per_node needs a cluster"))
 
         ids = addprocs(nworkers; kwargs...)
 
@@ -830,6 +938,16 @@ function _add_workers(nworkers; device, cluster, time, kwargs...)
 
     normalized_kwargs = process_time_parameter(manager, time, kwargs)
     merged_kwargs = merge(default_kwargs, normalized_kwargs)
+
+    workers_per_node = get(kwargs, :workers_per_node, 1)
+    if workers_per_node > 1
+        # Explicit resource requests from the caller win.
+        resources = filter(
+            p -> !haskey(kwargs, first(p)),
+            allocation_resource_kwargs(manager, device, workers_per_node),
+        )
+        merged_kwargs = merge(merged_kwargs, resources)
+    end
 
     return addprocs(manager; merged_kwargs...)
 end

@@ -41,5 +41,6 @@ steps:
   - label: "SlurmManager tests"
     command: julia --project=experiments/surface_fluxes_perfect_model test/slurm_manager_unit_tests.jl
     agents:
+      slurm_nodes: 1
       slurm_ntasks: 2
       slurm_cpus_per_task: 1

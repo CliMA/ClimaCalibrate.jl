@@ -13,6 +13,7 @@ main
 - Add `ClimaCalibrateMakie` extension for plotting ensemble members, the mean
   forward map evaluation, and the observations
   [#331](https://github.com/CliMA/ClimaCalibrate.jl/pull/331)
+- Add the `workers_per_node` keyword argument to `add_workers`, which runs multiple independent workers on a single allocation.
 
 v0.3.1
 -------
