@@ -22,7 +22,7 @@ computing environments.
    On a cluster, [`add_workers`](@ref) submits each worker as an individual
    scheduler allocation and adds it to a pool as it connects, so a calibration
    can start before every worker is up and picks up workers as they join. On
-   clusters that charge for whole nodes (Derecho), pass `workers_per_node` to
+   clusters that charge for whole nodes (e.g. Derecho), pass `workers_per_node` to
    [`add_workers`](@ref) to put several workers, one per GPU, in each
    allocation.
 

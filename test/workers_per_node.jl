@@ -16,7 +16,7 @@ import ClimaCalibrate.Backend:
     outputs = ["/tmp/w-1.out", "/tmp/w-2.out", "/tmp/w-3.out"]
     script = multi_worker_script(
         "julia",
-        Cmd(["--project=/my proj", "--threads=2"]),
+        Cmd(["--project=@temp proj", "--threads=2"]),
         outputs,
     )
     lines = split(script, '\n'; keepempty = false)
@@ -31,7 +31,7 @@ import ClimaCalibrate.Backend:
         @test endswith(line, "> '$(outputs[g])' 2>&1 &")
         @test occursin("--worker=$(worker_cookie())", line)
         # Arguments with spaces must be shell escaped
-        @test occursin("'--project=/my proj'", line)
+        @test occursin("'--project=@temp proj'", line)
         @test occursin("'--threads=2'", line)
     end
 end

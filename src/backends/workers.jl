@@ -366,33 +366,30 @@ function submit_workers!(
 )
     pids = []
     output_files = String[]
+    # With one worker per allocation (the default), submit each worker on its
+    # own so they schedule and join the pool independently. With several workers
+    # per allocation, group them into one billed allocation.
     if workers_per_node == 1
-        # One allocation per worker, so they schedule independently.
         for i in 1:ntasks
-            output_path = "$output_base-$i.out"
-            cmd = single_cmd(output_path)
+            output = "$output_base-$i.out"
+            cmd = single_cmd(output)
             @info "Starting worker job [$i/$ntasks]: $cmd"
             push!(pids, open(addenv(cmd, env)))
-            push!(output_files, output_path)
+            push!(output_files, output)
         end
     else
-        # Pack several workers into one allocation, one per GPU.
         counts = workers_per_allocation(ntasks, workers_per_node)
         njobs = length(counts)
         for (j, nworkers) in enumerate(counts)
-            worker_outputs =
-                [abspath("$output_base-$j-$g.out") for g in 1:nworkers]
+            outputs = [abspath("$output_base-$j-$g.out") for g in 1:nworkers]
             script_path = "$output_base-multiworker-$j.sh"
-            write(
-                script_path,
-                multi_worker_script(exename, exeflags, worker_outputs),
-            )
+            write(script_path, multi_worker_script(exename, exeflags, outputs))
             chmod(script_path, 0o700)
             cmd = multi_worker_cmd("$output_base-job$j.log", script_path)
             @info "Starting worker job [$j/$njobs] with $nworkers workers per node: $cmd"
             pid = open(addenv(cmd, env))
             append!(pids, fill(pid, nworkers))
-            append!(output_files, worker_outputs)
+            append!(output_files, outputs)
         end
     end
     return poll_files_for_worker_startup(
@@ -837,6 +834,8 @@ default_gpu_kwargs(::PBSManager) = (;
 
 # Resources for one allocation of `n` workers. The workers run as `n` background
 # processes in a single task, so that task needs all `n` workers' resources.
+# Each worker gets 4 CPUs per GPU, matching the single-worker defaults above
+# (`ngpus=1:ncpus=4`), so `n` GPU workers need `4n` CPUs.
 allocation_resource_kwargs(::PBSManager, device, n) = Dict{Symbol, Any}(
     :l_select => device == :gpu ? "ngpus=$n:ncpus=$(4n)" : "ncpus=$n",
 )
@@ -916,8 +915,16 @@ end
 function _add_workers(nworkers; device, cluster, time, kwargs...)
     if cluster == :local || (cluster == :auto && !is_cluster_environment())
         @info "Using local processing mode, adding $nworkers worker$(nworkers == 1 ? "" : "s")"
-        get(kwargs, :workers_per_node, 1) > 1 &&
-            throw(ArgumentError("workers_per_node needs a cluster"))
+        workers_per_node = get(kwargs, :workers_per_node, 1)
+        workers_per_node > 1 && throw(
+            ArgumentError(
+                "workers_per_node = $workers_per_node groups several workers " *
+                "into one scheduler allocation, which only applies on a " *
+                "cluster. Local processing starts each worker as its own " *
+                "process, so use cluster = :slurm or :pbs, or drop " *
+                "workers_per_node.",
+            ),
+        )
 
         ids = addprocs(nworkers; kwargs...)
 
