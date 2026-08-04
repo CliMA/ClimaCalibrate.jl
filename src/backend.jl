@@ -75,7 +75,7 @@ The default number of seconds a `WorkerBackend` iteration will wait on an empty
 worker pool before erroring, so an asynchronous calibration cannot hang forever
 when no workers ever start.
 """
-const EMPTY_POOL_TIMEOUT = 7200
+const EMPTY_POOL_TIMEOUT = 6 * 3600
 
 """
     WorkerBackend

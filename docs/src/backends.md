@@ -21,7 +21,10 @@ computing environments.
    [`Distributed.workers()`](https://docs.julialang.org/en/v1/stdlib/Distributed/#Distributed.workers).
    On a cluster, [`add_workers`](@ref) submits each worker as an individual
    scheduler allocation and adds it to a pool as it connects, so a calibration
-   can start before every worker is up and picks up workers as they join.
+   can start before every worker is up and picks up workers as they join. On
+   clusters that charge for whole nodes (e.g. Derecho), pass `workers_per_node` to
+   [`add_workers`](@ref) to put several workers, one per GPU, in each
+   allocation.
 
 3. HPC Cluster Backends: These backends schedule forward model runs on HPC clusters using Slurm or PBS.
     - [`CaltechHPCBackend`](@ref): Caltech's Resnick HPC cluster,

@@ -35,3 +35,21 @@ end
     @test_throws TaskFailedException p =
         addprocs(ClimaCalibrate.SlurmManager(1), time = "w")
 end
+
+@testset "SlurmManager - two workers per node" begin
+    # Two workers in one allocation must land on the same node and join the
+    # pool like individually-submitted workers
+    out_file = tempname()
+    kwargs = (; device = :cpu, o = out_file, time = 5, workers_per_node = 2)
+    p = add_workers_and_wait(2; kwargs...)
+    @test workers() == p
+    @test length(unique(map(w -> remotecall_fetch(gethostname, w), p))) == 1
+    @test ClimaCalibrate.map_remotecall_fetch(myid) == p
+    rmprocs(p)
+    @test nprocs() == 1
+    # Each worker writes to `<o>-<job>-<worker>.out`
+    for g in 1:2
+        @test isfile("$out_file-1-$g.out")
+        rm("$out_file-1-$g.out")
+    end
+end
