@@ -4,15 +4,11 @@ ClimaCalibrate.jl Release Notes
 main
 -------
 
-- Add `reconstruct_g` for reconstructing the G ensemble matrix as a matrix of
-  `OutputVar`s and `reconstruct_g_mean` for reconstructing the mean of the G
-  ensemble matrix as a vector of `OutputVar`s
-  [#319](https://github.com/CliMA/ClimaCalibrate.jl/pull/319)
-- Add "How do I?" section in the documentation
-  [#330](https://github.com/CliMA/ClimaCalibrate.jl/pull/330)
-- Add `ClimaCalibrateMakie` extension for plotting ensemble members, the mean
-  forward map evaluation, and the observations
-  [#331](https://github.com/CliMA/ClimaCalibrate.jl/pull/331)
+- Update minimum Julia version to 1.10
+  [#340](https://github.com/CliMA/ClimaCalibrate.jl/pull/340)
+- Add the `workers_per_node` keyword argument to `add_workers`, which runs
+  multiple independent workers on a single allocation
+  [#341](https://github.com/CliMA/ClimaCalibrate.jl/pull/341)
 - Add the `workers_per_node` keyword argument to `add_workers`, which runs multiple independent workers on a single allocation.
 - Add the `SampleBuilder` module and refactor `ObservationRecipe`
   [#334](https://github.com/CliMA/ClimaCalibrate.jl/pull/334)
@@ -44,6 +40,24 @@ main
     `OutputVar` is no longer accepted as one sample; split it into one sample
     per year with `build_samples_by_times`. The `ignore_nan` keyword was
     removed (`NaN`s are always ignored).
+
+v0.3.2
+-------
+
+- Add asynchronous workers
+  [#338](https://github.com/CliMA/ClimaCalibrate.jl/pull/338)
+- Add support for `OutputVar`s with no time dimension in `ObservationRecipe`
+  and `GEnsembleBuilder`
+  [#320](https://github.com/CliMA/ClimaCalibrate.jl/pull/320)
+- Add `reconstruct_g` for reconstructing the G ensemble matrix as a matrix of
+  `OutputVar`s and `reconstruct_g_mean` for reconstructing the mean of the G
+  ensemble matrix as a vector of `OutputVar`s
+  [#319](https://github.com/CliMA/ClimaCalibrate.jl/pull/319)
+- Add "How do I?" section in the documentation
+  [#330](https://github.com/CliMA/ClimaCalibrate.jl/pull/330)
+- Add `ClimaCalibrateMakie` extension for plotting ensemble members, the mean
+  forward map evaluation, and the observations
+  [#331](https://github.com/CliMA/ClimaCalibrate.jl/pull/331)
 
 v0.3.1
 -------
