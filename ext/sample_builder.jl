@@ -256,41 +256,19 @@ function _validate(
     end
 
     # Check that the coordinates where the NaNs are dropped are the same across
-    # samples
-    # It is possible for two FlatVars to have the same length, but the NaNs are
+    # samples. It is possible for two FlatVars to have the same length, but the NaNs are
     # at different coordinates
-    _same_coords_for_dropped_vals(flattened_var, metadata, ignore_dims) ||
-        error(
-            "Coordinates where values are dropped are not the same. Check that the dropped values (e.g. NaNs) appear at the same coordinates across different samples",
-        )
-
-    return nothing
-end
-
-"""
-    _same_coords_for_dropped_vals(
-        flattened_var::ClimaAnalysis.Var.FlatVar,
-        metadata::ClimaAnalysis.Var.Metadata,
+    # Note that arecompatible does extra checks, but they are already checked
+    # before this call
+    ClimaAnalysis.arecompatible(
+        metadata,
+        flattened_var.metadata;
         ignore_dims,
+    ) || error(
+        "Coordinates where values are dropped are not the same. Check that the dropped values (e.g. NaNs) appear at the same coordinates across different samples",
     )
 
-Return `true` if `metadata` and `flat_var` have the same coordinates where the
-values are dropped when flattening.
-"""
-function _same_coords_for_dropped_vals(
-    flattened_var::ClimaAnalysis.Var.FlatVar,
-    metadata::ClimaAnalysis.Var.Metadata,
-    ignore_dims,
-)
-    @static if pkgversion(ClimaAnalysis) > v"0.5.22"
-        return ClimaAnalysis.arecompatible(
-            metadata,
-            flattened_var.metadata;
-            ignore_dims,
-        )
-    else
-        return metadata.drop_mask == flattened_var.metadata.drop_mask
-    end
+    return nothing
 end
 
 """
