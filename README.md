@@ -11,12 +11,16 @@ calibration pipelines using minimal boilerplate.</strong>
 
 [![dev][docs-dev-img]][docs-dev-url]
 [![ghaci][gha-ci-img]][gha-ci-url]
+[![buildkite-ci][bk-ci-img]][bk-ci-url]
 
 [docs-dev-img]: https://img.shields.io/badge/docs-dev-blue.svg
 [docs-dev-url]: https://CliMA.github.io/ClimaCalibrate.jl/dev/
 
 [gha-ci-img]: https://github.com/CliMA/ClimaCalibrate.jl/actions/workflows/ci.yml/badge.svg
 [gha-ci-url]: https://github.com/CliMA/ClimaCalibrate.jl/actions/workflows/ci.yml
+
+[bk-ci-img]: https://badge.buildkite.com/1607c5a46f9adbaf939f2ff06ddda3fa971371bfa29188d23c.svg?branch=main
+[bk-ci-url]: https://buildkite.com/clima/climacalibrate-ci
 
 The recommended Julia version is: Stable release v1.11.4
 
