@@ -4,6 +4,12 @@ ClimaCalibrate.jl Release Notes
 main
 -------
 
+- Add support for zero dimensional `OutputVar`s in `SampleBuilder`,
+  `ObservationRecipe`, and `GEnsembleBuilder`
+
+v0.4.0
+-------
+
 - Update minimum Julia version to 1.10
   [#340](https://github.com/CliMA/ClimaCalibrate.jl/pull/340)
 - Add the `workers_per_node` keyword argument to `add_workers`, which runs

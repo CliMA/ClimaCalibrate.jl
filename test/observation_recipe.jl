@@ -1799,3 +1799,53 @@ end
     @test vars4[1].dims["lon"] == var3d.dims["lon"]
     @test vars4[1].data == var3d.data[[1], :, :]
 end
+
+@testset "Zero dimensional OutputVars" begin
+    zero_dim_var(short_name, val) =
+        TemplateVar() |>
+        add_attribs(short_name = short_name, units = "m") |>
+        add_data(data = fill(val)) |>
+        initialize
+
+    vars = [
+        zero_dim_var(short_name, val) for
+        short_name in ("a", "b"), val in (1.0, 2.0, 3.0)
+    ]
+    sample_collection = SampleBuilder.build_samples(vars; FT = Float64)
+
+    covar_estimator = ObservationRecipe.ScalarCovariance(scalar = 5.0)
+    @test ObservationRecipe.covariance(covar_estimator, sample_collection) ==
+          Diagonal([5.0, 5.0])
+
+    svd_covar_estimator =
+        ObservationRecipe.SVDplusDCovariance(regularization = 1e-3)
+    svd_covar =
+        ObservationRecipe.covariance(svd_covar_estimator, sample_collection)
+    @test svd_covar.diag_cov == Diagonal([1e-3, 1e-3])
+
+    obs = ObservationRecipe.observation(covar_estimator, sample_collection, 2)
+    @test obs.samples[1] == [2.0, 2.0]
+    @test obs.names == ["a;b"]
+
+    if pkgversion(EnsembleKalmanProcesses) > v"2.4.2"
+        @test ObservationRecipe.short_names(obs) == ["a", "b"]
+
+        reconstructed = ObservationRecipe.reconstruct_vars(obs)
+        @test all(var -> isempty(var.dims), reconstructed)
+        @test [var.data[] for var in reconstructed] == [2.0, 2.0]
+
+        diag_cov = ObservationRecipe.reconstruct_diag_cov(obs)
+        @test [var.data[] for var in diag_cov] == [5.0, 5.0]
+    end
+
+    # Latitude weights and seasonal covariances need dimensions that a zero
+    # dimensional OutputVar does not have
+    @test_throws ErrorException ObservationRecipe.covariance(
+        ObservationRecipe.ScalarCovariance(use_latitude_weights = true),
+        sample_collection,
+    )
+    @test_throws ErrorException ObservationRecipe.covariance(
+        ObservationRecipe.SeasonalDiagonalCovariance(),
+        sample_collection,
+    )
+end

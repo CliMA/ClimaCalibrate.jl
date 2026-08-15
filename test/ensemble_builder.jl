@@ -702,3 +702,46 @@ end
     )
     @test_throws ErrorException EnsembleBuilder.GEnsembleBuilder(eki)
 end
+
+@testset "GEnsembleBuilder with zero dimensional OutputVars" begin
+    zero_dim_var(short_name, val) =
+        TemplateVar() |>
+        add_attribs(short_name = short_name, units = "m") |>
+        add_data(data = fill(val)) |>
+        initialize
+
+    vars = [zero_dim_var("a", 1.0), zero_dim_var("b", 2.0)]
+    obs = ObservationRecipe.observation(
+        ObservationRecipe.ScalarCovariance(),
+        SampleBuilder.build_samples(vars),
+        1,
+    )
+    prior = constrained_gaussian("pi_groups_coeff", 1.0, 0.3, 0, Inf)
+    eki = EKP.EnsembleKalmanProcess(
+        obs,
+        EKP.TransformUnscented(prior, impose_prior = true),
+        scheduler = EKP.DataMisfitController(on_terminate = "continue"),
+    )
+
+    g_ens_builder = EnsembleBuilder.GEnsembleBuilder(eki)
+    @test size(g_ens_builder.completed) == (2, EKP.get_N_ens(eki))
+    @test EnsembleBuilder.ranges_by_short_name(g_ens_builder, "b") == [2:2]
+
+    for col_idx in 1:EKP.get_N_ens(eki)
+        @test !EnsembleBuilder.is_complete(g_ens_builder)
+        for var in vars
+            @test EnsembleBuilder.fill_g_ens_col!(g_ens_builder, col_idx, var)
+        end
+    end
+    @test EnsembleBuilder.is_complete(g_ens_builder)
+
+    g_ens = EnsembleBuilder.get_g_ensemble(g_ens_builder)
+    @test g_ens == repeat([1.0, 2.0], 1, EKP.get_N_ens(eki))
+
+    # Reconstructing from the G ensemble matrix gives back the OutputVars
+    EKP.update_ensemble!(eki, g_ens)
+    g_vars = ObservationRecipe.reconstruct_g(eki, 1)
+    @test size(g_vars) == (2, EKP.get_N_ens(eki))
+    @test all(var -> isempty(var.dims), g_vars)
+    @test all(var -> var.data[] in (1.0, 2.0), g_vars)
+end

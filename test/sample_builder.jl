@@ -725,3 +725,53 @@ end
     @test occursin("lon (5)", str)
     @test occursin("lat (4)", str)
 end
+
+@testset "Zero dimensional OutputVars" begin
+    zero_dim_var(short_name, val) =
+        TemplateVar() |>
+        add_attribs(short_name = short_name, units = "m") |>
+        add_data(data = fill(val)) |>
+        initialize
+
+    # Each zero dimensional OutputVar contributes a single value to a sample
+    vars = [
+        zero_dim_var(short_name, val) for
+        short_name in ("a", "b"), val in (1.0, 2.0, 3.0)
+    ]
+    sample_collection = SampleBuilder.build_samples(vars)
+    @test SampleBuilder.get_samples(sample_collection) ==
+          Float32[1.0 2.0 3.0; 1.0 2.0 3.0]
+    @test SampleBuilder.num_samples(sample_collection) == 3
+
+    reconstructed = SampleBuilder.reconstruct_col(sample_collection, 2)
+    @test ClimaAnalysis.short_name.(reconstructed) == ["a", "b"]
+    @test all(var -> isempty(var.dims), reconstructed)
+    @test all(var -> var.data[] == 2.0f0, reconstructed)
+
+    str = sprint(show, sample_collection)
+    @test occursin("2×3 matrix of Float32", str)
+    @test occursin("3 sample(s), each 2 value(s) from 2 variable(s)", str)
+
+    # Zero dimensional OutputVars can be mixed with other OutputVars
+    lat_var =
+        TemplateVar() |>
+        add_dim("lat", [-90.0, 0.0, 90.0], units = "degrees") |>
+        add_attribs(short_name = "c", units = "kg") |>
+        one_to_n_data(collected = true) |>
+        initialize
+    mixed_collection =
+        SampleBuilder.build_samples([zero_dim_var("a", 4.0), lat_var])
+    @test SampleBuilder.get_samples(mixed_collection) ==
+          to_col_vec(Float32[4.0, 1.0, 2.0, 3.0])
+
+    # Validation across samples is still done
+    @test_throws ErrorException SampleBuilder.build_samples(
+        [zero_dim_var("a", 1.0) zero_dim_var("b", 1.0)],
+    )
+
+    # Windowing by time requires a time dimension
+    @test_throws ErrorException SampleBuilder.build_samples_by_times(
+        [zero_dim_var("a", 1.0)],
+        [[0.0, 1.0]],
+    )
+end
