@@ -1186,6 +1186,38 @@ end
     end
 end
 
+@testset "Observation with OutputVars with no dimensions" begin
+    make_0d_var(val; attribs...) =
+        TemplateVar() |>
+        add_attribs(; units = "K", attribs...) |>
+        add_data(data = fill(val)) |>
+        initialize
+
+    ts_var = make_0d_var(300.0, short_name = "ts")
+    ta_var = make_0d_var(250.0, short_name = "ta")
+
+    covar_estimator = ObservationRecipe.ScalarCovariance(scalar = 2.0)
+    sample_collection = SampleBuilder.build_samples([ts_var, ta_var])
+    obs = ObservationRecipe.observation(covar_estimator, sample_collection, 1)
+
+    @test obs.samples[1] == Float32[300.0, 250.0]
+    @test EKP.get_obs_noise_cov(obs) == Diagonal(Float32[2.0, 2.0])
+    @test obs.names == ["ts;ta"]
+
+    pkgversion(ClimaAnalysis) > v"0.5.23" || return
+
+    # Reconstruct the 0-dimensional OutputVars from the observation
+    reconstructed_vars = ObservationRecipe.reconstruct_vars(obs)
+    @test [ndims(var.data) for var in reconstructed_vars] == [0, 0]
+    @test [only(var.data) for var in reconstructed_vars] == [300.0f0, 250.0f0]
+    @test ClimaAnalysis.short_name.(reconstructed_vars) == ["ts", "ta"]
+
+    # Reconstruct the diagonal of the covariance matrix
+    reconstructed_cov_vars = ObservationRecipe.reconstruct_diag_cov(obs)
+    @test [ndims(var.data) for var in reconstructed_cov_vars] == [0, 0]
+    @test [only(var.data) for var in reconstructed_cov_vars] == [2.0f0, 2.0f0]
+end
+
 @testset "Short names of observation" begin
     if pkgversion(EnsembleKalmanProcesses) > v"2.4.2"
         time = ClimaAnalysis.Utils.date_to_time.(

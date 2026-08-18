@@ -386,6 +386,55 @@ end
     @test EnsembleBuilder.is_complete(g_ens_builder)
 end
 
+@testset "GEnsembleBuilder with OutputVars with no dimensions" begin
+    make_0d_var(val; attribs...) =
+        TemplateVar() |>
+        add_attribs(; units = "K", attribs...) |>
+        add_data(data = fill(val)) |>
+        initialize
+
+    ts_var = make_0d_var(300.0, short_name = "ts")
+    ta_var = make_0d_var(250.0, short_name = "ta")
+
+    covar_estimator = ObservationRecipe.ScalarCovariance()
+
+    sample_collection = SampleBuilder.build_samples([ts_var, ta_var])
+    obs_vec =
+        [ObservationRecipe.observation(covar_estimator, sample_collection, 1)]
+    obs_series = EKP.ObservationSeries(
+        Dict(
+            "observations" => obs_vec,
+            "names" => ["1"],
+            "minibatcher" =>
+                ClimaCalibrate.minibatcher_over_samples([1], 1),
+        ),
+    )
+
+    prior = constrained_gaussian("pi_groups_coeff", 1.0, 0.3, 0, Inf)
+    eki = EKP.EnsembleKalmanProcess(
+        obs_series,
+        EKP.TransformUnscented(prior, impose_prior = true),
+        verbose = true,
+        scheduler = EKP.DataMisfitController(on_terminate = "continue"),
+    )
+
+    g_ens_builder = EnsembleBuilder.GEnsembleBuilder(eki)
+    g_ens = EnsembleBuilder.get_g_ensemble(g_ens_builder)
+    @test size(g_ens) == (2, EKP.get_N_ens(eki))
+    @test size(g_ens_builder.completed) == (2, EKP.get_N_ens(eki))
+    @test keys(g_ens_builder.metadata_by_short_name) == Set(["ts", "ta"])
+
+    for i in 1:EKP.get_N_ens(eki)
+        @test !EnsembleBuilder.is_complete(g_ens_builder)
+        @test EnsembleBuilder.fill_g_ens_col!(g_ens_builder, i, ts_var)
+        @test EnsembleBuilder.fill_g_ens_col!(g_ens_builder, i, ta_var)
+    end
+    @test EnsembleBuilder.is_complete(g_ens_builder)
+    g_ens = EnsembleBuilder.get_g_ensemble(g_ens_builder)
+    @test all(g_ens[1, :] .== 300.0)
+    @test all(g_ens[2, :] .== 250.0)
+end
+
 @testset "Use GEnsembleBuilder for a fake calibration" begin
     pkgversion(EnsembleKalmanProcesses) > v"2.4.3" || return
 

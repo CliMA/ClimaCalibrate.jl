@@ -158,7 +158,10 @@ function change_data_type(var, FT)
     # We change the data type since the metadata of the flattened OutputVar
     # stores it values using the type of var.data
     eltype(var.data) === FT && return var
-    return ClimaAnalysis.remake(var, data = FT.(var.data))
+    # Use map instead of broadcasting, because broadcasting over a
+    # zero-dimensional array returns a scalar instead of a zero-dimensional
+    # array
+    return ClimaAnalysis.remake(var, data = map(FT, var.data))
 end
 
 """
