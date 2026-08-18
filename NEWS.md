@@ -4,12 +4,19 @@ ClimaCalibrate.jl Release Notes
 main
 -------
 
+- Fix a bug where `SampleBuilder.build_samples` did not work with `OutputVar`s
+  with no dimensions. `SampleBuilder`, `ObservationRecipe`, and
+  `EnsembleBuilder` now support `OutputVar`s with no dimensions. This requires
+  versions of ClimaAnalysis after v0.5.23.
+
+v0.4.0
+-------
+
 - Update minimum Julia version to 1.10
   [#340](https://github.com/CliMA/ClimaCalibrate.jl/pull/340)
 - Add the `workers_per_node` keyword argument to `add_workers`, which runs
   multiple independent workers on a single allocation
   [#341](https://github.com/CliMA/ClimaCalibrate.jl/pull/341)
-- Add the `workers_per_node` keyword argument to `add_workers`, which runs multiple independent workers on a single allocation.
 - Add the `SampleBuilder` module and refactor `ObservationRecipe`
   [#334](https://github.com/CliMA/ClimaCalibrate.jl/pull/334)
   - The `SampleBuilder` module handles transforming one or more

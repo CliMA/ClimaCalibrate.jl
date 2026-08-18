@@ -662,6 +662,33 @@ end
     )
 end
 
+@testset "Samples from OutputVars with no dimensions" begin
+    make_0d_var(val; attribs...) =
+        TemplateVar() |>
+        add_attribs(; units = "K", attribs...) |>
+        add_data(data = fill(val)) |>
+        initialize
+
+    var_samples =
+        [make_0d_var(10.0 * i + j, short_name = "var$j") for j in 1:2, i in 1:3]
+    sample_collection = SampleBuilder.build_samples(var_samples)
+    @test SampleBuilder.get_samples(sample_collection) ==
+          Float32[11.0 21.0 31.0; 12.0 22.0 32.0]
+    @test SampleBuilder.num_samples(sample_collection) == 3
+
+    pkgversion(ClimaAnalysis) > v"0.5.23" || return
+
+    # Reconstruct 0-dimensional OutputVars from a column
+    reconstructed_col = SampleBuilder.reconstruct_col(sample_collection, 2)
+    @test [ndims(var.data) for var in reconstructed_col] == [0, 0]
+    @test [only(var.data) for var in reconstructed_col] == [21.0f0, 22.0f0]
+    for (reconstructed, var) in zip(reconstructed_col, var_samples[:, 2])
+        @test reconstructed.attributes == var.attributes
+        @test reconstructed.dims == var.dims
+        @test reconstructed.dim_attributes == var.dim_attributes
+    end
+end
+
 @testset "Show" begin
     lat = [-90.0, -30.0, 30.0, 90.0]
     lon = [-60.0, -30.0, 0.0, 30.0, 60.0]
