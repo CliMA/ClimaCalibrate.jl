@@ -336,7 +336,10 @@ end
 function default_worker_output_base(params, exehome, jobname)
     haskey(params, :o) && return params[:o]
     haskey(params, :output) && return params[:output]
-    return joinpath(mktempdir(exehome; prefix = ".julia_worker_"), jobname)
+    # Keep the worker logs after the main process exit to make it easier to
+    # debug a calibration
+    dir = mktempdir(exehome; prefix = ".julia_worker_", cleanup = false)
+    return joinpath(dir, jobname)
 end
 
 """
