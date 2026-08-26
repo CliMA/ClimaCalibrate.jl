@@ -6,6 +6,9 @@ main
 
 - Add `residual` for computing the normalized residual `(mean(G) - obs) / σ`
   [#350](https://github.com/CliMA/ClimaCalibrate.jl/issues/350)
+- Add `ObservationRecipe.reconstruct_residual` for reconstructing the
+  normalized residual as a vector of `OutputVar`s
+  [#350](https://github.com/CliMA/ClimaCalibrate.jl/issues/350)
 - Fix a bug where `SampleBuilder.build_samples` did not work with `OutputVar`s
   with no dimensions. `SampleBuilder`, `ObservationRecipe`, and
   `EnsembleBuilder` now support `OutputVar`s with no dimensions. This requires

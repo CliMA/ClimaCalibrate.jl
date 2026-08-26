@@ -1362,7 +1362,7 @@ end
     @test obs3 == [obs_series.observations[1], obs_series.observations[2]]
 end
 
-@testset "Reconstruct g and g mean" begin
+@testset "Reconstruct g, g mean, and residual" begin
     time = ClimaAnalysis.Utils.date_to_time.(
         Dates.DateTime(2007, 12),
         [Dates.DateTime(2007, 12) + Dates.Month(3 * i) for i in 0:47],
@@ -1465,6 +1465,19 @@ end
         # For i = 2, it is the average of 2, 4, and 6.
         # This pattern continues for i = 3 and i = 4.
         @test all(var.data .== 2 * i)
+    end
+
+    res_vars = ObservationRecipe.reconstruct_residual(eki, 1)
+    @test length(res_vars) == 4
+    @test ClimaAnalysis.short_name.(res_vars) == ["time", "lon", "time", "lon"]
+    @test all(isempty(ClimaAnalysis.units(var)) for var in res_vars)
+
+    # ScalarCovariance() has unit variance, so the residual is mean(G) - obs
+    obs_vars =
+        reduce(vcat, ObservationRecipe.reconstruct_vars.(observations[1:2]))
+    for (res_var, g_mean_var, obs_var) in
+        zip(res_vars, g_mean_as_vars, obs_vars)
+        @test res_var.data ≈ g_mean_var.data .- obs_var.data
     end
 end
 
@@ -1676,7 +1689,11 @@ end
     time_var =
         TemplateVar() |>
         add_dim("time", time, units = "s") |>
-        add_attribs(short_name = "time", start_date = "2007-12-1") |>
+        add_attribs(
+            short_name = "time",
+            start_date = "2007-12-1",
+            units = "K",
+        ) |>
         one_to_n_data() |>
         initialize
 
@@ -1733,6 +1750,11 @@ end
 
     @test isequal(time_var_from_covs1.data, time_var_from_covs2.data)
     @test isequal(lat_var_from_covs2.data, lat_var_from_covs3.data)
+
+    # Units are squared if they exist and empty otherwise
+    @test ClimaAnalysis.units(time_var_from_covs1) == "(K)^2"
+    @test ClimaAnalysis.units(time_var_from_covs2) == "(K)^2"
+    @test ClimaAnalysis.units(lat_var_from_covs2) == ""
 
     # Reconstruct OutputVars from observations
     vars1 = ObservationRecipe.reconstruct_vars(obs1)

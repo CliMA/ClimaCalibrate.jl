@@ -156,6 +156,10 @@ the underlying data back into `OutputVar`s:
   the `it`th iteration as a vector of `OutputVar`s.
 - [`reconstruct_g_mean_final`](@ref) reconstructs the mean forward model
   evaluation of the last iteration as a vector of `OutputVar`s.
+- [`reconstruct_residual`](@ref) reconstructs the normalized residual
+  `(mean(G) - obs) / σ` of the `it`th iteration as a vector of `OutputVar`s,
+  where `σ` is the square root of the diagonal of the observation noise
+  covariance.
 
 ```julia
 # obs is an EKP.Observation
@@ -169,6 +173,7 @@ ObservationRecipe.reconstruct_diag_cov(obs)
 ObservationRecipe.reconstruct_g(ekp, it)
 ObservationRecipe.reconstruct_g_mean(ekp, it)
 ObservationRecipe.reconstruct_g_mean_final(ekp)
+ObservationRecipe.reconstruct_residual(ekp, it)
 ```
 
 ## Creating custom covariance estimators

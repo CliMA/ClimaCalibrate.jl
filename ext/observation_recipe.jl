@@ -616,6 +616,44 @@ function ObservationRecipe.reconstruct_vars(obs::EKP.Observation)
 end
 
 """
+    reconstruct_residual(
+        ekp::EKP.EnsembleKalmanProcess,
+        it::Integer;
+        ignore_nan = true,
+    )
+
+Reconstruct the normalized residual `(mean(G) - obs) / σ` of the `it`th
+iteration as a vector of `OutputVar`s, where `σ` is the square root of the
+diagonal of the observation noise covariance.
+
+If `ignore_nan = true`, then the mean of the G ensemble at each index is
+computed over the ensemble members that are not `NaN`.
+"""
+function ObservationRecipe.reconstruct_residual(
+    ekp::EKP.EnsembleKalmanProcess,
+    it::Integer;
+    ignore_nan = true,
+)
+    obs_series = EKP.get_observation_series(ekp)
+    metadata = ClimaCalibrate.get_metadata_for_nth_iteration(obs_series, it)
+    all(m isa ClimaAnalysis.Var.Metadata for m in metadata) || error(
+        "Reconstructing the residual is only possible when the metadata are all ClimaAnalysis.Var.Metadata",
+    )
+
+    res = ClimaCalibrate.residual(ekp; N = it, ignore_nan)
+
+    # Check if length of the residual is the same as the length of the data in
+    # the metadatas
+    total_metadata_length =
+        sum(ClimaAnalysis.flattened_length(m) for m in metadata)
+    length(res) != total_metadata_length && error(
+        "Length of the residual is not the same as the length of all the metadata",
+    )
+
+    return _reconstruct_vars(res, metadata)
+end
+
+"""
     _get_minibatch_indices_for_nth_iteration(obs_series, N)
 
 Get the indices that correspond to each metadata for the minibatch of the `N`th

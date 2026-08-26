@@ -12,7 +12,8 @@ export ScalarCovariance,
     reconstruct_g_mean,
     reconstruct_g_mean_final,
     reconstruct_diag_cov,
-    reconstruct_vars
+    reconstruct_vars,
+    reconstruct_residual
 
 """
     abstract type AbstractCovarianceEstimator end
@@ -342,6 +343,8 @@ function reconstruct_g_mean_final end
 function reconstruct_diag_cov end
 
 function reconstruct_vars end
+
+function reconstruct_residual end
 
 function _get_minibatch_indices_for_nth_iteration end
 

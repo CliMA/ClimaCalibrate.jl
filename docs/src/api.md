@@ -145,6 +145,7 @@ ClimaCalibrate.ObservationRecipe.reconstruct_g_mean
 ClimaCalibrate.ObservationRecipe.reconstruct_g_mean_final
 ClimaCalibrate.ObservationRecipe.reconstruct_diag_cov
 ClimaCalibrate.ObservationRecipe.reconstruct_vars
+ClimaCalibrate.ObservationRecipe.reconstruct_residual
 ClimaCalibrate.ObservationRecipe.seasonally_aligned_yearly_sample_date_ranges
 ```
 
