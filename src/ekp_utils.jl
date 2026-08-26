@@ -1,12 +1,15 @@
 module EKPUtils
 
+import LinearAlgebra
+import Statistics
 import EnsembleKalmanProcesses as EKP
 
 export minibatcher_over_samples,
     observation_series_from_samples,
     g_ens_matrix,
     get_metadata_for_nth_iteration,
-    get_observations_for_nth_iteration
+    get_observations_for_nth_iteration,
+    residual
 
 _fixed_minibatcher_indices(n_batches, batch_size) =
     [collect(((i - 1) * batch_size + 1):(i * batch_size)) for i in 1:n_batches]
@@ -112,5 +115,58 @@ function get_observations_for_nth_iteration(
     minibatch_obs = EKP.get_observations(obs_series)[minibatch_indices]
     return minibatch_obs
 end
+
+"""
+    residual(
+        ekp::EKP.EnsembleKalmanProcess;
+        N = EKP.get_N_iterations(ekp),
+        ignore_nan = true,
+    )
+
+Return the normalized residual `(mean(G) - obs) / σ` for the `N`th iteration,
+where `σ` is the square root of the diagonal of the observation noise
+covariance.
+
+If `ignore_nan = true`, then the mean of the G ensemble at each index is
+computed over the ensemble members that are not `NaN`.
+
+!!! note "Sign convention" 
+    The sign of the residual is flipped compared to
+    [`ClimaCalibrate.analyze_residual`](@ref), which uses `obs - mean(G)`.
+
+See the [Visualization](@ref) documentation for how to interpret the residual.
+"""
+function residual(
+    ekp::EKP.EnsembleKalmanProcess;
+    N = EKP.get_N_iterations(ekp),
+    ignore_nan = true,
+)
+    obs_series = EKP.get_observation_series(ekp)
+    obs = get_observations_for_nth_iteration(obs_series, N)
+    stacked_obs = mapreduce(EKP.get_obs, vcat, obs)
+    stacked_noise_var = mapreduce(vcat, obs) do o
+        covs = EKP.get_obs_noise_cov(o, build = false)
+        mapreduce(_diag, vcat, covs)
+    end
+    g_mean = if ignore_nan
+        # Mean of an empty vector is NaN, so indices where all ensemble
+        # members are NaN stay NaN
+        map(row -> Statistics.mean(filter(!isnan, row)), eachrow(EKP.get_g(ekp, N)))
+    else
+        EKP.get_g_mean(ekp, N)
+    end
+    return (g_mean .- stacked_obs) ./ sqrt.(stacked_noise_var)
+end
+
+"""
+    _diag(A)
+
+Return the diagonal of the matrix `A` as a vector without materializing the
+entire matrix.
+"""
+_diag(A::AbstractMatrix) = LinearAlgebra.diag(A)
+# diag(U * Diagonal(S) * Vt)[i] is the sum of U[i, j] * S[j] * Vt[j, i] over j
+_diag(A::LinearAlgebra.SVD) = vec(sum(A.U .* transpose(A.S .* A.Vt), dims = 2))
+_diag(A::EKP.SVDplusD) = _diag(EKP.get_svd_cov(A)) .+ _diag(EKP.get_diag_cov(A))
 
 end

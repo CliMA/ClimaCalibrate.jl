@@ -111,6 +111,7 @@ ClimaCalibrate.EKPUtils.observation_series_from_samples
 ClimaCalibrate.EKPUtils.get_observations_for_nth_iteration
 ClimaCalibrate.EKPUtils.get_metadata_for_nth_iteration
 ClimaCalibrate.EKPUtils.g_ens_matrix
+ClimaCalibrate.EKPUtils.residual
 ```
 
 ## Sample Builder Interface

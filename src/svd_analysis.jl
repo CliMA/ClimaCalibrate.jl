@@ -182,6 +182,10 @@ Returns a named tuple with:
   `structured_energy_by_variable` and `residual_norm_by_variable`
 
 Requires ClimaAnalysis to be loaded.
+
+!!! note "Sign convention"
+    The sign of the residual is flipped compared to
+    [`EKPUtils.residual`](@ref), which uses `mean(G) - obs`.
 """
 function analyze_residual(ekp, iter; n_eigenvectors = 3)
     obs_series = EKP.get_observation_series(ekp)
