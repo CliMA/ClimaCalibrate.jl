@@ -83,6 +83,8 @@ const _MAKIE_STUBS = (
     Visualization.plot_g_mean!,
     Visualization.plot_obs,
     Visualization.plot_obs!,
+    Visualization.plot_residual,
+    Visualization.plot_residual!,
 )
 
 function _register_extension_hints()
