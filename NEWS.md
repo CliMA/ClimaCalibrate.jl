@@ -9,6 +9,9 @@ main
   [#351](https://github.com/CliMA/ClimaCalibrate.jl/pull/351)
 - Add `ObservationRecipe.reconstruct_residual` for reconstructing the
   normalized residual as a vector of `OutputVar`s
+  [#351](https://github.com/CliMA/ClimaCalibrate.jl/pull/351)
+- Add `Visualization.plot_residual` and `Visualization.plot_residual!` for
+  plotting the normalized residual
   [#350](https://github.com/CliMA/ClimaCalibrate.jl/issues/350)
 
 v0.5.0
