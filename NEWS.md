@@ -12,6 +12,9 @@ main
 - Add `Visualization.plot_residual` and `Visualization.plot_residual!` for
   plotting the normalized residual
   [#350](https://github.com/CliMA/ClimaCalibrate.jl/issues/350)
+- Fix the units of the `OutputVar`s returned by
+  `ObservationRecipe.reconstruct_diag_cov`, which are now squared, since the
+  diagonal of the covariance matrix contains variances
 - Fix a bug where `SampleBuilder.build_samples` did not work with `OutputVar`s
   with no dimensions. `SampleBuilder`, `ObservationRecipe`, and
   `EnsembleBuilder` now support `OutputVar`s with no dimensions. This requires

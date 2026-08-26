@@ -586,6 +586,9 @@ Reconstruct the diagonal of the covariance matrix in `obs` as a vector of
 
 This function only supports observations that contain diagonal covariance
 matrices.
+
+The units of the reconstructed `OutputVar`s are squared, since the diagonal of
+the covariance matrix contains variances.
 """
 function ObservationRecipe.reconstruct_diag_cov(obs::EKP.Observation)
     all_metadata = EKP.get_metadata(obs)
@@ -599,7 +602,12 @@ function ObservationRecipe.reconstruct_diag_cov(obs::EKP.Observation)
     # the indexing a bit more difficult
     cov_diags = mapreduce(cov -> view(cov, diagind(cov)), vcat, covs)
 
-    return _reconstruct_vars(cov_diags, all_metadata)
+    cov_vars = _reconstruct_vars(cov_diags, all_metadata)
+    for var in cov_vars
+        units = ClimaAnalysis.units(var)
+        isempty(units) || ClimaAnalysis.set_units!(var, "($units)^2")
+    end
+    return cov_vars
 end
 
 """
@@ -628,6 +636,9 @@ diagonal of the observation noise covariance.
 
 If `ignore_nan = true`, then the mean of the G ensemble at each index is
 computed over the ensemble members that are not `NaN`.
+
+The units of the reconstructed `OutputVar`s are empty, since the residual is
+normalized by `σ`.
 """
 function ObservationRecipe.reconstruct_residual(
     ekp::EKP.EnsembleKalmanProcess,
@@ -650,7 +661,10 @@ function ObservationRecipe.reconstruct_residual(
         "Length of the residual is not the same as the length of all the metadata",
     )
 
-    return _reconstruct_vars(res, metadata)
+    res_vars = _reconstruct_vars(res, metadata)
+    # The residual is normalized by σ, so it is unitless
+    foreach(var -> ClimaAnalysis.set_units!(var, ""), res_vars)
+    return res_vars
 end
 
 """
