@@ -4,7 +4,11 @@ ClimaCalibrate.jl Release Notes
 main
 -------
 
-- Add `residual` for computing the normalized residual `(mean(G) - obs) / σ`
+- Add tools for the normalized residual `(mean(G) - obs) / σ`, where `σ` is the
+  square root of the diagonal of the observation noise covariance
+  [#351](https://github.com/CliMA/ClimaCalibrate.jl/pull/351)
+- Add `ObservationRecipe.reconstruct_residual` for reconstructing the
+  normalized residual as a vector of `OutputVar`s
   [#350](https://github.com/CliMA/ClimaCalibrate.jl/issues/350)
 
 v0.5.0
