@@ -4,6 +4,12 @@ ClimaCalibrate.jl Release Notes
 main
 -------
 
+- Add `residual` for computing the normalized residual `(mean(G) - obs) / σ`
+  [#350](https://github.com/CliMA/ClimaCalibrate.jl/issues/350)
+
+v0.5.0
+-------
+
 ### Breaking
 
 - `calibrate` is now a single method for all backends instead of three

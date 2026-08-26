@@ -212,6 +212,10 @@ result.structured_energy
     Requires ClimaAnalysis to be loaded, and observations built by
     [`ClimaCalibrate.ObservationRecipe`](@ref), whose metadata is used to
     attribute the residual to individual variables.
+
+!!! note "Sign convention"
+    The sign of the residual is flipped compared to
+    [`EKPUtils.residual`](@ref), which uses `mean(G) - obs`.
 """
 function analyze_residual(ekp, iter; n_eigenvectors = 3)
     obs_series = EKP.get_observation_series(ekp)
