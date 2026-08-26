@@ -9,6 +9,9 @@ main
 - Add `ObservationRecipe.reconstruct_residual` for reconstructing the
   normalized residual as a vector of `OutputVar`s
   [#350](https://github.com/CliMA/ClimaCalibrate.jl/issues/350)
+- Add `Visualization.plot_residual` and `Visualization.plot_residual!` for
+  plotting the normalized residual
+  [#350](https://github.com/CliMA/ClimaCalibrate.jl/issues/350)
 - Fix a bug where `SampleBuilder.build_samples` did not work with `OutputVar`s
   with no dimensions. `SampleBuilder`, `ObservationRecipe`, and
   `EnsembleBuilder` now support `OutputVar`s with no dimensions. This requires

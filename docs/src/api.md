@@ -194,4 +194,6 @@ ClimaCalibrate.Visualization.plot_g_mean
 ClimaCalibrate.Visualization.plot_g_mean!
 ClimaCalibrate.Visualization.plot_obs
 ClimaCalibrate.Visualization.plot_obs!
+ClimaCalibrate.Visualization.plot_residual
+ClimaCalibrate.Visualization.plot_residual!
 ```

@@ -17,12 +17,14 @@ observation via a `Makie` extension.
     `EKP.EnsembleKalmanProcess` object to data that is more suitable for
     plotting.
 
-To plot the mean forward map evaluation, columns of the G ensemble matrix, and
-the true observation, you can use [`Visualization.plot_g_mean`](@ref),
-[`Visualization.plot_g`](@ref), and [`Visualization.plot_obs`](@ref)
+To plot the mean forward map evaluation, columns of the G ensemble matrix, the
+true observation, and the normalized residual, you can use
+[`Visualization.plot_g_mean`](@ref), [`Visualization.plot_g`](@ref),
+[`Visualization.plot_obs`](@ref), and [`Visualization.plot_residual`](@ref)
 respectively. The mutating versions also exist as
-[`Visualization.plot_g_mean!`](@ref), [`Visualization.plot_g!`](@ref), and
-[`Visualization.plot_obs!`](@ref). All plotting functions takes an
+[`Visualization.plot_g_mean!`](@ref), [`Visualization.plot_g!`](@ref),
+[`Visualization.plot_obs!`](@ref), and
+[`Visualization.plot_residual!`](@ref). All plotting functions takes an
 `EKP.EnsembleKalmanProcess` object to plot from. Additionally, the plotting
 function accept an `iter` keyword argument for plotting from a specific
 iteration. If the keyword argument is not provided, then the last iteration is
@@ -156,3 +158,51 @@ CairoMakie.Legend(
 
 fig
 ```
+
+We can also plot the normalized residual `(mean(G) - obs) / σ` from the second
+iteration, where `σ` is the square root of the diagonal of the observation
+noise covariance.
+
+```@example plot
+fig = CairoMakie.Figure()
+ClimaCalibrate.Visualization.plot_residual(fig[1, 1], ekp; iter = 2)
+fig
+```
+
+## Interpreting the residual
+
+Each entry of the normalized residual measures the mismatch between the mean
+forward map evaluation and the observation in units of the observation noise
+standard deviation, so it can be read like a z-score.
+
+- **Sign:** A positive value means the mean forward map evaluation over-predicts
+  the observation at that index (positive bias), and a negative value means it
+  under-predicts (negative bias). Note that this is the opposite sign convention
+  from [`analyze_residual`](@ref), which uses `obs - mean(G)`.
+- **Magnitude:** Values much larger than ``\pm 2`` in magnitude indicate a
+  mismatch that the noise model cannot explain.
+- **RMS as a summary:** The root mean square (RMS) of the residual is a useful
+  single-number summary. RMS much greater than 1 means learnable signal remains
+  (or the noise covariance is too small). RMS near 1 means the calibration has
+  fit to the noise floor and can no longer distinguish model error from the
+  noise it was told to expect. RMS much less than 1 means the noise covariance
+  is too large.
+- **Index order:** The x-axis is the index into the stacked observation vector
+  for that iteration. If you are using the ClimaAnalysis extension, you can use
+  [`ObservationRecipe.reconstruct_residual`](@ref) to reconstruct the residual
+  as `OutputVar`s and plot them with the ClimaAnalysis plotting functions.
+- **Across iterations:** As the calibration converges, the residual should
+  shrink toward the noise level, with most entries settling within ``\pm 2``
+  and the RMS approaching 1.
+
+!!! warning "Correlated noise"
+    The residual is normalized by only the diagonal of the observation noise
+    covariance, so correlations between entries are ignored. For an analysis
+    that accounts for the structure of the covariance, see
+    [`analyze_residual`](@ref).
+
+!!! note "`NaN`s in the ensemble"
+    With `ignore_nan = true` (the default), the mean forward map evaluation at
+    each index is computed over the ensemble members that are not `NaN`, so
+    iterations with different numbers of failed members average over different
+    ensemble sizes.

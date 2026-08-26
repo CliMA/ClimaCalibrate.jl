@@ -79,13 +79,14 @@ using EnsembleKalmanProcesses.ParameterDistributions
     @info "Plots" plot_dir
 
     # Test non mutating version
-    fig = CairoMakie.Figure(; size = (750, 1000))
+    fig = CairoMakie.Figure(; size = (750, 1300))
     plot_fns = [
         ClimaCalibrate.Visualization.plot_g,
         ClimaCalibrate.Visualization.plot_g_mean,
         ClimaCalibrate.Visualization.plot_obs,
+        ClimaCalibrate.Visualization.plot_residual,
     ]
-    colors = [:tomato, :lime, :skyblue]
+    colors = [:tomato, :lime, :skyblue, :black]
     for (i, (plot_fn, color)) in enumerate(zip(plot_fns, colors))
         plot_fn(fig[i, 1], ekp; iter = 2, color)
         plot_fn(fig[i, 2], ekp; color)
@@ -110,13 +111,20 @@ using EnsembleKalmanProcesses.ParameterDistributions
         ClimaCalibrate.Visualization.plot_g!,
         ClimaCalibrate.Visualization.plot_g_mean!,
         ClimaCalibrate.Visualization.plot_obs!,
+        ClimaCalibrate.Visualization.plot_residual!,
     ]
-    colors = [:tomato, :lime, :skyblue]
+    colors = [:tomato, :lime, :skyblue, :black]
     for (i, (mutating_plot_fn, color)) in
         enumerate(zip(mutating_plot_fns, colors))
         mutating_plot_fn(ax1, ekp; iter = 2, color)
         mutating_plot_fn(ax2, ekp; color)
     end
+    ClimaCalibrate.Visualization.plot_residual!(
+        ax2,
+        ekp;
+        reference_lines = false,
+        ignore_nan = false,
+    )
     CairoMakie.save(
         joinpath(plot_dir, "g_ensemble_and_obs_plot_from_mutating_axes.png"),
         fig,
