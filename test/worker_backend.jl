@@ -21,7 +21,7 @@ if nworkers() == 1
         ClimaCalibrate.add_workers(
             nprocs;
             cluster = :pbs,
-            q = "main@desched1",
+            q = "develop@desched1",
             A = "UCIT0011",
             l_select = "1:ncpus=1:ngpus=1",
             l_walltime = "00:30:00",
