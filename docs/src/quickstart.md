@@ -57,7 +57,7 @@ Distributed.addprocs(ClimaCalibrate.SlurmManager())
 backend = ClimaCalibrate.WorkerBackend()
 ```
 
-Finally, the [`HPCBackend`](@ref) is a backend specfic to each HPC cluster. The
+Finally, the [`HPCBackend`](@ref) is a backend specific to each HPC cluster. The
 work done by each ensemble member is done in parallel on different jobs. In the
 example, each job would start with the `directives`, `modules`, and `env_vars`
 listed. The job would last for 720 minutes with single task of 12 CPUs and 1
@@ -140,10 +140,10 @@ observations is also required.
 
 This is provided by implementing the function stub
 [`observation_map(interface, iteration)`](@ref). This function needs to return
-an `Matrix` where the `i`th column is the `i`th ensemble member's observational
+a `Matrix` where the `i`th column is the `i`th ensemble member's observational
 output. This matrix is called the G ensemble matrix.
 
-Here is a simple readable template for the `observation_map`
+Here is a simple template for the `observation_map`:
 
 ```julia
 function ClimaCalibrate.observation_map(interface, iteration)
@@ -172,8 +172,7 @@ columns of the G ensemble matrix.
 
 #### Optional postprocessing
 
-It may be the case that `observation_map` is insufficient as you need more
-information, such as information from the `ekp` object to compute `G_ensemble`.
+`observation_map` may be insufficient if you need more information, such as information from the `ekp` object to compute `G_ensemble`.
 Further postprocessing of the `G_ensemble` object can be done by implementing
 the `postprocess_g_ensemble` as shown below.
 
@@ -219,7 +218,7 @@ Every parameter that is being calibrated requires a prior distribution to sample
 
 EnsembleKalmanProcesses.jl's
 [constrained_gaussian](https://clima.github.io/EnsembleKalmanProcesses.jl/dev/API/ParameterDistributions/#EnsembleKalmanProcesses.ParameterDistributions.constrained_gaussian)
-provides a user-friendly way to constructor Gaussian distributions.
+provides a user-friendly way to construct Gaussian distributions.
 
 Multiple distributions can be combined using
 `combine_distributions(vec_of_distributions)`.
@@ -229,8 +228,8 @@ For more information, see the EKP documentation for
 
 ### Experiment Configuration
 
-A calibration consisting of `m` ensemble members that will run for `n`
-iterations. The recommended ensemble size is a function of the chosen method and
+A calibration consists of `m` ensemble members run for `n` iterations. The
+recommended ensemble size is a function of the chosen method and
 the number of parameters being calibrated. See the
 [EnsembleKalmanProcesses.jl documentation](https://clima.github.io/EnsembleKalmanProcesses.jl/dev/defaults/#ens-size)
 for more information for choosing the appropriate ensemble size.
@@ -253,7 +252,7 @@ iterations to run for.
 n_iterations = 7
 output_dir = "output/my_experiment"
 ```
-Once all of this has been set up, you can call put it all together using the
+Once all of this has been set up, you can put it all together using the
 [`calibrate`](@ref) function:
 
 ```julia
@@ -328,7 +327,7 @@ To access these paths programmatically:
 - [`path_to_iteration(output_dir, iteration)`](@ref): Path to an iteration's
   directory.
 
-# Checkpointing
+## Checkpointing
 
 ClimaCalibrate checkpoints each forward model and iteration so that an
 interrupted calibration can seamlessly pick up where it left off without wasting
@@ -346,10 +345,10 @@ checking each model's checkpoint file and the flag it contains.
 
 !!! note "Forward model restarts"
     Although the model is checkpointed, this does not mean the forward model
-    will automatically restarts. This functionality is delegated to forward
+    will automatically restart. This functionality is delegated to the forward
     model.
 
-# Example Calibrations
+## Example Calibrations
 
 The [example tutorial](https://clima.github.io/ClimaCalibrate.jl/dev/literate_example/)
 provides a clear calibration example that can be run locally using the
