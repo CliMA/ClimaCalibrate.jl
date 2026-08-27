@@ -146,6 +146,61 @@ end
         use_latitude_weights = true,
         min_cosd_lat = -0.1,
     )
+
+    # Invalid values for the diagonal builders
+    @test_throws ErrorException ObservationRecipe.ScalarDiagonal(-1.0)
+    @test_throws ErrorException ObservationRecipe.ModelErrorScaleDiagonal(-1.0)
+    @test_throws ErrorException ObservationRecipe.QuantileDiagonal(
+        0.0,
+        ObservationRecipe.ScalarDiagonal(1.0),
+    )
+    @test_throws ErrorException ObservationRecipe.QuantileDiagonal(
+        1.1,
+        ObservationRecipe.ScalarDiagonal(1.0),
+    )
+
+    # Zero is valid for ScalarDiagonal and ModelErrorScaleDiagonal
+    @test ObservationRecipe.ScalarDiagonal(0.0).value == 0.0
+    @test ObservationRecipe.ModelErrorScaleDiagonal(0.0).model_error_scale ==
+          0.0
+
+    # The keyword argument diagonal cannot be used with the keyword arguments
+    # model_error_scale or regularization
+    diagonal = ObservationRecipe.ScalarDiagonal(1.0)
+    @test_throws ErrorException ObservationRecipe.SVDplusDCovariance(
+        diagonal = diagonal,
+        model_error_scale = 1.0,
+    )
+    @test_throws ErrorException ObservationRecipe.SVDplusDCovariance(
+        diagonal = diagonal,
+        regularization = 1.0,
+    )
+
+    # The keyword argument diagonal must be an AbstractDiagonalBuilder
+    @test_throws ErrorException ObservationRecipe.SVDplusDCovariance(
+        diagonal = 1.0,
+    )
+    @test_throws ErrorException ObservationRecipe.SVDplusDCovariance(
+        diagonal = ObservationRecipe.ScalarCovariance(),
+    )
+
+    # The legacy keyword arguments model_error_scale and regularization are
+    # transformed into the equivalent diagonal builders
+    covar_estimator = ObservationRecipe.SVDplusDCovariance(
+        model_error_scale = 0.1,
+        regularization = 1e-3,
+    )
+    @test covar_estimator.diagonal ==
+          ObservationRecipe.ModelErrorScaleDiagonal(0.1) +
+          ObservationRecipe.ScalarDiagonal(1e-3)
+
+    mes = ObservationRecipe.ModelErrorScaleDiagonal(0.1)
+    covar_estimator = ObservationRecipe.SVDplusDCovariance(
+        model_error_scale = 0.1,
+        regularization = ObservationRecipe.QuantileRegularization(0.05),
+    )
+    @test covar_estimator.diagonal ==
+          mes + ObservationRecipe.QuantileDiagonal(0.05, mes)
 end
 
 @testset "Lat weights" begin
@@ -530,6 +585,45 @@ end
             mean(SampleBuilder.get_samples(sample_collection), dims = 2),
         ) .^ 2,
     )
+
+    # Passing the equivalent diagonal builder gives the same diagonal matrix
+    # as the legacy keyword arguments model_error_scale and regularization
+    covar_estimator_diagonal = ObservationRecipe.SVDplusDCovariance(
+        diagonal = ObservationRecipe.ModelErrorScaleDiagonal(
+            model_error_scale,
+        ) + ObservationRecipe.ScalarDiagonal(regularization),
+    )
+    svd_plus_d_covar_diagonal = ObservationRecipe.covariance(
+        covar_estimator_diagonal,
+        sample_collection,
+    )
+    @test svd_plus_d_covar_diagonal.diag_cov == svd_plus_d_covar.diag_cov
+
+    # The default diagonal matrix is the zero matrix
+    covar_estimator_default = ObservationRecipe.SVDplusDCovariance()
+    svd_plus_d_covar_default =
+        ObservationRecipe.covariance(covar_estimator_default, sample_collection)
+    @test svd_plus_d_covar_default.diag_cov == Diagonal(zeros(sample_size))
+
+    # The samples passed to build_diagonal already have latitude weights
+    # applied
+    covar_estimator_lat_diagonal = ObservationRecipe.SVDplusDCovariance(
+        diagonal = ObservationRecipe.ModelErrorScaleDiagonal(1.0),
+        use_latitude_weights = true,
+        min_cosd_lat = 0.2,
+    )
+    svd_plus_d_covar_lat_diagonal = ObservationRecipe.covariance(
+        covar_estimator_lat_diagonal,
+        sample_collection,
+    )
+    weighted_samples = copy(SampleBuilder.get_samples(sample_collection))
+    ext._apply_lat_weights_to_samples!(
+        weighted_samples,
+        SampleBuilder.get_metadata(sample_collection)[:, 1],
+        min_cosd_lat = 0.2,
+    )
+    @test svd_plus_d_covar_lat_diagonal.diag_cov ==
+          Diagonal(vec(mean(weighted_samples, dims = 2) .^ 2))
 
     # Test latitude weights
     covar_estimator_lat_weights = ObservationRecipe.SVDplusDCovariance(

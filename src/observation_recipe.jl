@@ -4,6 +4,11 @@ export ScalarCovariance,
     SeasonalDiagonalCovariance,
     SVDplusDCovariance,
     QuantileRegularization,
+    ScalarDiagonal,
+    ModelErrorScaleDiagonal,
+    QuantileDiagonal,
+    SumDiagonal,
+    build_diagonal,
     covariance,
     observation,
     short_names,
@@ -13,6 +18,8 @@ export ScalarCovariance,
     reconstruct_g_mean_final,
     reconstruct_diag_cov,
     reconstruct_vars
+
+include("diagonal_builder.jl")
 
 """
     abstract type AbstractCovarianceEstimator end
@@ -192,7 +199,12 @@ Regularization using the quantile of the model error scale for each
 
 The same quantile is used for each `OutputVar` when making the observation.
 
-This is used for the `SVDplusDCovariance` matrix.
+This is used for the `SVDplusDCovariance` matrix. Passing
+`SVDplusDCovariance(model_error_scale = scale, regularization =
+QuantileRegularization(qtl))` is equivalent to passing
+`SVDplusDCovariance(diagonal = ModelErrorScaleDiagonal(scale) +
+QuantileDiagonal(qtl, ModelErrorScaleDiagonal(scale)))` (see
+[`QuantileDiagonal`](@ref)).
 
 Examples
 ========
@@ -217,25 +229,25 @@ end
 
 Contain the necessary information to construct a `EKP.SVDplusD` covariance
 matrix from `ClimaAnalysis.OutputVar`s.
+
+The diagonal matrix of the `EKP.SVDplusD` covariance matrix is built by the
+diagonal builder stored in `diagonal` (see
+[`AbstractDiagonalBuilder`](@ref)).
 """
 struct SVDplusDCovariance{
-    FT1 <: AbstractFloat,
-    FT2 <: Union{AbstractFloat, QuantileRegularization},
-    FT3 <: AbstractFloat,
+    D <: AbstractDiagonalBuilder,
+    FT <: AbstractFloat,
     R <: Union{Integer, Nothing},
 } <: AbstractCovarianceEstimator
-    """A model error scale term added to the diagonal of the covariance
+    """Diagonal builder that builds the diagonal matrix of the covariance
     matrix"""
-    model_error_scale::FT1
-
-    """A regularization term added to the diagonal of the covariance matrix"""
-    regularization::FT2
+    diagonal::D
 
     """Use latitude weights"""
     use_latitude_weights::Bool
 
     """The minimum cosine weight when using latitude weighting"""
-    min_cosd_lat::FT3
+    min_cosd_lat::FT
 
     """Rank of the singular value decomposition (SVD)"""
     rank::R
@@ -243,8 +255,9 @@ end
 
 """
     SVDplusDCovariance(;
-        model_error_scale = 0.0,
-        regularization = 0.0,
+        diagonal = nothing,
+        model_error_scale = nothing,
+        regularization = nothing,
         use_latitude_weights = false,
         min_cosd_lat = 0.1,
         rank = nothing
@@ -257,6 +270,11 @@ be formed. When used with `ObservationRecipe.observation` or
 The samples used to compute the covariance matrix come from the
 `SampleCollection`, where each sample is one column.
 
+The diagonal matrix of the `EKP.SVDplusD` covariance matrix is built by the
+diagonal builder passed as `diagonal`. The keyword arguments
+`model_error_scale` and `regularization` are shorthands for the equivalent
+diagonal builders and cannot be used together with `diagonal`.
+
 !!! note "Recommended sample size"
     When constructing the samples (e.g. with `build_samples_by_times`), it is
     recommended that each sample contains data from a single year. For example,
@@ -268,18 +286,27 @@ The samples used to compute the covariance matrix come from the
     the samples contain DJF for both 2010 and 2011. Then, the sample mean will be
     the mean of DJF 2010, 2012, and so on, and the mean of DJF 2011, 2013, and so
     on. As a result, if one were to use this covariance matrix with
-    `model_error_scale`, the covariance matrix will not make sense.
+    `ModelErrorScaleDiagonal`, the covariance matrix will not make sense.
 
 Keyword arguments
 =====================
 
+- `diagonal`: A diagonal builder (see [`AbstractDiagonalBuilder`](@ref)) that
+  builds the diagonal matrix of the covariance matrix from the samples. If
+  `use_latitude_weights = true`, the samples passed to the diagonal builder
+  already have latitude weights applied. Cannot be used together with
+  `model_error_scale` or `regularization`.
+
 - `model_error_scale`: Noise from the model error added to the covariance
   matrix. This is `(model_error_scale * mean(samples, dims = 2)).^2`, where
-  `mean(samples, dims = 2)` is the mean of the samples.
+  `mean(samples, dims = 2)` is the mean of the samples. This is a shorthand for
+  the diagonal builder [`ModelErrorScaleDiagonal`](@ref).
 
 - `regularization`: If a scalar is used, a diagonal matrix of the form
-  `regularization * I` is added to the covariance matrix. See
-  [`QuantileRegularization`](@ref) for another option for regularization.
+  `regularization * I` is added to the covariance matrix. This is a shorthand
+  for the diagonal builder [`ScalarDiagonal`](@ref). See
+  [`QuantileRegularization`](@ref) for another option for regularization,
+  which is a shorthand for the diagonal builder [`QuantileDiagonal`](@ref).
 
 - `use_latitude_weights`: If `true`, then latitude weighting is applied to the
   covariance matrix. Latitude weighting is multiplying the columns of the matrix
@@ -295,18 +322,28 @@ Keyword arguments
   in, then the rank is automatically inferred from the data.
 """
 function SVDplusDCovariance(;
-    model_error_scale = 0.0,
-    regularization = 0.0,
+    diagonal = nothing,
+    model_error_scale = nothing,
+    regularization = nothing,
     use_latitude_weights = false,
     min_cosd_lat = 0.1,
     rank = nothing,
 )
-    model_error_scale < zero(model_error_scale) &&
-        error("Model_error_scale ($model_error_scale) should not be negative")
-    if regularization isa AbstractFloat
-        regularization < zero(regularization) &&
-            error("Regularization ($regularization) should not be negative")
+    if !isnothing(diagonal) &&
+       (!isnothing(model_error_scale) || !isnothing(regularization))
+        error(
+            "The keyword argument diagonal cannot be used together with the keyword arguments model_error_scale or regularization",
+        )
     end
+    if isnothing(diagonal)
+        diagonal = _diagonal_from_legacy_kwargs(
+            isnothing(model_error_scale) ? 0.0 : model_error_scale,
+            isnothing(regularization) ? 0.0 : regularization,
+        )
+    end
+    diagonal isa AbstractDiagonalBuilder || error(
+        "The keyword argument diagonal ($diagonal) should be an AbstractDiagonalBuilder",
+    )
     if use_latitude_weights && min_cosd_lat <= zero(min_cosd_lat)
         error(
             "The value for min_cosd_lat ($min_cosd_lat) should be greater than zero",
@@ -317,13 +354,29 @@ function SVDplusDCovariance(;
         error("Rank ($rank) should be nothing or non-negative")
 
     return SVDplusDCovariance(
-        model_error_scale,
-        regularization,
+        diagonal,
         use_latitude_weights,
         min_cosd_lat,
         rank,
     )
 end
+
+"""
+    _diagonal_from_legacy_kwargs(model_error_scale, regularization)
+
+Return the diagonal builder equivalent to the keyword arguments
+`model_error_scale` and `regularization` of `SVDplusDCovariance`.
+"""
+_diagonal_from_legacy_kwargs(model_error_scale, regularization::AbstractFloat) =
+    ModelErrorScaleDiagonal(model_error_scale) + ScalarDiagonal(regularization)
+_diagonal_from_legacy_kwargs(
+    model_error_scale,
+    regularization::QuantileRegularization,
+) =
+    ModelErrorScaleDiagonal(model_error_scale) + QuantileDiagonal(
+        regularization.qtl,
+        ModelErrorScaleDiagonal(model_error_scale),
+    )
 
 function covariance end
 

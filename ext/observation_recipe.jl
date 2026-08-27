@@ -3,7 +3,6 @@ import ClimaCalibrate.ObservationRecipe
 import ClimaCalibrate.ObservationRecipe: AbstractCovarianceEstimator
 import ClimaCalibrate.ObservationRecipe:
     ScalarCovariance, SeasonalDiagonalCovariance, SVDplusDCovariance
-import ClimaCalibrate.ObservationRecipe: QuantileRegularization
 
 """
     covariance(
@@ -19,19 +18,18 @@ function ObservationRecipe.covariance(
     covar_estimator::ScalarCovariance,
     sample_collection::SampleCollection,
 )
-    FT = eltype(get_samples(sample_collection))
-    all_metadata = _metadata_of_first_sample(sample_collection)
-
-    total_length = sum(ClimaAnalysis.flattened_length, all_metadata)
-    diag_cov = fill(FT(covar_estimator.scalar), total_length)
+    diag_cov = ObservationRecipe.build_diagonal(
+        ScalarDiagonal(covar_estimator.scalar),
+        sample_collection,
+    )
     if covar_estimator.use_latitude_weights
         _check_lats_across_samples(get_metadata(sample_collection))
-        diag_cov .*= _flat_lat_weights(
-            all_metadata,
+        diag_cov.diag .*= _flat_lat_weights(
+            _metadata_of_first_sample(sample_collection),
             min_cosd_lat = covar_estimator.min_cosd_lat,
         )
     end
-    return Diagonal(diag_cov)
+    return diag_cov
 end
 
 """
@@ -178,6 +176,12 @@ end
 
 Compute the `EKP.SVDplusD` covariance matrix from the samples in
 `sample_collection`.
+
+The diagonal matrix of the `EKP.SVDplusD` covariance matrix is built with
+`ObservationRecipe.build_diagonal` from the diagonal builder in
+`covar_estimator.diagonal` and the samples in `sample_collection`. If
+`covar_estimator.use_latitude_weights = true`, then the samples passed to
+`build_diagonal` already have latitude weights applied.
 """
 function ObservationRecipe.covariance(
     covar_estimator::SVDplusDCovariance,
@@ -210,101 +214,24 @@ function ObservationRecipe.covariance(
         rank_of_svd != rank &&
         @warn "Rank of SVD is $rank_of_svd but requested rank is $rank"
 
-    # Add model error scale. This may not make sense if the samples do not
-    # represent a single year. For example, if the stacked samples are seasonal
-    # averages over two years, then this quantity is the mean of seasonal
-    # averages spanned over two years, where the first DJF is the mean of every
-    # other DJF and the second DJF is the mean of every other DJF.
-    FT = eltype(stacked_sample_matrix)
-    model_error_scale =
-        (
-            FT(covar_estimator.model_error_scale) .*
-            mean(stacked_sample_matrix, dims = 2)
-        ) .^ 2
-    model_error_scale = Diagonal(vec(model_error_scale))
-
-    # Add regularization
-    regularization = create_regularization(
-        covar_estimator.regularization,
-        covar_estimator,
-        metadata,
-        model_error_scale,
+    # Build the diagonal matrix of the covariance matrix from the (latitude
+    # weighted) samples
+    weighted_sample_collection =
+        SampleCollection(stacked_sample_matrix, get_metadata(sample_collection))
+    diag_cov = ObservationRecipe.build_diagonal(
+        covar_estimator.diagonal,
+        weighted_sample_collection,
     )
-
-    return EKP.SVDplusD(gamma_low_rank, model_error_scale + regularization)
-end
-
-"""
-    create_regularization(regularization::AbstractFloat, _, _, model_error_scale)
-
-Create the regularization matrix of the form `regularization * I`.
-
-The scalar is cast to the element type of `model_error_scale` so the resulting
-covariance keeps a consistent element type (e.g. Float32).
-"""
-function create_regularization(
-    regularization::AbstractFloat,
-    _,
-    _,
-    model_error_scale,
-)
-    FT = eltype(model_error_scale)
-    return FT(regularization) * I
-end
-
-"""
-    create_regularization(
-        regularization::QuantileRegularization,
-        covar_estimator::SVDplusDCovariance,
-        metadata,
-        model_error_scale,
+    n = size(stacked_sample_matrix, 1)
+    size(diag_cov) == (n, n) || error(
+        "The size of the matrix from build_diagonal is $(size(diag_cov)), but ($n, $n) is expected",
     )
-
-Create the regularization matrix where each variable gets its own regularization
-value based on the `regularization.qtl` quantile of its model error scale
-vector.
-
-For each variable, the `qtl` quantile of the model error scale diagonal entries
-corresponding to that variable is computed and used as a constant regularization
-term for all entries belonging to that variable. The per-variable index ranges
-are determined from `metadata` (one `Metadata` per variable).
-"""
-function create_regularization(
-    regularization::QuantileRegularization,
-    covar_estimator::SVDplusDCovariance,
-    metadata,
-    model_error_scale,
-)
-    indices_vec = _get_indices_of_metadata(metadata)
-
-    (; qtl) = regularization
-
-    model_error_scale_vec = model_error_scale.diag
-    FT = eltype(model_error_scale)
-
-    regularization_vals_vec = []
-    for (i, indices) in enumerate(indices_vec)
-        var_model_error_scale_vec = view(model_error_scale_vec, indices)
-        # Check that there is a sufficient number of samples (e.g. if qtl =
-        # 0.05, there should be at least 20 samples for a meaningful
-        # quantile computation)
-        length(var_model_error_scale_vec) < 1 / qtl &&
-            error("Insufficient samples for computing quantile")
-        qtl_for_var = FT(Statistics.quantile(var_model_error_scale_vec, qtl))
-        qtl_for_var ≈ 0.0 && error(
-            "Zero found for the quantile ($qtl) of the model error scale for the variable ($(ClimaAnalysis.short_name(metadata[i]))). The model error scale ($(covar_estimator.model_error_scale)) might be too small",
-        )
-        push!(regularization_vals_vec, qtl_for_var)
-    end
-
-    return Diagonal(
-        vcat(
-            [
-                fill(reg, length(indices)) for
-                (reg, indices) in zip(regularization_vals_vec, indices_vec)
-            ]...,
-        ),
+    isdiag(diag_cov) || error(
+        "The matrix from build_diagonal with $(covar_estimator.diagonal) is not a diagonal matrix",
     )
+    diag_cov isa Diagonal || (diag_cov = Diagonal(diag(diag_cov)))
+
+    return EKP.SVDplusD(gamma_low_rank, diag_cov)
 end
 
 """

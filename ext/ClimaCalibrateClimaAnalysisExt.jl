@@ -11,7 +11,7 @@ import Statistics
 import Statistics: mean
 import NaNStatistics: nanmean, nanvar
 
-import LinearAlgebra: Diagonal, I, diagind
+import LinearAlgebra: Diagonal, I, diagind, diag, isdiag
 
 # Used by both by SampleBuilder and ObservationRecipe for default flattening
 # of OutputVars
@@ -21,6 +21,7 @@ const FLATTENED_DIMS =
 include("utils.jl")
 include("checkers.jl")
 include("sample_builder.jl")
+include("diagonal_builder.jl")
 include("observation_recipe.jl")
 include("ensemble_builder.jl")
 
