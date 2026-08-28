@@ -1,12 +1,11 @@
 # ClimaCalibrate.jl
 
-ClimaCalibrate takes a forward model, a set of observations, and a prior
-distribution over the model's parameters, and finds parameter values that make
-the model match the observations. The parameter search itself is done by
-[EnsembleKalmanProcesses.jl](https://github.com/CliMA/EnsembleKalmanProcesses.jl/);
-ClimaCalibrate handles everything around it: running an ensemble of models in
-parallel, collecting their output, feeding it back to the solver, and picking up
-where it left off if the run is interrupted.
+ClimaCalibrate runs the calibration loop around your forward model: it launches
+an ensemble of models in parallel, collects their output, hands it to
+[EnsembleKalmanProcesses.jl](https://github.com/CliMA/EnsembleKalmanProcesses.jl/)
+to produce the next set of parameters, and picks up where it left off if the run
+is interrupted. EKP chooses the parameters, while ClimaCalibrate runs your model
+with them and returns the results.
 
 The same calibration code runs unchanged on a laptop, across Julia worker
 processes, or as one scheduler job per ensemble member on an HPC cluster. You

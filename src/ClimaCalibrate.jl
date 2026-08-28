@@ -18,11 +18,6 @@ import Reexport: @reexport
 
 export project_dir
 
-"""
-    project_dir()
-
-Return the directory of the currently active Julia project.
-"""
 project_dir() = dirname(Base.active_project())
 
 include("model_interface.jl")

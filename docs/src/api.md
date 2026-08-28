@@ -1,5 +1,11 @@
 # API
 
+## Package
+
+```@docs
+ClimaCalibrate.ClimaCalibrate
+```
+
 ## Model Interface
 
 ```@docs

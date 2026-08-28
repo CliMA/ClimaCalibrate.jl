@@ -172,9 +172,10 @@ columns of the G ensemble matrix.
 
 #### Optional postprocessing
 
-`observation_map` may be insufficient if you need more information, such as information from the `ekp` object to compute `G_ensemble`.
-Further postprocessing of the `G_ensemble` object can be done by implementing
-the `postprocess_g_ensemble` as shown below.
+If the interface and the iteration are not enough to determine the G ensemble
+matrix, implement `postprocess_g_ensemble` as shown below. It gives you the
+`ekp` object, the prior, and the output directory, so you can process the matrix
+further using information that `observation_map` does not have access to.
 
 ```julia
 function ClimaCalibrate.postprocess_g_ensemble(
@@ -228,7 +229,7 @@ For more information, see the EKP documentation for
 
 ### Experiment Configuration
 
-A calibration consists of `m` ensemble members run for `n` iterations. The
+A calibration consists of `m` ensemble members that run for `n` iterations. The
 recommended ensemble size is a function of the chosen method and
 the number of parameters being calibrated. See the
 [EnsembleKalmanProcesses.jl documentation](https://clima.github.io/EnsembleKalmanProcesses.jl/dev/defaults/#ens-size)
