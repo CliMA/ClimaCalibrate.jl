@@ -1,5 +1,6 @@
 using Test
 
+import LinearAlgebra
 import ClimaCalibrate as CAL
 import EnsembleKalmanProcesses as EKP
 
@@ -105,4 +106,65 @@ end
         @test CAL.get_metadata_for_nth_iteration(series3, i) ==
               string.((3i - 2):(3i))
     end
+end
+
+@testset "Diagonal of matrices" begin
+    A = [4.0 1.0 0.0; 1.0 5.0 2.0; 0.0 2.0 6.0]
+    @test CAL.EKPUtils._diag(A) == LinearAlgebra.diag(A)
+    @test CAL.EKPUtils._diag(LinearAlgebra.Diagonal([1.0, 2.0, 3.0])) ==
+          [1.0, 2.0, 3.0]
+
+    # Full SVD
+    F = LinearAlgebra.svd(A)
+    @test CAL.EKPUtils._diag(F) ≈ LinearAlgebra.diag(A)
+
+    # Truncated SVD of a rank two matrix
+    U = [1.0 0.0; 0.0 1.0; 1.0 1.0]
+    S = [2.0, 3.0]
+    Vt = [1.0 0.0 1.0; 0.0 1.0 1.0]
+    truncated_svd = LinearAlgebra.SVD(U, S, Vt)
+    M = U * LinearAlgebra.Diagonal(S) * Vt
+    @test CAL.EKPUtils._diag(truncated_svd) ≈ LinearAlgebra.diag(M)
+
+    # SVDplusD
+    D = [1.0, 2.0, 3.0]
+    svd_plus_d = EKP.SVDplusD(F, LinearAlgebra.Diagonal(D))
+    @test CAL.EKPUtils._diag(svd_plus_d) ≈ LinearAlgebra.diag(A) .+ D
+end
+
+@testset "Residual" begin
+    # Covariance matrix of the SVDplusD observation is 12I + 4I = 16I
+    svd_plus_d = EKP.SVDplusD(
+        LinearAlgebra.svd(12.0 .* Matrix(LinearAlgebra.I, 2, 2)),
+        LinearAlgebra.Diagonal([4.0, 4.0]),
+    )
+    observations = [
+        EKP.Observation([1.0, 2.0], LinearAlgebra.Diagonal([4.0, 4.0]), "1"),
+        EKP.Observation([3.0, 4.0], 9.0 .* Matrix(LinearAlgebra.I, 2, 2), "2"),
+        EKP.Observation([5.0, 6.0], svd_plus_d, "3"),
+    ]
+    series = CAL.observation_series_from_samples(observations, 3)
+    prior = EKP.constrained_gaussian("amplitude", 2, 1, 0, Inf)
+    N_ensemble = 4
+    initial_ensemble = EKP.construct_initial_ensemble(prior, N_ensemble)
+    ekp = EKP.EnsembleKalmanProcess(initial_ensemble, series, EKP.Inversion())
+    G_ens = [
+        NaN 2.0 3.0 4.0
+        5.0 6.0 7.0 8.0
+        9.0 10.0 11.0 12.0
+        13.0 14.0 15.0 16.0
+        17.0 18.0 19.0 20.0
+        21.0 22.0 23.0 24.0
+    ]
+    EKP.update_ensemble!(ekp, G_ens)
+
+    # mean(G) ignoring NaNs = [3, 6.5, 10.5, 14.5, 18.5, 22.5],
+    # obs = [1, 2, 3, 4, 5, 6], and σ = [2, 2, 3, 3, 4, 4]
+    @test CAL.residual(ekp; N = 1) ≈ [1.0, 2.25, 2.5, 3.5, 3.375, 4.125]
+    # The default iteration is the last one
+    @test CAL.residual(ekp) == CAL.residual(ekp; N = 1)
+    # Without ignoring NaNs, the NaN propagates to the residual
+    res_with_nan = CAL.residual(ekp; N = 1, ignore_nan = false)
+    @test isnan(res_with_nan[1])
+    @test res_with_nan[2:end] ≈ [2.25, 2.5, 3.5, 3.375, 4.125]
 end
