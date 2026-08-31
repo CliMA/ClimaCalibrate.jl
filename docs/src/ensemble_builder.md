@@ -205,7 +205,7 @@ function process_member_data!(
 end
 ```
 
-# Checkers
+## Checkers
 
 To determine whether a `OutputVar` matches with a metadata, `GEnsembleBuilder`
 uses `Checker`s to check and compare the contents of a `OutputVar` and with that

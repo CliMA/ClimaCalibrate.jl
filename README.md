@@ -5,12 +5,13 @@
 
 <!-- description -->
 <p align="center">
-  <strong>ClimaCalibrate is a toolkit for developing scalable
-calibration pipelines using minimal boilerplate.</strong>
+  <strong>A toolkit for building scalable calibration pipelines with minimal boilerplate.</strong>
 </p>
 
 [![dev][docs-dev-img]][docs-dev-url]
 [![ghaci][gha-ci-img]][gha-ci-url]
+[![codecov][codecov-img]][codecov-url]
+[![license][license-img]][license-url]
 
 [docs-dev-img]: https://img.shields.io/badge/docs-dev-blue.svg
 [docs-dev-url]: https://CliMA.github.io/ClimaCalibrate.jl/dev/
@@ -18,18 +19,72 @@ calibration pipelines using minimal boilerplate.</strong>
 [gha-ci-img]: https://github.com/CliMA/ClimaCalibrate.jl/actions/workflows/ci.yml/badge.svg
 [gha-ci-url]: https://github.com/CliMA/ClimaCalibrate.jl/actions/workflows/ci.yml
 
-The recommended Julia version is: Stable release v1.11.4
+[codecov-img]: https://codecov.io/gh/CliMA/ClimaCalibrate.jl/branch/main/graph/badge.svg
+[codecov-url]: https://codecov.io/gh/CliMA/ClimaCalibrate.jl
 
-ClimaCalibrate supports different backends for calibration from
-- the Julia backend for single-process calibration,
-- [Distributed.jl](https://github.com/JuliaLang/Distributed.jl) with support for
-  Slurm and PBS job schedulers,
-- [Resnick High Performance Computing Center](https://www.hpc.caltech.edu/),
-- [NSF NCAR Supercomputer Derecho](https://ncar-hpc-docs.readthedocs.io/en/latest/compute-systems/derecho/),
-- CliMA's private GPU server.
+[license-img]: https://img.shields.io/badge/license-Apache%202.0-blue.svg
+[license-url]: https://github.com/CliMA/ClimaCalibrate.jl/blob/main/LICENSE
+
+ClimaCalibrate runs the calibration loop around your forward model: it launches
+an ensemble of models in parallel, collects their output, hands it to
+[EnsembleKalmanProcesses.jl](https://github.com/CliMA/EnsembleKalmanProcesses.jl)
+to produce the next set of parameters, and picks up where it left off if the run
+is interrupted. EKP chooses the parameters, while ClimaCalibrate runs your model
+with them and returns the results.
+
+The same calibration code runs unchanged on a laptop, across Julia worker
+processes, or as one scheduler job per ensemble member on an HPC cluster. You
+choose by swapping the backend.
+
+## Installation
+
+```julia
+julia> ] add ClimaCalibrate
+```
+
+Julia 1.10 or newer is required.
+
+## Where to run
+
+- `JuliaBackend` runs ensemble members one at a time in the current process.
+  Good for small models and for debugging.
+- `WorkerBackend` distributes members over
+  [Distributed.jl](https://github.com/JuliaLang/Distributed.jl) workers, which
+  can be started locally or requested from Slurm or PBS.
+- The HPC backends submit one scheduler job per ensemble member. Ready-made
+  configurations exist for the
+  [Resnick High Performance Computing Center](https://www.hpc.caltech.edu/),
+  [NSF NCAR Derecho](https://ncar-hpc-docs.readthedocs.io/en/latest/compute-systems/derecho/),
+  Google Cloud, and CliMA's private GPU server.
+
+## What else is in the box
+
+- Restart handling: completed forward models and iterations are checkpointed and
+  skipped on restart.
+- Recipes for turning [ClimaAnalysis.jl](https://github.com/CliMA/ClimaAnalysis.jl)
+  `OutputVar`s into observations with estimated noise covariances.
+- A builder that assembles the ensemble output matrix from `OutputVar`s, so you
+  do not have to track index ranges by hand. It validates each `OutputVar`
+  against the observation it is filling in, checking short names, units,
+  dimension names, dimension units, and dimension values, so a mismatch between
+  model output and observations is caught rather than silently calibrated
+  against.
+- Diagnostics for `SVDplusD` covariance matrices and Makie plots of ensemble
+  output against observations.
+
+## Documentation
+
+The [documentation](https://CliMA.github.io/ClimaCalibrate.jl/dev/) covers a
+[getting started guide](https://clima.github.io/ClimaCalibrate.jl/dev/quickstart/),
+a [worked distributed example](https://clima.github.io/ClimaCalibrate.jl/dev/literate_example/),
+and the full API.
 
 ## Contributing
 
-If you're interested in contributing to the development of ClimaCalibrate we want your help no matter how big or small a contribution you make! It's always great to have new people look at the code with fresh eyes: you will see errors that other developers have missed.
+Contributions of any size are welcome, and fresh eyes catch errors that regular
+developers miss. If you would like to work on a new feature, let us know by
+[opening an issue](https://github.com/CliMA/ClimaCalibrate.jl/issues/new).
 
-Let us know by [opening an issue](https://github.com/CliMA/ClimaCalibrate.jl/issues/new) if you'd like to work on a new feature.
+## License
+
+Apache License 2.0. See [LICENSE](LICENSE).
