@@ -111,7 +111,7 @@ sample_collection =
     )
 
 # We choose SVDplusDCovariance. The diagonal matrix of the covariance matrix
-# is built from diagonal builders (see the section on customizing the diagonal
+# is built from diagonal terms (see the section on customizing the diagonal
 # of SVDplusDCovariance).
 covar_estimator = ObservationRecipe.SVDplusDCovariance(
     diagonal = ObservationRecipe.ModelErrorScaleDiagonal(0.05) +
@@ -316,16 +316,16 @@ EKP.get_covs(obs)
 The `EKP.SVDplusD` covariance matrix produced by
 [`SVDplusDCovariance`](@ref ObservationRecipe.SVDplusDCovariance) consists of
 a low-rank part computed from the SVD of the samples and a diagonal matrix.
-The diagonal matrix is built by a diagonal builder, which is passed with the
+The diagonal matrix is built by a diagonal term, which is passed with the
 `diagonal` keyword argument.
 
-Diagonal builders (see [`AbstractDiagonalBuilder`](@ref
-ObservationRecipe.AbstractDiagonalBuilder)) are the building blocks for the
-diagonal matrix. Unlike covariance estimators, diagonal builders cannot be
+Diagonal terms (see [`AbstractDiagonalTerm`](@ref
+ObservationRecipe.AbstractDiagonalTerm)) are the building blocks for the
+diagonal matrix. Unlike covariance estimators, diagonal terms cannot be
 passed to [`observation`](@ref) or [`covariance`](@ref) — they only build the
 diagonal matrix of the covariance matrix.
 
-The built-in diagonal builders are:
+The built-in diagonal terms are:
 
 - [`ScalarDiagonal`](@ref ObservationRecipe.ScalarDiagonal): a diagonal matrix
   of the form `value * I`.
@@ -334,10 +334,10 @@ The built-in diagonal builders are:
   `(model_error_scale .* mean(samples, dims = 2)).^2`.
 - [`QuantileDiagonal`](@ref ObservationRecipe.QuantileDiagonal): a diagonal
   matrix where each variable's block is filled with the quantile of that
-  block of the diagonal built from another diagonal builder.
+  block of the diagonal built from another diagonal term.
 
-Diagonal builders can be added together with `+`, which builds the sum of the
-diagonal matrices of each diagonal builder (see [`SumDiagonal`](@ref
+Diagonal terms can be added together with `+`, which builds the sum of the
+diagonal matrices of each diagonal term (see [`SumDiagonal`](@ref
 ObservationRecipe.SumDiagonal)):
 
 ```julia
@@ -359,23 +359,23 @@ covar_estimator = ObservationRecipe.SVDplusDCovariance(
 
 !!! note "Latitude weighting"
     If `use_latitude_weights = true` in `SVDplusDCovariance`, then the samples
-    in the `SampleCollection` passed to `build_diagonal` already have latitude
-    weights applied. A diagonal builder does not need to apply latitude
+    in the `SampleCollection` passed to `compute_diagonal` already have latitude
+    weights applied. A diagonal term does not need to apply latitude
     weighting itself.
 
-### Example: writing a custom diagonal builder
+### Example: writing a custom diagonal term
 
-If the built-in diagonal builders are not sufficient, you can write your own.
+If the built-in diagonal terms are not sufficient, you can write your own.
 The steps mirror those for writing a custom covariance estimator:
 
-1. Define a struct that subtypes [`AbstractDiagonalBuilder`](@ref
-   ObservationRecipe.AbstractDiagonalBuilder). Any parameters needed to build
+1. Define a struct that subtypes [`AbstractDiagonalTerm`](@ref
+   ObservationRecipe.AbstractDiagonalTerm). Any parameters needed to build
    the diagonal matrix (scales, floors, per-variable settings, and so on)
    should be stored as fields of this struct.
-2. Implement a method of [`build_diagonal`](@ref
-   ObservationRecipe.build_diagonal) that dispatches on your struct, with the
+2. Implement a method of [`compute_diagonal`](@ref
+   ObservationRecipe.compute_diagonal) that dispatches on your struct, with the
    signature
-   `ObservationRecipe.build_diagonal(diagonal_builder::YourType, sample_collection)`.
+   `ObservationRecipe.compute_diagonal(diagonal_term::YourType, sample_collection)`.
    It must return a diagonal matrix whose side length is the number of rows of
    `get_samples(sample_collection)`.
 
@@ -383,7 +383,7 @@ The example below builds the diagonal matrix from the variance of the samples
 and composes it with a `ScalarDiagonal` to prevent very small values along the
 diagonal.
 
-```@setup diagonal_builder
+```@setup diagonal_term
 import ClimaAnalysis
 import ClimaAnalysis.Template:
     TemplateVar, add_dim, add_attribs, one_to_n_data, initialize
@@ -413,15 +413,15 @@ sample_collection = SampleBuilder.build_samples_by_times(
 )
 ```
 
-```@example diagonal_builder
+```@example diagonal_term
 import ClimaCalibrate.ObservationRecipe
 import ClimaCalibrate.SampleBuilder
 import LinearAlgebra: Diagonal
 import Statistics
 
-struct VarianceDiagonal <: ObservationRecipe.AbstractDiagonalBuilder end
+struct VarianceDiagonal <: ObservationRecipe.AbstractDiagonalTerm end
 
-function ObservationRecipe.build_diagonal(
+function ObservationRecipe.compute_diagonal(
     ::VarianceDiagonal,
     sample_collection,
 )
@@ -431,10 +431,10 @@ end
 nothing # hide
 ```
 
-Using it is the same as for the built-in diagonal builders, including
+Using it is the same as for the built-in diagonal terms, including
 composition with `+`:
 
-```@repl diagonal_builder
+```@repl diagonal_term
 sample_collection
 diagonal = VarianceDiagonal() + ObservationRecipe.ScalarDiagonal(1e-6)
 covar_estimator = ObservationRecipe.SVDplusDCovariance(; diagonal)
@@ -477,7 +477,7 @@ keyword argument. For `SVDplusDCovariance`, the `regularization` keyword
 argument can also be a [`QuantileRegularization`](@ref), which sets the
 regularization from a quantile of the model error scale instead of a fixed
 value. For `SVDplusDCovariance`, these keyword arguments are shorthands for
-diagonal builders, which can also be composed and customized directly with the
+diagonal terms, which can also be composed and customized directly with the
 `diagonal` keyword argument (see [Customizing the diagonal of
 `SVDplusDCovariance`](@ref)).
 

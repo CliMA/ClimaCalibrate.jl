@@ -147,7 +147,7 @@ end
         min_cosd_lat = -0.1,
     )
 
-    # Invalid values for the diagonal builders
+    # Invalid values for the diagonal terms
     @test_throws ErrorException ObservationRecipe.ScalarDiagonal(-1.0)
     @test_throws ErrorException ObservationRecipe.ModelErrorScaleDiagonal(-1.0)
     @test_throws ErrorException ObservationRecipe.QuantileDiagonal(
@@ -176,7 +176,7 @@ end
         regularization = 1.0,
     )
 
-    # The keyword argument diagonal must be an AbstractDiagonalBuilder
+    # The keyword argument diagonal must be an AbstractDiagonalTerm
     @test_throws ErrorException ObservationRecipe.SVDplusDCovariance(
         diagonal = 1.0,
     )
@@ -185,7 +185,7 @@ end
     )
 
     # The legacy keyword arguments model_error_scale and regularization are
-    # transformed into the equivalent diagonal builders
+    # transformed into the equivalent diagonal terms
     covar_estimator = ObservationRecipe.SVDplusDCovariance(
         model_error_scale = 0.1,
         regularization = 1e-3,
@@ -586,7 +586,7 @@ end
         ) .^ 2,
     )
 
-    # Passing the equivalent diagonal builder gives the same diagonal matrix
+    # Passing the equivalent diagonal term gives the same diagonal matrix
     # as the legacy keyword arguments model_error_scale and regularization
     covar_estimator_diagonal = ObservationRecipe.SVDplusDCovariance(
         diagonal = ObservationRecipe.ModelErrorScaleDiagonal(
@@ -605,7 +605,7 @@ end
         ObservationRecipe.covariance(covar_estimator_default, sample_collection)
     @test svd_plus_d_covar_default.diag_cov == Diagonal(zeros(sample_size))
 
-    # The samples passed to build_diagonal already have latitude weights
+    # The samples passed to compute_diagonal already have latitude weights
     # applied
     covar_estimator_lat_diagonal = ObservationRecipe.SVDplusDCovariance(
         diagonal = ObservationRecipe.ModelErrorScaleDiagonal(1.0),

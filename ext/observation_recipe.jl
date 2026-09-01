@@ -18,7 +18,7 @@ function ObservationRecipe.covariance(
     covar_estimator::ScalarCovariance,
     sample_collection::SampleCollection,
 )
-    diag_cov = ObservationRecipe.build_diagonal(
+    diag_cov = ObservationRecipe.compute_diagonal(
         ScalarDiagonal(covar_estimator.scalar),
         sample_collection,
     )
@@ -178,10 +178,10 @@ Compute the `EKP.SVDplusD` covariance matrix from the samples in
 `sample_collection`.
 
 The diagonal matrix of the `EKP.SVDplusD` covariance matrix is built with
-`ObservationRecipe.build_diagonal` from the diagonal builder in
+`ObservationRecipe.compute_diagonal` from the diagonal term in
 `covar_estimator.diagonal` and the samples in `sample_collection`. If
 `covar_estimator.use_latitude_weights = true`, then the samples passed to
-`build_diagonal` already have latitude weights applied.
+`compute_diagonal` already have latitude weights applied.
 """
 function ObservationRecipe.covariance(
     covar_estimator::SVDplusDCovariance,
@@ -218,16 +218,16 @@ function ObservationRecipe.covariance(
     # weighted) samples
     weighted_sample_collection =
         SampleCollection(stacked_sample_matrix, get_metadata(sample_collection))
-    diag_cov = ObservationRecipe.build_diagonal(
+    diag_cov = ObservationRecipe.compute_diagonal(
         covar_estimator.diagonal,
         weighted_sample_collection,
     )
     n = size(stacked_sample_matrix, 1)
     size(diag_cov) == (n, n) || error(
-        "The size of the matrix from build_diagonal is $(size(diag_cov)), but ($n, $n) is expected",
+        "The size of the matrix from compute_diagonal is $(size(diag_cov)), but ($n, $n) is expected",
     )
     isdiag(diag_cov) || error(
-        "The matrix from build_diagonal with $(covar_estimator.diagonal) is not a diagonal matrix",
+        "The matrix from compute_diagonal with $(covar_estimator.diagonal) is not a diagonal matrix",
     )
     diag_cov isa Diagonal || (diag_cov = Diagonal(diag(diag_cov)))
 

@@ -8,7 +8,7 @@ export ScalarCovariance,
     ModelErrorScaleDiagonal,
     QuantileDiagonal,
     SumDiagonal,
-    build_diagonal,
+    compute_diagonal,
     covariance,
     observation,
     short_names,
@@ -19,7 +19,7 @@ export ScalarCovariance,
     reconstruct_diag_cov,
     reconstruct_vars
 
-include("diagonal_builder.jl")
+include("diagonal_term.jl")
 
 """
     abstract type AbstractCovarianceEstimator end
@@ -231,15 +231,15 @@ Contain the necessary information to construct a `EKP.SVDplusD` covariance
 matrix from `ClimaAnalysis.OutputVar`s.
 
 The diagonal matrix of the `EKP.SVDplusD` covariance matrix is built by the
-diagonal builder stored in `diagonal` (see
-[`AbstractDiagonalBuilder`](@ref)).
+diagonal term stored in `diagonal` (see
+[`AbstractDiagonalTerm`](@ref)).
 """
 struct SVDplusDCovariance{
-    D <: AbstractDiagonalBuilder,
+    D <: AbstractDiagonalTerm,
     FT <: AbstractFloat,
     R <: Union{Integer, Nothing},
 } <: AbstractCovarianceEstimator
-    """Diagonal builder that builds the diagonal matrix of the covariance
+    """Diagonal term that builds the diagonal matrix of the covariance
     matrix"""
     diagonal::D
 
@@ -271,9 +271,9 @@ The samples used to compute the covariance matrix come from the
 `SampleCollection`, where each sample is one column.
 
 The diagonal matrix of the `EKP.SVDplusD` covariance matrix is built by the
-diagonal builder passed as `diagonal`. The keyword arguments
+diagonal term passed as `diagonal`. The keyword arguments
 `model_error_scale` and `regularization` are shorthands for the equivalent
-diagonal builders and cannot be used together with `diagonal`.
+diagonal terms and cannot be used together with `diagonal`.
 
 !!! note "Recommended sample size"
     When constructing the samples (e.g. with `build_samples_by_times`), it is
@@ -291,22 +291,22 @@ diagonal builders and cannot be used together with `diagonal`.
 Keyword arguments
 =====================
 
-- `diagonal`: A diagonal builder (see [`AbstractDiagonalBuilder`](@ref)) that
+- `diagonal`: A diagonal term (see [`AbstractDiagonalTerm`](@ref)) that
   builds the diagonal matrix of the covariance matrix from the samples. If
-  `use_latitude_weights = true`, the samples passed to the diagonal builder
+  `use_latitude_weights = true`, the samples passed to the diagonal term
   already have latitude weights applied. Cannot be used together with
   `model_error_scale` or `regularization`.
 
 - `model_error_scale`: Noise from the model error added to the covariance
   matrix. This is `(model_error_scale * mean(samples, dims = 2)).^2`, where
   `mean(samples, dims = 2)` is the mean of the samples. This is a shorthand for
-  the diagonal builder [`ModelErrorScaleDiagonal`](@ref).
+  the diagonal term [`ModelErrorScaleDiagonal`](@ref).
 
 - `regularization`: If a scalar is used, a diagonal matrix of the form
   `regularization * I` is added to the covariance matrix. This is a shorthand
-  for the diagonal builder [`ScalarDiagonal`](@ref). See
+  for the diagonal term [`ScalarDiagonal`](@ref). See
   [`QuantileRegularization`](@ref) for another option for regularization,
-  which is a shorthand for the diagonal builder [`QuantileDiagonal`](@ref).
+  which is a shorthand for the diagonal term [`QuantileDiagonal`](@ref).
 
 - `use_latitude_weights`: If `true`, then latitude weighting is applied to the
   covariance matrix. Latitude weighting is multiplying the columns of the matrix
@@ -341,8 +341,8 @@ function SVDplusDCovariance(;
             isnothing(regularization) ? 0.0 : regularization,
         )
     end
-    diagonal isa AbstractDiagonalBuilder || error(
-        "The keyword argument diagonal ($diagonal) should be an AbstractDiagonalBuilder",
+    diagonal isa AbstractDiagonalTerm || error(
+        "The keyword argument diagonal ($diagonal) should be an AbstractDiagonalTerm",
     )
     if use_latitude_weights && min_cosd_lat <= zero(min_cosd_lat)
         error(
@@ -364,7 +364,7 @@ end
 """
     _diagonal_from_legacy_kwargs(model_error_scale, regularization)
 
-Return the diagonal builder equivalent to the keyword arguments
+Return the diagonal term equivalent to the keyword arguments
 `model_error_scale` and `regularization` of `SVDplusDCovariance`.
 """
 _diagonal_from_legacy_kwargs(model_error_scale, regularization::AbstractFloat) =

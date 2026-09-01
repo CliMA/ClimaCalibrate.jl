@@ -6,14 +6,14 @@ main
 
 - The diagonal matrix of the `EKP.SVDplusD` covariance matrix produced by
   `ObservationRecipe.SVDplusDCovariance` is now built by composable diagonal
-  builders (`ScalarDiagonal`, `ModelErrorScaleDiagonal`, and
+  terms (`ScalarDiagonal`, `ModelErrorScaleDiagonal`, and
   `QuantileDiagonal`, added together with `+`), which are passed with the new
-  `diagonal` keyword argument. Custom diagonal builders can be written by
-  subtyping `ObservationRecipe.AbstractDiagonalBuilder` and implementing a
-  method of `ObservationRecipe.build_diagonal`.
+  `diagonal` keyword argument. Custom diagonal terms can be written by
+  subtyping `ObservationRecipe.AbstractDiagonalTerm` and implementing a
+  method of `ObservationRecipe.compute_diagonal`.
   - The `model_error_scale` and `regularization` keyword arguments (including
     `QuantileRegularization`) still work and are transformed into the
-    equivalent diagonal builders. Passing `diagonal` together with
+    equivalent diagonal terms. Passing `diagonal` together with
     `model_error_scale` or `regularization` is an error.
   - **Breaking**: the fields of the `SVDplusDCovariance` struct changed
     (`model_error_scale` and `regularization` are replaced by `diagonal`), so
