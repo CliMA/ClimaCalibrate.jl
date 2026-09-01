@@ -411,6 +411,19 @@ function SampleBuilder.get_metadata(sample_collection::SampleCollection)
     return sample_collection.metadata
 end
 
+"""
+    var_indices(sample_collection::SampleCollection)
+
+Return a vector of ranges, where each range contains the indices of the rows of
+the matrix of samples that belong to each `OutputVar`.
+
+The ranges are computed from the metadata of the first sample, which is valid
+for every sample, since all samples share the same variables.
+"""
+function SampleBuilder.var_indices(sample_collection::SampleCollection)
+    return _get_indices_of_metadata(view(sample_collection.metadata, :, 1))
+end
+
 function Base.show(io::IO, sc::SampleCollection)
     sample_len, n_samples = size(sc.samples)
     n_vars = size(sc.metadata, 1)

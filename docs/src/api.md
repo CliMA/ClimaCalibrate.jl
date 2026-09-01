@@ -129,6 +129,7 @@ ClimaCalibrate.SampleBuilder.num_samples
 ClimaCalibrate.SampleBuilder.reconstruct_col
 ClimaCalibrate.SampleBuilder.get_samples
 ClimaCalibrate.SampleBuilder.get_metadata
+ClimaCalibrate.SampleBuilder.var_indices
 ```
 
 ## Observation Recipe Interface
