@@ -122,10 +122,15 @@ function compute_diagonal(
         # Check that there is a sufficient number of entries (e.g. if qtl =
         # 0.05, there should be at least 20 entries for a meaningful
         # quantile computation)
-        length(var_diagonal_vec) < 1 / qtl &&
-            error("Insufficient samples for computing quantile")
+        length(var_diagonal_vec) < 1 / qtl && error(
+            "QuantileDiagonal with quantile $qtl needs a variable with at least \
+            $(ceil(Int, 1 / qtl)) entries to take a meaningful quantile, but \
+            variable $(ClimaAnalysis.short_name(metadata[i])) has only \
+            $(length(var_diagonal_vec)). Use a larger quantile or a constant \
+            regularization instead.",
+        )
         qtl_for_var = FT(Statistics.quantile(var_diagonal_vec, qtl))
-        qtl_for_var ≈ 0.0 && error(
+        iszero(qtl_for_var) && error(
             "Zero found for the quantile ($qtl) of the diagonal term ($(typeof(diag_term))) for the variable ($(ClimaAnalysis.short_name(metadata[i]))). The values of the diagonal term might be too small",
         )
         push!(quantile_vals_vec, qtl_for_var)
