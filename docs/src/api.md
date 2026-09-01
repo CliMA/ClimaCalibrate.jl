@@ -142,6 +142,7 @@ ClimaCalibrate.ObservationRecipe.SeasonalDiagonalCovariance
 ClimaCalibrate.ObservationRecipe.SeasonalDiagonalCovariance()
 ClimaCalibrate.ObservationRecipe.SVDplusDCovariance
 ClimaCalibrate.ObservationRecipe.SVDplusDCovariance()
+ClimaCalibrate.ObservationRecipe.SVDplusDCovariance(::ClimaCalibrate.ObservationRecipe.AbstractDiagonalTerm)
 ClimaCalibrate.ObservationRecipe.QuantileRegularization
 ClimaCalibrate.ObservationRecipe.covariance
 ClimaCalibrate.ObservationRecipe.observation

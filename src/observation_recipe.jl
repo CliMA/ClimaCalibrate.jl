@@ -221,23 +221,23 @@ Contain the necessary information to construct a `EKP.SVDplusD` covariance
 matrix from `ClimaAnalysis.OutputVar`s.
 """
 struct SVDplusDCovariance{
-    FT1 <: AbstractFloat,
-    FT2 <: Union{AbstractFloat, QuantileRegularization},
-    FT3 <: AbstractFloat,
+    D <: AbstractDiagonalTerm,
+    FT <: AbstractFloat,
     R <: Union{Integer, Nothing},
 } <: AbstractCovarianceEstimator
-    """A model error scale term added to the diagonal of the covariance
-    matrix"""
-    model_error_scale::FT1
-
-    """A regularization term added to the diagonal of the covariance matrix"""
-    regularization::FT2
+    """A diagonal term that describes the diagonal matrix added to the low rank
+    approximation of the covariance matrix"""
+    diagonal::D
 
     """Use latitude weights"""
     use_latitude_weights::Bool
 
+    """Compute the diagonal term from the latitude weighted samples when
+    latitude weights are used"""
+    use_weight_samples_for_diagonal::Bool
+
     """The minimum cosine weight when using latitude weighting"""
-    min_cosd_lat::FT3
+    min_cosd_lat::FT
 
     """Rank of the singular value decomposition (SVD)"""
     rank::R
@@ -248,6 +248,7 @@ end
         model_error_scale = 0.0,
         regularization = 0.0,
         use_latitude_weights = false,
+        use_weight_samples_for_diagonal = true,
         min_cosd_lat = 0.1,
         rank = nothing
     )
@@ -288,6 +289,11 @@ Keyword arguments
   of samples by `1 / sqrt(max(cosd(lat), 0.1))`. See the keyword argument
   `min_cosd_lat` for more information.
 
+- `use_weight_samples_for_diagonal`: If `true` and `use_latitude_weights` is `true`,
+  then the diagonal term is computed from the latitude weighted samples.
+  Otherwise, the diagonal term is computed from the samples without latitude
+  weighting. This has no effect when `use_latitude_weights` is `false`.
+
 - `min_cosd_lat`: Control the minimum latitude weight when
   `use_latitude_weights` is `true`. The value for `min_cosd_lat` must be greater
   than zero as values close to zero along the diagonal of the covariance matrix
@@ -300,6 +306,7 @@ function SVDplusDCovariance(;
     model_error_scale = 0.0,
     regularization = 0.0,
     use_latitude_weights = false,
+    use_weight_samples_for_diagonal = true,
     min_cosd_lat = 0.1,
     rank = nothing,
 )
@@ -309,6 +316,63 @@ function SVDplusDCovariance(;
         regularization < zero(regularization) &&
             error("Regularization ($regularization) should not be negative")
     end
+
+    return SVDplusDCovariance(
+        _diagonal_term(model_error_scale, regularization);
+        use_latitude_weights,
+        use_weight_samples_for_diagonal,
+        min_cosd_lat,
+        rank,
+    )
+end
+
+"""
+    SVDplusDCovariance(
+        diagonal::AbstractDiagonalTerm;
+        use_latitude_weights = false,
+        use_weight_samples_for_diagonal = true,
+        min_cosd_lat = 0.1,
+        rank = nothing,
+    )
+
+Create a `SVDplusDCovariance` whose diagonal matrix is described by the diagonal
+term `diagonal`. When used with `ObservationRecipe.observation` or
+`ObservationRecipe.covariance`, return a `EKP.SVDplusD` covariance matrix.
+
+Passing `model_error_scale = x` and `regularization = y` to the keyword
+constructor is the same as passing
+`diagonal = ModelErrorScaleDiagonal(x) + ScalarDiagonal(y)`. Passing
+`regularization = QuantileRegularization(q)` instead is the same as passing
+`diagonal = ModelErrorScaleDiagonal(x) + QuantileDiagonal(q, ModelErrorScaleDiagonal(x))`.
+
+Keyword arguments
+=====================
+
+- `use_latitude_weights`: If `true`, then latitude weighting is applied to the
+  covariance matrix. Latitude weighting is multiplying the columns of the matrix
+  of samples by `1 / sqrt(max(cosd(lat), 0.1))`. See the keyword argument
+  `min_cosd_lat` for more information.
+
+- `use_weight_samples_for_diagonal`: If `true` and `use_latitude_weights` is `true`,
+  then the diagonal term is computed from the latitude weighted samples.
+  Otherwise, the diagonal term is computed from the samples without latitude
+  weighting. This has no effect when `use_latitude_weights` is `false`.
+
+- `min_cosd_lat`: Control the minimum latitude weight when
+  `use_latitude_weights` is `true`. The value for `min_cosd_lat` must be greater
+  than zero as values close to zero along the diagonal of the covariance matrix
+  can lead to issues when taking the inverse of the covariance matrix.
+
+- `rank`: Rank of the singular value decomposition (SVD). If `nothing` is passed
+  in, then the rank is automatically inferred from the data.
+"""
+function SVDplusDCovariance(
+    diagonal::AbstractDiagonalTerm;
+    use_latitude_weights = false,
+    use_weight_samples_for_diagonal = true,
+    min_cosd_lat = 0.1,
+    rank = nothing,
+)
     if use_latitude_weights && min_cosd_lat <= zero(min_cosd_lat)
         error(
             "The value for min_cosd_lat ($min_cosd_lat) should be greater than zero",
@@ -319,12 +383,32 @@ function SVDplusDCovariance(;
         error("Rank ($rank) should be nothing or non-negative")
 
     return SVDplusDCovariance(
-        model_error_scale,
-        regularization,
+        diagonal,
         use_latitude_weights,
+        use_weight_samples_for_diagonal,
         min_cosd_lat,
         rank,
     )
+end
+
+"""
+    _diagonal_term(model_error_scale, regularization)
+
+Construct the diagonal term specified by `model_error_scale` and
+`regularization`.
+"""
+function _diagonal_term(model_error_scale, regularization)
+    return ModelErrorScaleDiagonal(model_error_scale) +
+           ScalarDiagonal(regularization)
+end
+
+function _diagonal_term(
+    model_error_scale,
+    regularization::QuantileRegularization,
+)
+    model_error_scale_term = ModelErrorScaleDiagonal(model_error_scale)
+    return model_error_scale_term +
+           QuantileDiagonal(regularization.qtl, model_error_scale_term)
 end
 
 function covariance end
