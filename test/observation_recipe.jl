@@ -824,6 +824,165 @@ end
     )
 end
 
+@testset "SVDplusDCovariance with diagonal term" begin
+    # Constructor stores the diagonal term
+    diag_term =
+        ObservationRecipe.ModelErrorScaleDiagonal(0.05) .+
+        ObservationRecipe.ScalarDiagonal(1e-3)
+    covar_estimator = ObservationRecipe.SVDplusDCovariance(diag_term)
+    @test covar_estimator.diagonal === diag_term
+
+    # model_error_scale and regularization lower to a diagonal term
+    covar_estimator_legacy = ObservationRecipe.SVDplusDCovariance(
+        model_error_scale = 0.05,
+        regularization = 1e-3,
+    )
+    @test covar_estimator_legacy.diagonal isa
+          ObservationRecipe.BroadcastedDiagonal
+
+    # The diagonal term is positional, not a keyword argument
+    @test_throws MethodError ObservationRecipe.SVDplusDCovariance(
+        diagonal = diag_term,
+    )
+
+    # A single variable with a time dimension and three samples, where each
+    # sample is one year of seasonal averages
+    time = ClimaAnalysis.Utils.date_to_time.(
+        Dates.DateTime(2007, 12),
+        [Dates.DateTime(2007, 12) + Dates.Month(i) for i in 0:35],
+    )
+    var =
+        TemplateVar() |>
+        add_dim("time", time, units = "s") |>
+        add_attribs(
+            short_name = "hi",
+            long_name = "hello",
+            start_date = "2007-12-1",
+        ) |>
+        one_to_n_data(collected = true) |>
+        initialize
+    var = ClimaAnalysis.average_season_across_time(var)
+    sample_date_ranges = [
+        (Dates.DateTime(i, 12, 1), Dates.DateTime(i + 1, 9, 1)) for
+        i in 2007:2009
+    ]
+    sample_collection = SampleBuilder.build_samples_by_times(
+        [var],
+        sample_date_ranges;
+        FT = Float64,
+    )
+
+    # Passing the equivalent diagonal term gives the same diagonal matrix as
+    # model_error_scale and regularization
+    @test ObservationRecipe.covariance(covar_estimator, sample_collection).diag_cov ==
+          ObservationRecipe.covariance(
+        covar_estimator_legacy,
+        sample_collection,
+    ).diag_cov
+
+    # A custom diagonal term
+    @test ObservationRecipe.covariance(
+        ObservationRecipe.SVDplusDCovariance(
+            ObservationRecipe.ScalarDiagonal(2.0),
+        ),
+        sample_collection,
+    ).diag_cov == Diagonal(fill(2.0, 4))
+
+    # use_weighted_samples_for_diagonal controls whether the diagonal term is
+    # computed from the latitude weighted samples
+    lat = [-90.0, -30.0, 30.0, 90.0]
+    lon = [-60.0, -30.0, 0.0, 30.0, 60.0]
+    lat_var =
+        TemplateVar() |>
+        add_dim("time", time, units = "s") |>
+        add_dim("lon", lon, units = "degrees") |>
+        add_dim("lat", lat, units = "degrees") |>
+        add_attribs(
+            short_name = "hi",
+            long_name = "hello",
+            start_date = "2007-12-1",
+        ) |>
+        one_to_n_data(collected = true) |>
+        initialize
+    lat_var = ClimaAnalysis.average_season_across_time(lat_var)
+    lat_sample_collection = SampleBuilder.build_samples_by_times(
+        [lat_var],
+        sample_date_ranges;
+        FT = Float64,
+    )
+    mes_term = ObservationRecipe.ModelErrorScaleDiagonal(1.0)
+
+    # QuantileRegularization lowers to a QuantileDiagonal of the model error
+    # scale term
+    @test ObservationRecipe.covariance(
+        ObservationRecipe.SVDplusDCovariance(
+            model_error_scale = 1.0,
+            regularization = ObservationRecipe.QuantileRegularization(0.5),
+        ),
+        sample_collection,
+    ).diag_cov == ObservationRecipe.covariance(
+        ObservationRecipe.SVDplusDCovariance(
+            mes_term .+ ObservationRecipe.QuantileDiagonal(0.5, mes_term),
+        ),
+        sample_collection,
+    ).diag_cov
+
+    # A zero diagonal term warns like the keyword defaults do
+    @test_logs (:warn, r"4 non-positive or NaN diagonal entries") ObservationRecipe.covariance(
+        ObservationRecipe.SVDplusDCovariance(
+            ObservationRecipe.ScalarDiagonal(0.0),
+        ),
+        sample_collection,
+    )
+
+    diag_cov_weighted = ObservationRecipe.covariance(
+        ObservationRecipe.SVDplusDCovariance(
+            mes_term;
+            use_latitude_weights = true,
+            min_cosd_lat = 0.2,
+        ),
+        lat_sample_collection,
+    ).diag_cov
+    diag_cov_unweighted = ObservationRecipe.covariance(
+        ObservationRecipe.SVDplusDCovariance(
+            mes_term;
+            use_latitude_weights = true,
+            use_weighted_samples_for_diagonal = false,
+            min_cosd_lat = 0.2,
+        ),
+        lat_sample_collection,
+    ).diag_cov
+
+    # Computing the diagonal term from the samples without latitude weighting
+    # is the same as not using latitude weights at all for the diagonal
+    @test diag_cov_unweighted == ObservationRecipe.covariance(
+        ObservationRecipe.SVDplusDCovariance(mes_term),
+        lat_sample_collection,
+    ).diag_cov
+
+    # Weighting the samples by sqrt(w) scales the model error scale and
+    # variance terms by w, but not a scalar term
+    lat_weights = ext._flat_lat_weights(
+        ext._metadata_of_first_sample(lat_sample_collection);
+        min_cosd_lat = 0.2,
+    )
+    @test diag_cov_weighted ≈ Diagonal(diag_cov_unweighted.diag .* lat_weights)
+    var_term = ObservationRecipe.VarianceDiagonal()
+    @test ObservationRecipe.covariance(
+        ObservationRecipe.SVDplusDCovariance(
+            var_term .+ ObservationRecipe.ScalarDiagonal(1.0);
+            use_latitude_weights = true,
+            min_cosd_lat = 0.2,
+        ),
+        lat_sample_collection,
+    ).diag_cov ≈ Diagonal(
+        ObservationRecipe.covariance(
+            ObservationRecipe.SVDplusDCovariance(var_term),
+            lat_sample_collection,
+        ).diag_cov.diag .* lat_weights .+ 1.0,
+    )
+end
+
 @testset "Seasonal diagonal covariance" begin
     time = ClimaAnalysis.Utils.date_to_time.(
         Dates.DateTime(2007, 12),

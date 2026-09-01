@@ -3,6 +3,21 @@ ClimaCalibrate.jl Release Notes
 
 main
 -------
+- `AbstractDiagonalTerm`s are added to simplify the `covariance` methods for
+  `ObservationRecipe`s
+  [#362](https://github.com/CliMA/ClimaCalibrate.jl/pull/362).
+- A custom diagonal term can be passed to the `SVDplusDCovariance` observation
+  recipe. Diagonal terms are combined with broadcasting, for example
+  `ModelErrorScaleDiagonal(0.05) .+ ScalarDiagonal(1e-6)`
+  [#362](https://github.com/CliMA/ClimaCalibrate.jl/pull/362).
+- The `SVDplusDCovariance` observation recipe gains a
+  `use_weighted_samples_for_diagonal` keyword argument which controls whether
+  the diagonal term is computed from the latitude-weighted or unweighted
+  samples when `use_latitude_weights` is `true`
+  [#362](https://github.com/CliMA/ClimaCalibrate.jl/pull/362).
+
+v0.5.0
+-------
 
 - Add tools for the normalized residual `(mean(G) - obs) / σ`, where `σ` is the
   square root of the diagonal of the observation noise covariance
