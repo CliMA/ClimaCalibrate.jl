@@ -439,7 +439,7 @@ function Base.show(io::IO, sc::SampleCollection)
     # All columns share the same variables, so read metadata from column 1. The
     # ranges give the rows of the sample matrix that belong to each variable.
     first_metadata = view(sc.metadata, :, 1)
-    ranges = _get_indices_of_metadata(first_metadata)
+    ranges = SampleBuilder.var_indices(sc)
 
     headers = ("Short name", "Units", "Indices", "Dimensions")
     rows = NTuple{length(headers), String}[]

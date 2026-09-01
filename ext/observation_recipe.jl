@@ -5,6 +5,8 @@ import ClimaCalibrate.ObservationRecipe:
     ScalarCovariance, SeasonalDiagonalCovariance, SVDplusDCovariance
 import ClimaCalibrate.ObservationRecipe: QuantileRegularization
 
+include("diagonal_term.jl")
+
 """
     covariance(
         covar_estimator::ScalarCovariance,

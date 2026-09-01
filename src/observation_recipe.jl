@@ -14,6 +14,8 @@ export ScalarCovariance,
     reconstruct_diag_cov,
     reconstruct_vars
 
+include("diagonal_term.jl")
+
 """
     abstract type AbstractCovarianceEstimator end
 
@@ -210,6 +212,26 @@ struct QuantileRegularization{FT <: AbstractFloat}
         (qtl <= 0 || qtl > 1) && error("Quantile must be in (0, 1], got $qtl")
         new{typeof(qtl)}(qtl)
     end
+end
+
+"""
+    _diagonal_from_legacy_kwargs(model_error_scale, regularization)
+
+Lower the `model_error_scale` and `regularization` keyword arguments to an
+`AbstractDiagonalTerm`.
+"""
+function _diagonal_from_legacy_kwargs(model_error_scale, regularization)
+    return ModelErrorScaleDiagonal(model_error_scale) +
+           ScalarDiagonal(regularization)
+end
+
+function _diagonal_from_legacy_kwargs(
+    model_error_scale,
+    regularization::QuantileRegularization,
+)
+    model_error_scale_term = ModelErrorScaleDiagonal(model_error_scale)
+    return model_error_scale_term +
+           QuantileDiagonal(regularization.qtl, model_error_scale_term)
 end
 
 """
