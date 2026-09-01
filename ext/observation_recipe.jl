@@ -268,10 +268,12 @@ function ObservationRecipe.covariance(
             min_cosd_lat = covar_estimator.min_cosd_lat,
         )
         # Remake the sample collection with the latitude weighted sample matrix
-        sample_collection = SampleCollection(
-            stacked_sample_matrix,
-            get_metadata(sample_collection),
-        )
+        if covar_estimator.use_weighted_samples_for_diagonal
+            sample_collection = SampleCollection(
+                stacked_sample_matrix,
+                get_metadata(sample_collection),
+            )
+        end
     end
 
     # Compute SVD of covariance matrix
@@ -287,18 +289,13 @@ function ObservationRecipe.covariance(
         rank_of_svd != rank &&
         @warn "Rank of SVD is $rank_of_svd but requested rank is $rank"
 
-    # Add model error scale. This may not make sense if the samples do not
-    # represent a single year. For example, if the stacked samples are seasonal
-    # averages over two years, then this quantity is the mean of seasonal
-    # averages spanned over two years, where the first DJF is the mean of every
-    # other DJF and the second DJF is the mean of every other DJF.
-    diag_cov = compute_diagonal(
-        _diagonal_term(
-            covar_estimator.model_error_scale,
-            covar_estimator.regularization,
-        ),
-        sample_collection,
-    )
+    # Computing the diagonal may not make sense if the samples do not represent
+    # a single year. For example, if the stacked samples are seasonal averages
+    # over two years and the model error scale is non-zero, then this quantity
+    # is the mean of seasonal averages spanned over two years, where the first
+    # DJF is the mean of every other DJF and the second DJF is the mean of every
+    # other DJF.
+    diag_cov = compute_diagonal(covar_estimator.diagonal, sample_collection)
     _check_d_term(diag_cov.diag, metadata, n_samples)
     return EKP.SVDplusD(gamma_low_rank, diag_cov)
 end
@@ -311,7 +308,7 @@ finite while the SVD term is rank deficient, which leaves the sum singular.
 
 The sample covariance of `n` samples has rank at most `n - 1`, so with no more
 samples than observation entries the SVD term is singular on its own and the D
-term is what makes the sum invertible. D is
+term is what makes the sum invertible. With the keyword constructor, D is
 `(model_error_scale * mean)^2 + regularization`, so it is zero wherever the
 sample mean is zero and `regularization` is zero, and zero everywhere when both
 are zero.
@@ -324,29 +321,10 @@ function _check_d_term(d_diag, all_metadata, n_samples)
            $n_samples samples for $(length(d_diag)) observation entries the \
            SVD term is rank deficient, so EKP will not be able to invert the \
            covariance. Set `model_error_scale` or `regularization` to a \
-           positive value; `model_error_scale` alone leaves a zero wherever \
-           the sample mean is zero."
+           positive value, or use a diagonal term that is positive everywhere; \
+           `model_error_scale` alone leaves a zero wherever the sample mean is \
+           zero."
     return nothing
-end
-
-"""
-    _diagonal_term(model_error_scale, regularization)
-
-Construct the diagonal term specified by `model_error_scale` and
-`regularization`.
-"""
-function _diagonal_term(model_error_scale, regularization)
-    return ModelErrorScaleDiagonal(model_error_scale) .+
-           ScalarDiagonal(regularization)
-end
-
-function _diagonal_term(
-    model_error_scale,
-    regularization::QuantileRegularization,
-)
-    model_error_scale_term = ModelErrorScaleDiagonal(model_error_scale)
-    return model_error_scale_term .+
-           QuantileDiagonal(regularization.qtl, model_error_scale_term)
 end
 
 """
