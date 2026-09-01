@@ -21,19 +21,18 @@ function ObservationRecipe.covariance(
     covar_estimator::ScalarCovariance,
     sample_collection::SampleCollection,
 )
-    FT = eltype(get_samples(sample_collection))
-    all_metadata = _metadata_of_first_sample(sample_collection)
-
-    total_length = sum(ClimaAnalysis.flattened_length, all_metadata)
-    diag_cov = fill(FT(covar_estimator.scalar), total_length)
+    diag_cov = compute_diagonal(
+        ScalarDiagonal(covar_estimator.scalar),
+        sample_collection,
+    )
     if covar_estimator.use_latitude_weights
         _check_lats_across_samples(get_metadata(sample_collection))
-        diag_cov .*= _flat_lat_weights(
-            all_metadata,
+        diag_cov.diag .*= _flat_lat_weights(
+            _metadata_of_first_sample(sample_collection),
             min_cosd_lat = covar_estimator.min_cosd_lat,
         )
     end
-    return Diagonal(diag_cov)
+    return diag_cov
 end
 
 """
@@ -65,30 +64,23 @@ function ObservationRecipe.covariance(
     _check_metadata_represent_seasons(get_metadata(sample_collection))
 
     # Variance of each season across the samples (years)
-    # Reduce per row, since we want the variance of each season
-    diag_cov = collect(nanvar(view(samples, i, :)) for i in axes(samples, 1))
-
-    # Add model error scale
-    if !iszero(covar_estimator.model_error_scale)
-        seasonal_mean =
-            collect(nanmean(view(samples, i, :)) for i in axes(samples, 1))
-        diag_cov .+= (covar_estimator.model_error_scale .* seasonal_mean) .^ 2
-    end
-
-    # Add regularization
-    !iszero(covar_estimator.regularization) &&
-        (diag_cov .+= covar_estimator.regularization)
+    diag_cov = compute_diagonal(
+        VarianceDiagonal() .+
+        ModelErrorScaleDiagonal(covar_estimator.model_error_scale) .+
+        ScalarDiagonal(covar_estimator.regularization),
+        sample_collection,
+    )
 
     # Add latitude weights
     if covar_estimator.use_latitude_weights
         _check_lats_across_samples(get_metadata(sample_collection))
-        diag_cov .*= _flat_lat_weights(
+        diag_cov.diag .*= _flat_lat_weights(
             _metadata_of_first_sample(sample_collection),
             min_cosd_lat = covar_estimator.min_cosd_lat,
         )
     end
-    _check_diagonal(diag_cov, _metadata_of_first_sample(sample_collection))
-    return Diagonal(diag_cov)
+    _check_diagonal(diag_cov.diag, _metadata_of_first_sample(sample_collection))
+    return diag_cov
 end
 
 """
@@ -275,6 +267,11 @@ function ObservationRecipe.covariance(
             metadata,
             min_cosd_lat = covar_estimator.min_cosd_lat,
         )
+        # Remake the sample collection with the latitude weighted sample matrix
+        sample_collection = SampleCollection(
+            stacked_sample_matrix,
+            get_metadata(sample_collection),
+        )
     end
 
     # Compute SVD of covariance matrix
@@ -295,25 +292,15 @@ function ObservationRecipe.covariance(
     # averages over two years, then this quantity is the mean of seasonal
     # averages spanned over two years, where the first DJF is the mean of every
     # other DJF and the second DJF is the mean of every other DJF.
-    FT = eltype(stacked_sample_matrix)
-    model_error_scale =
-        (
-            FT(covar_estimator.model_error_scale) .*
-            mean(stacked_sample_matrix, dims = 2)
-        ) .^ 2
-    model_error_scale = Diagonal(vec(model_error_scale))
-
-    # Add regularization
-    regularization = create_regularization(
-        covar_estimator.regularization,
-        covar_estimator,
-        metadata,
-        model_error_scale,
+    diag_cov = compute_diagonal(
+        _diagonal_term(
+            covar_estimator.model_error_scale,
+            covar_estimator.regularization,
+        ),
+        sample_collection,
     )
-
-    d_term = model_error_scale + regularization
-    _check_d_term(d_term.diag, metadata, n_samples)
-    return EKP.SVDplusD(gamma_low_rank, d_term)
+    _check_d_term(diag_cov.diag, metadata, n_samples)
+    return EKP.SVDplusD(gamma_low_rank, diag_cov)
 end
 
 """
@@ -343,83 +330,23 @@ function _check_d_term(d_diag, all_metadata, n_samples)
 end
 
 """
-    create_regularization(regularization::AbstractFloat, _, _, model_error_scale)
+    _diagonal_term(model_error_scale, regularization)
 
-Create the regularization matrix of the form `regularization * I`.
-
-The scalar is cast to the element type of `model_error_scale` so the resulting
-covariance keeps a consistent element type (e.g. Float32).
+Construct the diagonal term specified by `model_error_scale` and
+`regularization`.
 """
-function create_regularization(
-    regularization::AbstractFloat,
-    _,
-    _,
-    model_error_scale,
-)
-    FT = eltype(model_error_scale)
-    return FT(regularization) * I
+function _diagonal_term(model_error_scale, regularization)
+    return ModelErrorScaleDiagonal(model_error_scale) .+
+           ScalarDiagonal(regularization)
 end
 
-"""
-    create_regularization(
-        regularization::QuantileRegularization,
-        covar_estimator::SVDplusDCovariance,
-        metadata,
-        model_error_scale,
-    )
-
-Create the regularization matrix where each variable gets its own regularization
-value based on the `regularization.qtl` quantile of its model error scale
-vector.
-
-For each variable, the `qtl` quantile of the model error scale diagonal entries
-corresponding to that variable is computed and used as a constant regularization
-term for all entries belonging to that variable. The per-variable index ranges
-are determined from `metadata` (one `Metadata` per variable).
-"""
-function create_regularization(
-    regularization::QuantileRegularization,
-    covar_estimator::SVDplusDCovariance,
-    metadata,
+function _diagonal_term(
     model_error_scale,
+    regularization::QuantileRegularization,
 )
-    indices_vec = _get_indices_of_metadata(metadata)
-
-    (; qtl) = regularization
-
-    model_error_scale_vec = model_error_scale.diag
-    FT = eltype(model_error_scale)
-
-    regularization_vals_vec = []
-    for (i, indices) in enumerate(indices_vec)
-        var_model_error_scale_vec = view(model_error_scale_vec, indices)
-        # The quantile is taken over the variable's flattened entries, so the
-        # variable needs at least 1/qtl of them for the result to mean anything
-        # (with qtl = 0.05, at least 20 entries)
-        length(var_model_error_scale_vec) < 1 / qtl && error(
-            "QuantileRegularization with qtl = $qtl needs a variable with at \
-            least $(ceil(Int, 1 / qtl)) entries to take a meaningful quantile, \
-            but variable $i has only $(length(var_model_error_scale_vec)). Use \
-            a larger `qtl` or a scalar `regularization`.",
-        )
-        qtl_for_var = FT(Statistics.quantile(var_model_error_scale_vec, qtl))
-        # A tolerance here is an absolute threshold on a squared quantity, and
-        # with the Float32 samples that `build_samples` produces by default it
-        # rejects the small values that a variable in SI units can have
-        iszero(qtl_for_var) && error(
-            "Zero found for the quantile ($qtl) of the model error scale for the variable ($(ClimaAnalysis.short_name(metadata[i]))). The model error scale ($(covar_estimator.model_error_scale)) might be too small",
-        )
-        push!(regularization_vals_vec, qtl_for_var)
-    end
-
-    return Diagonal(
-        vcat(
-            [
-                fill(reg, length(indices)) for
-                (reg, indices) in zip(regularization_vals_vec, indices_vec)
-            ]...,
-        ),
-    )
+    model_error_scale_term = ModelErrorScaleDiagonal(model_error_scale)
+    return model_error_scale_term .+
+           QuantileDiagonal(regularization.qtl, model_error_scale_term)
 end
 
 """

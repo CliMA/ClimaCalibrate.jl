@@ -288,7 +288,7 @@ end
 
     # Blocks are too small for a meaningful quantile (1 / 0.05 = 20 entries
     # needed)
-    @test_throws "Insufficient samples" compute_diagonal(
+    @test_throws "needs a variable with at least" compute_diagonal(
         QuantileDiagonal(0.05, mes_term),
         sample_collection,
     )
