@@ -167,6 +167,21 @@ ClimaCalibrate.ObservationRecipe.reconstruct_residual
 ClimaCalibrate.ObservationRecipe.seasonally_aligned_yearly_sample_date_ranges
 ```
 
+### Diagonal Terms
+
+```@docs
+ClimaCalibrate.ObservationRecipe.AbstractDiagonalTerm
+ClimaCalibrate.ObservationRecipe.compute_diagonal
+ClimaCalibrate.ObservationRecipe.ScalarDiagonal
+ClimaCalibrate.ObservationRecipe.ScalarDiagonal(::AbstractFloat)
+ClimaCalibrate.ObservationRecipe.ModelErrorScaleDiagonal
+ClimaCalibrate.ObservationRecipe.ModelErrorScaleDiagonal(::AbstractFloat)
+ClimaCalibrate.ObservationRecipe.VarianceDiagonal
+ClimaCalibrate.ObservationRecipe.QuantileDiagonal
+ClimaCalibrate.ObservationRecipe.QuantileDiagonal(::AbstractFloat, ::ClimaCalibrate.ObservationRecipe.AbstractDiagonalTerm)
+ClimaCalibrate.ObservationRecipe.BroadcastedDiagonal
+```
+
 ## SVD Residual Analysis
 
 ```@docs
