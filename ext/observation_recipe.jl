@@ -190,10 +190,12 @@ function ObservationRecipe.covariance(
             min_cosd_lat = covar_estimator.min_cosd_lat,
         )
         # Remake the sample collection with the latitude weighted sample matrix
-        sample_collection = SampleCollection(
-            stacked_sample_matrix,
-            get_metadata(sample_collection),
-        )
+        if covar_estimator.use_weight_samples_for_diagonal
+            sample_collection = SampleCollection(
+                stacked_sample_matrix,
+                get_metadata(sample_collection),
+            )
+        end
     end
 
     # Compute SVD of covariance matrix
@@ -214,35 +216,9 @@ function ObservationRecipe.covariance(
     # averages over two years, then this quantity is the mean of seasonal
     # averages spanned over two years, where the first DJF is the mean of every
     # other DJF and the second DJF is the mean of every other DJF.
-    diag_cov = compute_diagonal(
-        _diagonal_term(
-            covar_estimator.model_error_scale,
-            covar_estimator.regularization,
-        ),
-        sample_collection,
-    )
+    diag_cov = compute_diagonal(covar_estimator.diagonal, sample_collection)
 
     return EKP.SVDplusD(gamma_low_rank, diag_cov)
-end
-
-"""
-    _diagonal_term(model_error_scale, regularization)
-
-Construct the diagonal term specified by `model_error_scale` and
-`regularization`.
-"""
-function _diagonal_term(model_error_scale, regularization)
-    return ModelErrorScaleDiagonal(model_error_scale) +
-           ScalarDiagonal(regularization)
-end
-
-function _diagonal_term(
-    model_error_scale,
-    regularization::QuantileRegularization,
-)
-    model_error_scale_term = ModelErrorScaleDiagonal(model_error_scale)
-    return model_error_scale_term +
-           QuantileDiagonal(regularization.qtl, model_error_scale_term)
 end
 
 """

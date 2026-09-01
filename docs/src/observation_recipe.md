@@ -303,6 +303,145 @@ obs = ObservationRecipe.observation(estimator, sample_collection, 1);
 EKP.get_covs(obs)
 ```
 
+## Customizing the diagonal of `SVDplusDCovariance`
+
+If you need more flexibility with the `SVDplusDCovariance` observation recipe,
+then you can use the following method:
+
+```@docs; canonical=false
+ClimaCalibrate.ObservationRecipe.SVDplusDCovariance(::ClimaCalibrate.ObservationRecipe.AbstractDiagonalTerm)
+```
+
+The covariance matrix produced by `SVDplusDCovariance` is the sum of a low rank
+approximation of the covariance matrix computed from the samples and a diagonal
+matrix. The diagonal matrix is described by a diagonal term, a subtype of
+[`ObservationRecipe.AbstractDiagonalTerm`](@ref
+ClimaCalibrate.ObservationRecipe.AbstractDiagonalTerm). A diagonal term
+describes how the matrix should be built from a `SampleCollection`. It is not
+a matrix itself.
+
+The built-in diagonal terms are
+
+- [`ScalarDiagonal`](@ref ClimaCalibrate.ObservationRecipe.ScalarDiagonal): the
+  entries are constant for each variable, with a scalar chosen per variable.
+- [`ModelErrorScaleDiagonal`](@ref
+  ClimaCalibrate.ObservationRecipe.ModelErrorScaleDiagonal): the entries are
+  `(scale * mean)^2`, where the mean of each entry is taken across the samples
+  and the scale is the model error scale of the variable that the entry
+  belongs to.
+- [`VarianceDiagonal`](@ref
+  ClimaCalibrate.ObservationRecipe.VarianceDiagonal): the entries are the
+  variance of each row of the sample matrix, taken across the samples.
+- [`QuantileDiagonal`](@ref
+  ClimaCalibrate.ObservationRecipe.QuantileDiagonal): the entries are constant
+  for each variable, where the constant is a quantile of the entries that
+  another diagonal term produces for that variable.
+
+Diagonal terms can be added together with `+`, which produces a
+[`SumDiagonal`](@ref ClimaCalibrate.ObservationRecipe.SumDiagonal) whose
+diagonal is the elementwise sum of the diagonals of its terms.
+
+```@setup diag_term_example
+import ClimaAnalysis
+import ClimaAnalysis.Template:
+    TemplateVar, add_dim, add_attribs, one_to_n_data, initialize
+import ClimaCalibrate: ObservationRecipe, SampleBuilder
+
+function make_var(short_name, units, lat, factor)
+    var =
+        TemplateVar() |>
+        add_dim("time", [0.0], units = "s") |>
+        add_dim("lat", lat, units = "degrees") |>
+        add_attribs(
+            short_name = short_name,
+            start_date = "2008-1-1",
+            units = units,
+        ) |>
+        one_to_n_data(collected = true) |>
+        initialize
+    var.data .*= factor
+    return var
+end
+pr_lat = collect(range(-90.0, 90.0, length = 5))
+rsut_lat = collect(range(-90.0, 90.0, length = 3))
+# Three samples of two variables each
+sample_collection = SampleBuilder.build_samples(
+    [
+        make_var("pr", "mm/day", pr_lat, 1.0) make_var("pr", "mm/day", pr_lat, 2.0) make_var("pr", "mm/day", pr_lat, 3.0)
+        make_var("rsut", "W m-2", rsut_lat, 1.0) make_var("rsut", "W m-2", rsut_lat, 2.0) make_var("rsut", "W m-2", rsut_lat, 3.0)
+    ];
+    FT = Float64,
+)
+```
+
+```@repl diag_term_example
+sample_collection
+diagonal_term =
+    ObservationRecipe.ScalarDiagonal([1e-6, 1e-4]) +
+    ObservationRecipe.ModelErrorScaleDiagonal(0.05);
+covar_estimator = ObservationRecipe.SVDplusDCovariance(diagonal_term);
+covariance_matrix =
+    ObservationRecipe.covariance(covar_estimator, sample_collection);
+covariance_matrix.diag_cov
+```
+
+When `use_latitude_weights = true`, the diagonal term is computed from the
+latitude weighted samples by default, which matches how `model_error_scale`
+behaves. Pass `use_weight_samples_for_diagonal = false` to compute the diagonal
+term from the samples without latitude weighting instead.
+
+### Creating custom diagonal terms
+
+If the built-in terms are not sufficient, then define a struct that subtypes
+`ObservationRecipe.AbstractDiagonalTerm` and implement a method of
+[`compute_diagonal`](@ref ClimaCalibrate.ObservationRecipe.compute_diagonal)
+with the signature `ObservationRecipe.compute_diagonal(term::YourType,
+sample_collection)`. The method must return an `n × n` diagonal matrix, where
+`n` is the number of rows of `get_samples(sample_collection)`.
+It is your responsibility to ensure the entries of the diagonal matrix make
+sense. It is recommended to match the element type of the samples, which the
+built-in terms do.
+
+Besides `get_samples` and `get_metadata`, the function
+[`var_indices`](@ref ClimaCalibrate.SampleBuilder.var_indices) is useful when
+the diagonal should depend on the variable. It returns the rows of the samples
+that belong to each variable, so
+`view(get_samples(sample_collection), var_indices(sample_collection)[i], :)`
+is the block of the samples for the `i`-th variable.
+
+For example, the following term fills each variable's block with the largest
+squared value in that block:
+
+```@example diag_term_example
+import LinearAlgebra: Diagonal
+import ClimaCalibrate: ObservationRecipe, SampleBuilder
+
+struct MaxSquaredDiagonal <: ObservationRecipe.AbstractDiagonalTerm end
+
+function ObservationRecipe.compute_diagonal(
+    ::MaxSquaredDiagonal,
+    sample_collection,
+)
+    samples = SampleBuilder.get_samples(sample_collection)
+    diag = similar(samples, size(samples, 1))
+    for rows in SampleBuilder.var_indices(sample_collection)
+        diag[rows] .= maximum(abs2, view(samples, rows, :))
+    end
+    return Diagonal(diag)
+end
+nothing # hide
+```
+
+A custom term composes with the built-in ones and can be wrapped in
+`QuantileDiagonal`:
+
+```@repl diag_term_example
+term =
+    ObservationRecipe.QuantileDiagonal(0.5, MaxSquaredDiagonal()) +
+    ObservationRecipe.ScalarDiagonal(1e-6);
+ObservationRecipe.compute_diagonal(term, sample_collection)
+```
+
 ## Frequently asked questions
 
 **Q: I need to compute `g_ensemble` and I do not know how the data of the `OutputVar`s is flattened.**
