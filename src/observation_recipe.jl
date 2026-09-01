@@ -215,26 +215,6 @@ struct QuantileRegularization{FT <: AbstractFloat}
 end
 
 """
-    _diagonal_from_legacy_kwargs(model_error_scale, regularization)
-
-Lower the `model_error_scale` and `regularization` keyword arguments to an
-`AbstractDiagonalTerm`.
-"""
-function _diagonal_from_legacy_kwargs(model_error_scale, regularization)
-    return ModelErrorScaleDiagonal(model_error_scale) +
-           ScalarDiagonal(regularization)
-end
-
-function _diagonal_from_legacy_kwargs(
-    model_error_scale,
-    regularization::QuantileRegularization,
-)
-    model_error_scale_term = ModelErrorScaleDiagonal(model_error_scale)
-    return model_error_scale_term +
-           QuantileDiagonal(regularization.qtl, model_error_scale_term)
-end
-
-"""
     SVDplusDCovariance <: AbstractCovarianceEstimator
 
 Contain the necessary information to construct a `EKP.SVDplusD` covariance
