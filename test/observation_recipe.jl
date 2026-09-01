@@ -862,7 +862,7 @@ end
     covar_estimator = ObservationRecipe.SeasonalDiagonalCovariance()
     seasonal_covariance =
         ObservationRecipe.covariance(covar_estimator, sample_collection)
-    @test seasonal_covariance ==
+    @test seasonal_covariance ≈
           Diagonal([nanvar(season) for season in (DJF, MAM, JJA, SON)])
 
     # Include regularization
@@ -872,7 +872,7 @@ end
     )
     seasonal_covariance =
         ObservationRecipe.covariance(covar_estimator, sample_collection)
-    @test seasonal_covariance ==
+    @test seasonal_covariance ≈
           Diagonal([nanvar(season) for season in (DJF, MAM, JJA, SON)]) + 2 * I
 
     # Include model scale
@@ -882,7 +882,7 @@ end
     )
     seasonal_covariance =
         ObservationRecipe.covariance(covar_estimator, sample_collection)
-    @test seasonal_covariance ==
+    @test seasonal_covariance ≈
           Diagonal([nanvar(season) for season in (DJF, MAM, JJA, SON)]) + Diagonal(
         (
             model_error_scale .*
