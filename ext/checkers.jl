@@ -217,7 +217,7 @@ dates of `var`, `false` otherwise.
     It is recommended to always enable this check when possible.
 
 !!! note "Why use this check?"
-    This check is helpful in ensuring that the dates are matched correctly
+    This check catches dates that do not match
     between `var` and `metadata`. For example, without this check, if the
     simulation data contain monthly averages and metadata track seasonal
     averages, then no error is thrown, because all dates in `metadata` are in
@@ -259,24 +259,42 @@ end
         verbose = false,
     )
 
-Return `true` if the absolute difference of the proportion of positive values in
-`var.data` and the proportion of positive values in `data` is less than the
-threshold defined in `SignChecker`, `false` otherwise.
+Return `true` if the proportion of positive values in `var`, flattened with
+`metadata` the way the observation was, is within the threshold defined in
+`SignChecker` of the proportion of positive values in `data`, `false` otherwise.
+
+This check assumes `var` can be flattened with `metadata`, which the default
+checkers establish before it runs.
 """
 function Checker.check(
     checker::SignChecker,
     var::OutputVar,
     metadata::Metadata;
-    data,
+    data = nothing,
     verbose = false,
 )
-    obs_pos_proportion = mean(data .> 0)
+    isnothing(data) && error(
+        "SignChecker needs the observational data. Pass it as the `data` \
+        keyword argument to `Checker.check`",
+    )
 
-    # This is inaccurate, because not all the values in var.data will end up in
-    # the G ensemble matrix. See _match_dates for one case. However, the mean
-    # should not change that much with additional times.
-    valid = @. !isnan(var.data)
-    sim_pos_proportion = sum(valid .& (var.data .> 0)) / sum(valid)
+    # Flatten `var` the way the observation was, so that both proportions are
+    # taken over the same coordinates: the values flattening drops (the
+    # observation's NaNs, and times outside the metadata's) count in neither
+    if ClimaAnalysis.has_time(var) && ClimaAnalysis.has_time(metadata)
+        var = _match_dates(var, metadata)
+    end
+    sim_data = ClimaAnalysis.flatten(var, metadata).data
+    # Flattening has already dropped the observation's NaNs from both, so only
+    # the simulation can still hold NaNs. Leave those coordinates out of both
+    # proportions, so that they are taken over the same entries
+    valid = @. !isnan(sim_data)
+    iszero(count(valid)) && error(
+        "SignChecker cannot compare a variable that is entirely NaN (short \
+        name $(ClimaAnalysis.short_name(var)))",
+    )
+    obs_pos_proportion = count(valid .& (data .> 0)) / count(valid)
+    sim_pos_proportion = count(valid .& (sim_data .> 0)) / count(valid)
 
     same_sign = abs(obs_pos_proportion - sim_pos_proportion) < checker.threshold
     !same_sign &&

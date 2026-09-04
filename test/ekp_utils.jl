@@ -12,9 +12,9 @@ import EnsembleKalmanProcesses as EKP
     mb_partial = CAL.minibatcher_over_samples(7, 2)
     @test mb_partial.minibatches == [[1, 2], [3, 4], [5, 6]]  # 7th is dropped
 
-    # Edge: batch size larger than n_samples
-    mb_small = CAL.minibatcher_over_samples(3, 5)
-    @test mb_small.minibatches == []
+    # Edge: batch size larger than n_samples leaves no minibatch, which EKP
+    # divides by
+    @test_throws ArgumentError CAL.minibatcher_over_samples(3, 5)
 
     # Edge: n_samples = 0
     @test_throws ArgumentError CAL.minibatcher_over_samples(0, 2)
@@ -36,9 +36,8 @@ end
     @test series.minibatcher.minibatches == [[1, 2], [3, 4], [5, 6]]
     @test series.names == ["1", "2", "3", "4", "5", "6"]
 
-    # fewer samples than batch size
-    series2 = CAL.observation_series_from_samples(samples, 7)
-    @test series2.minibatcher.minibatches == []  # No batches
+    # fewer samples than batch size leaves no minibatch
+    @test_throws ArgumentError CAL.observation_series_from_samples(samples, 7)
 
     # empty sample list
     @test_throws ArgumentError CAL.observation_series_from_samples(

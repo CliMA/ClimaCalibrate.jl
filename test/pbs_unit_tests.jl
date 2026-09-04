@@ -3,16 +3,20 @@ using Test
 import ClimaCalibrate
 
 @testset "Submit PBS job" begin
-    backend_type = ClimaCalibrate.get_backend()
-    if !(backend_type <: ClimaCalibrate.DerechoBackend)
-        @info "Backend identified is $backend_type which is not a DerechoBackend. Skipping submitting a PBS job"
+    cluster_backend = ClimaCalibrate.backend_type()
+    if !(cluster_backend <: ClimaCalibrate.DerechoBackend)
+        @info "Backend identified is $cluster_backend, which is not a \
+               DerechoBackend. Skipping submitting a PBS job"
         return
     end
 
     # Need the backend to submit the job
-    backend = backend_type(; directives = [:time => 1])
+    backend = cluster_backend(; directives = [:time => 1])
 
-    job_script = """
+    # Derecho answers `Check your job_syntax` to a submission that leaves out
+    # the account, the queue, or the select statement, so both scripts carry
+    # all three and differ only in what they run
+    pbs_script(body) = """
     #!/bin/bash
     #PBS -j oe
     #PBS -A UCIT0011
@@ -20,8 +24,10 @@ import ClimaCalibrate
     #PBS -l walltime=00:01:00
     #PBS -l select=1:ncpus=1:ngpus=1
 
-    sleep 10
+    $body
     """
+
+    job_script = pbs_script("sleep 10")
 
     # Helper function to wait for a job to complete
     function wait_for(job, t)
@@ -40,8 +46,16 @@ import ClimaCalibrate
         # qstat, so we need to wait longer
         # If the test is flaky, increase the time to wait for
         wait_for(job, 180)
-        @test ClimaCalibrate.job_status(job) == ClimaCalibrate.Backend.COMPLETED
+        # Whether PBS records a qdel'd job with the error substate depends on
+        # how far it got, so only assert that it is no longer pending or running
         @test ClimaCalibrate.iscompleted(job)
+    end
+
+    @testset "A PBS job that fails is reported as failed" begin
+        job = ClimaCalibrate.submit_job(backend, pbs_script("exit 1"))
+        wait_for(job, 240)
+        @test ClimaCalibrate.isfailed(job)
+        @test !ClimaCalibrate.issuccess(job)
     end
 
     @testset "Submit multiple PBS jobs and cancel them" begin

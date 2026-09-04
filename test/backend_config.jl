@@ -71,11 +71,22 @@ end
     @test collect(config.directives) == [
         :time => "00:01:00",
         :queue => "main@desched1",
+        :account => "UCIT0011",
         :ntasks => 1,
         :cpus_per_task => 1,
         :gpus_per_task => 0,
         :job_priority => "regular",
     ]
+
+    # The account the job is charged to is a directive, not a fixed string
+    other_account = ClimaCalibrate.PBSConfig(;
+        directives = [:time => 1, :account => "ABCD1234"],
+    )
+    @test other_account.directives[:account] == "ABCD1234"
+    @test occursin(
+        "#PBS -A ABCD1234",
+        ClimaCalibrate.Backend.generate_directives(other_account),
+    )
     @test isempty(config.modules)
     @test collect(config.env_vars) == [
         "JULIA_MPI_HAS_CUDA" => true
@@ -108,6 +119,7 @@ end
         :cpus_per_task => 10,
         :gpus_per_task => 42,
         :job_priority => "preempt",
+        :account => "UCIT0011",
     ]
     @test isempty(config.modules)
     @test collect(config.env_vars) == [
@@ -211,6 +223,24 @@ end
        #SBATCH --job-priority=preempt"""
 
     @test modules == "module load climacommon"
+
+    # Underscores are a Slurm spelling of the option *name* only. Rewriting
+    # them in the value would silently rename partitions and QOS names
+    underscore_config = ClimaCalibrate.SlurmConfig(;
+        directives = [
+            :time => 1,
+            :partition => "gpu_debug",
+            :qos => "high_priority",
+            :t => "00:10:00",
+        ],
+    )
+    underscore_directives =
+        ClimaCalibrate.Backend.generate_directives(underscore_config)
+    @test occursin("#SBATCH --partition=gpu_debug", underscore_directives)
+    @test occursin("#SBATCH --qos=high_priority", underscore_directives)
+    # Short options take a space, not an `=`
+    @test occursin("#SBATCH -t 00:10:00", underscore_directives)
+
     # Remove leading and trailing whitespaces to avoid using \" for quotation
     # marks
     @test env_vars == strip("""

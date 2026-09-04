@@ -17,7 +17,7 @@ nprocs = 3
 # adds itself to the global pool once started. The calibration begins with an
 # empty pool and picks up workers as they join
 if nworkers() == 1
-    if ClimaCalibrate.get_backend() == ClimaCalibrate.DerechoBackend
+    if ClimaCalibrate.backend_type() == ClimaCalibrate.DerechoBackend
         ClimaCalibrate.add_workers(
             nprocs;
             cluster = :pbs,
@@ -42,29 +42,39 @@ ClimaCalibrate.@worker_setup ClimaCalibrate.forward_model(
     m,
 ) = m == 1 && exit()
 
-eki = EKP.EnsembleKalmanProcess(
-    EKP.construct_initial_ensemble(prior, ensemble_size),
-    observation,
-    variance,
-    EKP.Inversion(),
-    verbose = true,
-)
+# Each phase below writes to a directory of its own, created fresh. Reusing one
+# directory meant deleting and recreating it under the processes the previous
+# phase still had open: on a cluster filesystem `initialize` then read a
+# truncated `eki_file.jld2` out of the directory it had removed a moment
+# earlier. `cleanup = false` keeps the directories for the CI artifact upload
+mkpath(output_dir)
+interrupted_dir =
+    mktempdir(output_dir; prefix = "interrupted_", cleanup = false)
+calibration_dir =
+    mktempdir(output_dir; prefix = "calibration_", cleanup = false)
 
-ClimaCalibrate.initialize(eki, prior, output_dir)
+eki = make_ekp(prior, observation, variance; verbose = true)
+
+ClimaCalibrate.initialize(eki, prior, interrupted_dir)
 
 ClimaCalibrate.Calibration.run_iteration(
     ClimaCalibrate.WorkerBackend(),
     CancelModelInterface(),
     1,
     ensemble_size,
-    output_dir,
+    interrupted_dir,
 )
 
+# Member 1 exits, which takes down the worker running it along with the other
+# members that worker had in flight. How many that is depends on the machine, so
+# the test is that each member is left with a checkpoint a restart can read, and
+# that the member which exited is not marked complete.
 @testset "Test model checkpoints with interruptions" begin
+    @test ClimaCalibrate.model_started(interrupted_dir, 1, 1)
     for m in 1:ensemble_size
-        @test m == 1 ? ClimaCalibrate.model_started(output_dir, 1, m) :
-              ClimaCalibrate.model_completed(output_dir, 1, m)
-        rm(ClimaCalibrate.checkpoint_path(output_dir, 1, m))
+        @test ClimaCalibrate.model_started(interrupted_dir, 1, m) ||
+              ClimaCalibrate.model_completed(interrupted_dir, 1, m)
+        rm(ClimaCalibrate.checkpoint_path(interrupted_dir, 1, m))
     end
 end
 
@@ -77,63 +87,49 @@ ClimaCalibrate.@worker_setup include(
     ),
 )
 
-rng_seed = 1234
-Random.seed!(rng_seed)
-rng_ekp = Random.MersenneTwister(rng_seed)
-user_initial_ensemble = EKP.construct_initial_ensemble(prior, ensemble_size)
-ekp = EKP.EnsembleKalmanProcess(
-    user_initial_ensemble,
-    observation,
-    variance,
-    EKP.Inversion();
-    rng = rng_ekp,
-    localization_method = EKP.Localizers.NoLocalization(),
-    accelerator = EKP.DefaultAccelerator(),
-    scheduler = EKP.DefaultScheduler(),
-)
+ekp = make_ekp(prior, observation, variance)
 eki = ClimaCalibrate.Calibration.calibrate(
     ClimaCalibrate.WorkerBackend(),
     ekp,
-    SurfaceFluxModelInterface(),
+    SurfaceFluxModelInterface(calibration_dir, ensemble_size),
     n_iterations,
     prior,
-    output_dir,
+    calibration_dir,
 )
 
-@test ClimaCalibrate.last_completed_iteration(output_dir) == n_iterations
+@test ClimaCalibrate.last_completed_iteration(calibration_dir) == n_iterations
 
-test_sf_calibration_output(eki, prior, observation)
+test_sf_calibration_output(eki, prior, observation, variance)
 
-theta_star_vec =
-    (; coefficient_a_m_businger = 4.7, coefficient_a_h_businger = 4.7)
+theta_star_vec = (; coefficient_a_m_businger = 4.7)
 
 convergence_plot(
     eki,
     prior,
     theta_star_vec,
-    ["coefficient_a_m_businger", "coefficient_a_h_businger"],
-    output_dir,
+    ["coefficient_a_m_businger"],
+    calibration_dir,
 )
 
-g_vs_iter_plot(eki, output_dir)
+g_vs_iter_plot(eki, calibration_dir)
 
 @testset "Restarts" begin
-    last_iter = ClimaCalibrate.last_completed_iteration(output_dir)
+    last_iter = ClimaCalibrate.last_completed_iteration(calibration_dir)
     @test last_iter == n_iterations
     ClimaCalibrate.Calibration.run_iteration(
         ClimaCalibrate.WorkerBackend(),
-        SurfaceFluxModelInterface(),
+        SurfaceFluxModelInterface(calibration_dir, ensemble_size),
         last_iter + 1,
         ensemble_size,
-        output_dir,
+        calibration_dir,
     )
     G_ensemble = ClimaCalibrate.observation_map(
-        SurfaceFluxModelInterface(),
+        SurfaceFluxModelInterface(calibration_dir, ensemble_size),
         last_iter + 1,
     )
-    ClimaCalibrate.save_G_ensemble(output_dir, last_iter + 1, G_ensemble)
-    ClimaCalibrate.update_ensemble(output_dir, last_iter + 1, prior)
+    ClimaCalibrate.save_G_ensemble(calibration_dir, last_iter + 1, G_ensemble)
+    ClimaCalibrate.update_ensemble(calibration_dir, last_iter + 1, prior)
 
-    @test ClimaCalibrate.last_completed_iteration(output_dir) ==
+    @test ClimaCalibrate.last_completed_iteration(calibration_dir) ==
           n_iterations + 1
 end

@@ -2,7 +2,7 @@
 CurrentModule = ClimaCalibrate
 ```
 
-# How-to guide and cookbook
+# How do I?
 
 !!! note "Abbreviation"
     We use `EKP` as shorthand for `EnsembleKalmanProcesses`.
@@ -164,7 +164,7 @@ ObservationRecipe.reconstruct_diag_cov(obs)
 nothing # hide
 ```
 
-# How do I handle `NaN`s in the `OutputVar`s so that there are no `NaN`s in the sample and covariance matrix?
+## How do I handle `NaN`s in the `OutputVar`s so that there are no `NaN`s in the sample and covariance matrix?
 
 `NaN`s should be handled when preprocessing the data. In some cases,
 there will be `NaN`s in the data (e.g. calibrating with data that is valid only

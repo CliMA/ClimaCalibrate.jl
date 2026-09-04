@@ -1,229 +1,182 @@
-# # Distributed Calibration Tutorial Using Julia Workers
-# This example will teach you how to use ClimaCalibrate to parallelize your
-# calibration with workers. Workers are additional processes spun up to run code
-# in a distributed fashion. In this tutorial, we will run ensemble members'
-# forward models on different workers.
+# # Calibration Tutorial
+#
+# This tutorial runs a complete calibration end to end, and then shows the three
+# lines that change to distribute it across Julia workers.
+#
+# The model is a damped harmonic oscillator. Its displacement is
+# ``x(t) = e^{-\gamma t}\cos(\omega t)``, and we calibrate the damping rate
+# ``\gamma`` and the angular frequency ``\omega`` against a trajectory generated
+# from known values. Any forward model would do: ClimaCalibrate calls only
+# `forward_model` and `observation_map`.
 
-# The example calibration uses CliMA's atmosphere model, [`ClimaAtmos.jl`](https://github.com/CliMA/ClimaAtmos.jl/),
-# in a column spatial configuration for 30 days to simulate outgoing radiative fluxes.
-# Radiative fluxes are used in the observation map to calibrate the astronomical unit.
-
-# First, we load in some necessary packages.
-using Distributed
 import ClimaCalibrate as CAL
-import ClimaAnalysis: SimDir, get, slice, average_xy
-using ClimaUtilities.ClimaArtifacts
 import EnsembleKalmanProcesses as EKP
-import EnsembleKalmanProcesses: I, ParameterDistributions.constrained_gaussian
+import EnsembleKalmanProcesses.ParameterDistributions:
+    combine_distributions, constrained_gaussian
+import Statistics
+import CairoMakie
 
-# Next, we add workers. These are primarily added by
-# [`Distributed.addprocs`](https://docs.julialang.org/en/v1/stdlib/Distributed/#Distributed.addprocs)
-# or by starting Julia with multiple processes: `julia -p <nprocs>`.
+# ## Where the model code lives
+#
+# The forward model and the model interface go in their own file. That is what
+# lets a worker or a scheduler job load them: both start as fresh Julia
+# processes, and an [`HPCBackend`](@ref) job script `include`s this file
+# directly.
 
-# `addprocs` itself initializes the workers and registers them with the main
-# Julia process, but there are multiple ways to call it. The simplest is just
-# `addprocs(nprocs)`, which will create new local processes on your machine.
-# The other is to use [`SlurmManager`](@ref), which will acquire and start
-# workers on Slurm resources.
-# You can use keyword arguments to specify the Slurm resources:
+model_file =
+    joinpath(pkgdir(CAL), "docs", "src", "assets", "damped_oscillator.jl")
+include(model_file)
+print(read(model_file, String)) #hide
 
-# `addprocs(ClimaCalibrate.SlurmManager(nprocs), gpus_per_task = 1, time = "01:00:00")`
+# `forward_model` and `observation_map` receive only the iteration and member
+# numbers. They read the output directory, the ensemble size, and the
+# observation times from the fields of `DampedOscillator`. That configuration
+# travels with the interface, so the same code works on a worker or inside a job
+# script, where a global defined in your session will not exist.
+#
+# `forward_model` reads its parameters from the file ClimaCalibrate wrote for
+# that member, at [`parameter_path`](@ref).
 
-# For this example, we would add one worker if it was compatible with Documenter.jl:
-# ```julia
-# addprocs(1)
-# ```
+# ## The prior
+#
+# Every parameter being calibrated needs a prior. `constrained_gaussian` takes a
+# name, a mean, a standard deviation, and lower and upper bounds, and gives back
+# a distribution that respects those bounds.
 
-# We can see the number of workers and their ID numbers:
-nworkers()
-#-
-workers()
+prior = combine_distributions([
+    constrained_gaussian("damping", 0.3, 0.3, 0, Inf),
+    constrained_gaussian("frequency", 2.5, 1.5, 0, Inf),
+])
 
-# We can call functions on the worker using [`remotecall`](https://docs.julialang.org/en/v1/stdlib/Distributed/#Distributed.remotecall_fetch-Tuple{Any,%20Integer,%20Vararg{Any}}).
-# We pass in the function name and the worker ID followed by the function arguments.
-remotecall_fetch(*, 1, 4, 4)
-# ClimaCalibrate uses this functionality to run the forward model on workers.
+# ## The observation
+#
+# This is a perfect-model experiment: the observation comes from the forward
+# model itself, run with the parameters we want the calibration to recover.
 
-# Since the workers start in their own Julia sessions, we need to import
-# packages and declare variables. `Distributed.@everywhere` executes code on all
-# workers, allowing us to load the code that they need.
-@everywhere begin
-    output_dir = joinpath("output", "climaatmos_calibration")
-    import ClimaCalibrate as CAL
-    import ClimaAtmos as CA
-    import ClimaComms
-end
-output_dir = joinpath("output", "climaatmos_calibration")
-mkpath(output_dir)
+t = collect(0.0:0.5:20.0)
+true_damping, true_frequency = 0.15, 2.0
+observation = solve_oscillator(true_damping, true_frequency, t)
 
-# First, we define `RadiativeFluxModelInterface` which will subtype the
-# `ClimaCalibrate.AbstractModelInterface`. The `RadiativeFluxModelInterface`
-# will define how to run the forward model and observation map.
+# The noise covariance says how much of the mismatch between model and
+# observation to attribute to error rather than to the parameters. Here the
+# observation is noise-free, so any small value will do; with real data this is
+# the part that deserves care, and the [Observations](@ref) page covers it.
 
-# The forward model takes in the sampled parameters, runs the simulation, and
-# saves the diagnostic output that can be processed and compared to
-# observations. This is defined by
-# `ClimaCalibrate.forward_model(interface, iteration, member)`. This function
-# is ran in parallel by the `WorkerBackend` and the `HPCBackend`s.
+noise = 0.01 * EKP.I(length(t))
 
-# Since `forward_model(interface, iteration, member)` only takes in the
-# iteration and member numbers, so we need to use these as hooks to set the
-# model parameters and output directory.
-# Two useful functions:
-# - [`path_to_ensemble_member`](@ref): Returns the ensemble member's output
-#   directory
-# - [`parameter_path`](@ref): Returns the ensemble member's parameter file as
-#   specified by [`EKP.TOMLInterface`](https://clima.github.io/EnsembleKalmanProcesses.jl/dev/API/TOMLInterface/#EnsembleKalmanProcesses.TOMLInterface.save_parameter_ensemble)
+# ## Putting it together
+#
+# `calibrate` needs a backend, an `EnsembleKalmanProcess`, a model interface, a
+# number of iterations, the prior, and an output directory.
 
-# The forward model below is running `ClimaAtmos.jl` in a minimal `column`
-# spatial configuration.
+ensemble_size = 20
+n_iterations = 8
+output_dir = mktempdir()
 
-# !!! note "Everywhere macro"
-#     Due to limitations in Documenter.jl (see
-#     [here](https://github.com/fredrikekre/Literate.jl/issues/254) and
-#     [here](https://github.com/JuliaDocs/Documenter.jl/issues/1848)), we append
-#     `@eval $(@__MODULE__)` to every `@everywhere` call. For your own
-#     calibration script, you do not need to do this.
+interface = DampedOscillator(output_dir, ensemble_size, t)
 
-@everywhere @eval $(@__MODULE__) struct RadiativeFluxModelInterface <:
-                                        CAL.AbstractModelInterface end
-
-@everywhere @eval $(@__MODULE__) function CAL.forward_model(
-    ::RadiativeFluxModelInterface,
-    iteration,
-    member,
+ekp = EKP.EnsembleKalmanProcess(
+    EKP.construct_initial_ensemble(prior, ensemble_size),
+    observation,
+    noise,
+    EKP.Inversion(),
 )
-    config_dict = Dict(
-        "dt" => "2000secs",
-        "t_end" => "30days",
-        "config" => "column",
-        "h_elem" => 1,
-        "insolation" => "timevarying",
-        "output_dir" => output_dir,
-        "output_default_diagnostics" => false,
-        "dt_rad" => "6hours",
-        "rad" => "clearsky",
-        "co2_model" => "fixed",
-        "log_progress" => false,
-        "diagnostics" => [
-            Dict(
-                "reduction_time" => "average",
-                "short_name" => "rsut",
-                "period" => "30days",
-                "writer" => "nc",
-            ),
-        ],
+
+ekp = CAL.calibrate(
+    CAL.JuliaBackend(),
+    ekp,
+    interface,
+    n_iterations,
+    prior,
+    output_dir,
+)
+
+# ## Results
+#
+# The ensemble mean should have moved towards the values the observation was
+# generated with.
+
+final = EKP.get_ϕ_mean_final(prior, ekp)
+(; damping = final[1], frequency = final[2]), (true_damping, true_frequency)
+
+# The calibration can stop before `n_iterations` if EKP's scheduler decides it
+# has converged, so ask the object how many iterations it ran.
+
+completed = EKP.get_N_iterations(ekp)
+
+# The spread across the ensemble contracts as the data constrains the
+# parameters:
+
+spread =
+    [Statistics.var(EKP.get_ϕ(prior, ekp, i), dims = 2) for i in 1:completed]
+first(spread), last(spread)
+
+# Plotting the ensemble against the observation shows the same thing. The final
+# iteration's members bracket the observation much more tightly than the first.
+
+fig = CairoMakie.Figure(size = (800, 350))
+for (col, iter) in enumerate((1, completed))
+    ax = CairoMakie.Axis(
+        fig[1, col],
+        title = "Iteration $iter",
+        xlabel = "time",
+        ylabel = "displacement",
     )
-    ## Set the output path for the current member
-    member_path = CAL.path_to_ensemble_member(output_dir, iteration, member)
-    config_dict["output_dir"] = member_path
-
-    ## Set the parameters for the current member
-    parameter_path = CAL.parameter_path(output_dir, iteration, member)
-    if haskey(config_dict, "toml")
-        push!(config_dict["toml"], parameter_path)
-    else
-        config_dict["toml"] = [parameter_path]
+    G = EKP.get_g(ekp, iter)
+    for m in axes(G, 2)
+        CairoMakie.lines!(ax, t, G[:, m], color = (:grey, 0.4))
     end
-
-    ## Turn off default diagnostics
-    config_dict["output_default_diagnostics"] = false
-
-    comms_ctx = ClimaComms.SingletonCommsContext()
-    atmos_config = CA.AtmosConfig(config_dict; comms_ctx)
-    simulation = CA.get_simulation(atmos_config)
-    CA.solve_atmos!(simulation)
-    return simulation
+    CairoMakie.lines!(ax, t, observation, color = :black, linewidth = 2)
 end
+fig
 
-# Next, the observation map is required to process a full ensemble of model output
-# for the ensemble update step. The observation map just takes in the iteration
-# number, and always outputs an array.
-# For observation map output `G_ensemble`, `G_ensemble[:, m]` must the output of
-# ensemble member `m`.
-# This is needed for compatibility with EnsembleKalmanProcesses.jl.
-const days = 86_400
-function CAL.observation_map(::RadiativeFluxModelInterface, iteration)
-    single_member_dims = (1,)
-    G_ensemble = Array{Float64}(undef, single_member_dims..., ensemble_size)
-
-    for m in 1:ensemble_size
-        member_path = CAL.path_to_ensemble_member(output_dir, iteration, m)
-        simdir_path = joinpath(member_path, "output_active")
-        if isdir(simdir_path)
-            simdir = SimDir(simdir_path)
-            G_ensemble[:, m] .= process_member_data(simdir)
-        else
-            G_ensemble[:, m] .= NaN
-        end
-    end
-    return G_ensemble
-end
-
-# Separating out the individual ensemble member output processing often
-# results in more readable code.
-function process_member_data(simdir::SimDir)
-    isempty(simdir.vars) && return NaN
-    rsut =
-        get(simdir; short_name = "rsut", reduction = "average", period = "30d")
-    return slice(average_xy(rsut); time = 30days).data
-end
-
-# Now, we can set up the remaining experiment details:
-# - ensemble size, number of iterations
-# - the prior distribution
-# - the observational data
-ensemble_size = 30
-n_iterations = 7
-noise = 0.1 * I
-prior = constrained_gaussian("astronomical_unit", 6e10, 1e11, 2e5, Inf)
-
-# For a perfect model, we generate observations from the forward model itself.
-# This is most easily done by creating an empty parameter file and 
-# running the 0th ensemble member:
-@info "Generating observations"
-parameter_file = CAL.parameter_path(output_dir, 0, 0)
-mkpath(dirname(parameter_file))
-touch(parameter_file)
-simulation = CAL.forward_model(RadiativeFluxModelInterface(), 0, 0)
-# Lastly, we use the observation map itself to generate the observations.
-observations = Vector{Float64}(undef, 1)
-observations .= process_member_data(SimDir(simulation.output_dir))
-
-# Now we are ready to run our calibration, putting it all together using the
-# `calibrate` function. The `WorkerBackend` distributes ensemble members across
-# the workers added above, so you would use it once you have added workers:
+# ## Running the ensemble in parallel
+#
+# [`JuliaBackend`](@ref) runs the ensemble members one after another, which is
+# enough while debugging and for a closed-form model like this one. For a
+# forward model that takes minutes or hours, swap in a backend that runs the
+# members at the same time. Nothing else about the calibration changes.
+#
+# To spread the members across Julia workers, add the workers, load the model
+# code on them, and pass a [`WorkerBackend`](@ref):
 #
 # ```julia
-# eki = CAL.calibrate(
+# using Distributed
+#
+# ## `cluster = :local` starts workers as local processes; on a cluster, omit it
+# ## and each worker is requested from the scheduler as its own allocation
+# wait(CAL.add_workers(4; cluster = :local))
+#
+# ## Use `@worker_setup` rather than `Distributed.@everywhere`: workers join
+# ## asynchronously, so `@everywhere` would miss any that connect later and
+# ## leave them without the model code
+# CAL.@worker_setup include($model_file)
+#
+# ekp = CAL.calibrate(
 #     CAL.WorkerBackend(),
 #     ekp,
-#     RadiativeFluxModelInterface(),
+#     interface,
 #     n_iterations,
 #     prior,
 #     output_dir,
 # )
 # ```
 #
-# Other backends are available for forward models that can't use workers or need
-# to be parallelized internally. Since this example runs without workers, we use
-# the `JuliaBackend`, which runs all ensemble members sequentially and does not
-# require `Distributed.jl`.
-# For more information, see the [`Backends`](https://clima.github.io/ClimaCalibrate.jl/dev/backends/)
-# page.
-user_initial_ensemble = EKP.construct_initial_ensemble(prior, ensemble_size)
-ekp = EKP.EnsembleKalmanProcess(
-    user_initial_ensemble,
-    observations,
-    noise,
-    EKP.Inversion(),
-    EKP.default_options_dict(EKP.Inversion()),
-)
-eki = CAL.calibrate(
-    CAL.JuliaBackend(),
-    ekp,
-    RadiativeFluxModelInterface(),
-    n_iterations,
-    prior,
-    output_dir,
-)
+# !!! note "Why this block is not executed here"
+#     Documenter captures the output of each executed block, which deadlocks
+#     against `Distributed`'s message handling. The code above is what to run in
+#     a script or the REPL; it is not run while this page is built.
+#
+# To submit one scheduler job per ensemble member instead, pass an
+# [`HPCBackend`](@ref) such as `CAL.CaltechHPCBackend(; directives = ...)`. That
+# backend also needs [`model_interface_filepath`](@ref) implemented on the
+# interface, so its job scripts know which file to `include`.
+
+# ## Where to go next
+#
+# - [Backends](@ref Backends) explains how to choose between these and how to
+#   move a working calibration onto a cluster.
+# - [Troubleshooting](@ref) covers what to do when a calibration does not
+#   converge, or fails partway through.
+# - The [Observations](@ref) page covers building observations and noise
+#   covariances from real data.

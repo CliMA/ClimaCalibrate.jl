@@ -19,24 +19,52 @@ steps:
 
   - wait
 
-  - label: "SurfaceFluxes perfect model calibration"
-    command: 
-    - echo "--- WorkerBackend Calibration"
-    - julia --project=experiments/surface_fluxes_perfect_model test/worker_backend.jl
-    - rm -rf output/surface_fluxes_perfect_model/*
-    - echo "--- HPCBackend Calibration"
-    - julia --project=experiments/surface_fluxes_perfect_model test/hpc_backend.jl
-    artifact_paths: output/surface_fluxes_perfect_model/*
+  # The two calibrations are separate steps so that a failure in one is not
+  # hidden by the other never running, and so that a retry does not repeat the
+  # half that passed. Each test clears the output directory it writes to.
+  - label: "SurfaceFluxes calibration on the WorkerBackend"
+    command: julia --project=experiments/surface_fluxes_perfect_model test/worker_backend.jl
+    artifact_paths: "output/surface_fluxes_perfect_model/**/*"
     agents:
       slurm_ntasks: 5
       slurm_cpus_per_task: 1
-    # The tests submit slurm jobs which can be flaky if it takes too long for
-    # the slurm jobs to run
-    soft_fail: true
+    # These tests submit scheduler jobs, which fail when the queue is busy
+    # enough that a job does not start within the test's wait. One retry covers
+    # that; marking the step soft-failing would instead report a green build for
+    # a `calibrate`, `submit_job`, or `job_status` failure as well, which is how
+    # a broken submission went unnoticed.
+    retry:
+      automatic:
+        - exit_status: "*"
+          limit: 1
+
+  - label: "SurfaceFluxes calibration on the HPCBackend"
+    command: julia --project=experiments/surface_fluxes_perfect_model test/hpc_backend.jl
+    artifact_paths: "output/surface_fluxes_perfect_model/**/*"
+    agents:
+      slurm_ntasks: 5
+      slurm_cpus_per_task: 1
+    # These tests submit scheduler jobs, which fail when the queue is busy
+    # enough that a job does not start within the test's wait. One retry covers
+    # that; marking the step soft-failing would instead report a green build for
+    # a `calibrate`, `submit_job`, or `job_status` failure as well, which is how
+    # a broken submission went unnoticed.
+    retry:
+      automatic:
+        - exit_status: "*"
+          limit: 1
 
   - label: "Slurm job controller unit tests"
     command: julia --project=experiments/surface_fluxes_perfect_model test/slurm_unit_tests.jl
-    soft_fail: true
+    # These tests submit scheduler jobs, which fail when the queue is busy
+    # enough that a job does not start within the test's wait. One retry covers
+    # that; marking the step soft-failing would instead report a green build for
+    # a `calibrate`, `submit_job`, or `job_status` failure as well, which is how
+    # a broken submission went unnoticed.
+    retry:
+      automatic:
+        - exit_status: "*"
+          limit: 1
 
   - label: "SlurmManager tests"
     command: julia --project=experiments/surface_fluxes_perfect_model test/slurm_manager_unit_tests.jl

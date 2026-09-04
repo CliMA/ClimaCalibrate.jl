@@ -1,4 +1,4 @@
-# Job Submission Scripts for HPC Clusters
+# Writing submission scripts
 
 This page provides concrete examples and best practices for running calibrations
 on HPC clusters using ClimaCalibrate.jl. The examples assume basic familiarity
@@ -182,7 +182,7 @@ Set these environment variables in your submission script:
 - `CLIMACOMMS_CONTEXT`: Set to `"SINGLETON"` for [`WorkerBackend`](@ref). The
   context is automatically set to `"MPI"` for HPC backends.
 
-## Troubleshooting
+## Scheduler troubleshooting
 
 ### Common Issues
 
@@ -190,7 +190,8 @@ Set these environment variables in your submission script:
    session if workers are timing out
 2. **Memory Issues**: Monitor memory usage and adjust `--mem` or `-l mem`
    accordingly.
-3. **GPU Allocation**: Ensure `--gpus-per-task` or `-l select` is set correctly
+3. **GPU Allocation**: Ensure `--gpus-per-task` or `-l select` matches the
+   GPUs the model needs
 4. **Module Conflicts**: Use `module purge` and ensure your MODULEPATH is set
    before loading required modules
 

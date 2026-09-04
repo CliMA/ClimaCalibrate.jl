@@ -2,7 +2,7 @@
 CurrentModule = ClimaCalibrate.SampleBuilder
 ```
 
-# SampleBuilder
+# Building samples
 
 !!! warning
     If you are not using ClimaAnalysis, you can skip this page.
@@ -75,7 +75,7 @@ The rows of the input matrix correspond to `OutputVar`s of the same kind and the
 columns correspond to samples. The function `build_samples` flattens each
 `OutputVar` into a column vector of floats by calling `flatten` in a fixed
 dimension order. Each column of the result is a sample which is the vertical
-concatenation of the flattened vectors from every `OutputVar` in that column.
+concatenation of the flattened vectors from all `OutputVar`s in that column.
 The final `SampleCollection` stores this as a single numeric matrix with the
 associated `Metadata` for each `OutputVar` kept separately.
 
@@ -92,14 +92,9 @@ Furthermore, for each row of `OutputVar`s, for dimensions that are not ignored,
 7. the dimension values are the same,
 8. the coordinates where the NaNs are dropped are the same.
 
-You can exclude dimensions from these checks with the `ignore_dims` keyword
-argument. This is useful when the samples are meant to differ along a dimension.
-For example, [`build_samples_by_times`](@ref) ignores the time dimension because
-each sample covers a different time range.
-
 Keep in mind that a covariance estimator may need the values of a dimension to
 be the same across the samples. For example, latitude weighting applies the
-weights of the first sample to every sample, so the estimators error when the
+weights of the first sample to all samples, so the estimators error when the
 latitude dimension is ignored and the latitudes differ across the samples.
 
 After a `SampleCollection` is created, you can choose a column of the matrix of
@@ -146,7 +141,10 @@ pr1, pr2, pr3 = pr_var, shift_data(pr_var, 10), shift_data(pr_var, 20)
 rsut1, rsut2, rsut3 = rsut_var, shift_data(rsut_var, 10), shift_data(rsut_var, 20)
 ```
 
-Here's an example of using `build_samples` to create a `SampleCollection`.
+Here's an example of using `build_samples` to create a `SampleCollection`. The
+samples here are meant to differ along time, so the `ignore_dims` keyword
+argument excludes the time dimension from the checks above. Without it,
+`build_samples` would reject samples whose time values do not match.
 
 ```@example samples
 # The rows are variables (pr, rsut) and the columns are samples
@@ -168,7 +166,7 @@ to window the `OutputVar`s by time ranges, so that each sample typically
 represents a single year of data. For this example, we use short time windows.
 
 ```@example samples
-# Each time range becomes one sample, with every variable windowed to that range
+# Each time range becomes one sample, with all variables windowed to that range
 SampleBuilder.build_samples_by_times(
     [pr_var, rsut_var],
     [(0.0, 1.0), (2.0, 3.0), (4.0, 5.0)], # this also works with Dates.DateTime
@@ -202,5 +200,5 @@ first(col_vars)
 Once you have a `SampleCollection`, you pass a covariance estimator, the
 `SampleCollection`, and the index of the sample to use as the observation to
 [`observation`](@ref ClimaCalibrate.ObservationRecipe.observation) to build the
-`EKP.Observation` used in the calibration. See [Observation
-Recipes](observation_recipe.md) section for the available estimators.
+`EKP.Observation` used in the calibration. See
+[building observations](observation_recipe.md) for the available estimators.

@@ -4,7 +4,7 @@ using Logging
 import ..ClimaCalibrate: project_dir
 
 export add_workers,
-    default_worker_pool,
+    calibration_worker_pool,
     set_worker_loggers,
     set_worker_logger,
     cancel_worker_jobs,
@@ -41,7 +41,8 @@ const GLOBAL_WORKER_POOL = WorkerPool()
 const POOL_LOCK = ReentrantLock()
 
 # Workers that have connected but are still loading code: present in `workers()`
-# but not yet schedulable. Keeps `default_worker_pool` from pooling them early.
+# but not yet schedulable. Keeps `calibration_worker_pool` from pooling them
+# early.
 const INITIALIZING_WORKERS = Set{Int}()
 
 """
@@ -56,24 +57,47 @@ n_initializing_workers() = lock(POOL_LOCK) do
 end
 
 """
-    default_worker_pool()
+    calibration_worker_pool()
 
-Return the process-wide `GLOBAL_WORKER_POOL`.
+Return the process-wide `GLOBAL_WORKER_POOL`, which is what a
+[`WorkerBackend`](@ref) draws ensemble members from.
 
 Cluster workers add themselves via the `:register` hook. Workers added by other
-means (e.g. plain `addprocs`/`LocalManager` or pre-existing workers) are
-reconciled into the pool here. Workers still loading code (in `INITIALIZING_WORKERS`)
-are skipped so they are not scheduled before they are ready.
+means (e.g. plain `addprocs`/`LocalManager` or pre-existing workers) are picked
+up here: each is claimed with `_claim_worker` and initialized in the
+background, so it joins the pool once it has the code to run a forward model.
+
+A worker enters `workers()` when `Distributed` registers it, which is before the
+`:register` hook runs, so pooling ids straight from `workers()` can hand a
+member to a worker that has yet to load `ClimaCalibrate`. Claiming is what keeps
+the two paths from either racing or initializing the same worker twice.
+
+The name is package-specific because `Distributed` exports a
+`default_worker_pool` of its own, which makes the unqualified name ambiguous
+under `using Distributed, ClimaCalibrate`.
 """
-function default_worker_pool()
-    lock(POOL_LOCK) do
-        for id in workers()
-            id == 1 && continue  # id 1 is the main process, not a worker
-            id in INITIALIZING_WORKERS && continue
-            id in GLOBAL_WORKER_POOL.workers || push!(GLOBAL_WORKER_POOL, id)
-        end
+function calibration_worker_pool()
+    # id 1 is the main process, not a worker
+    unclaimed = filter(id -> id != 1 && _claim_worker(id), workers())
+    for id in unclaimed
+        @async _initialize_claimed_worker(id)
     end
     return GLOBAL_WORKER_POOL
+end
+
+"""
+    default_worker_pool()
+
+Deprecated name for [`calibration_worker_pool`](@ref).
+"""
+function default_worker_pool()
+    Base.depwarn(
+        "`default_worker_pool` is now `calibration_worker_pool`, since \
+        `Distributed` exports a `default_worker_pool` of its own. It is not \
+        exported, so call it as `ClimaCalibrate.calibration_worker_pool()`.",
+        :default_worker_pool,
+    )
+    return calibration_worker_pool()
 end
 
 # ----------------------------------------------------------------------------
@@ -86,7 +110,7 @@ end
 # `@everywhere` that both applies now and persists for future workers.
 # ----------------------------------------------------------------------------
 
-# Ordered list of SOURCE_PATH-wrapped toplevel expressions to run on every worker.
+# Ordered list of SOURCE_PATH-wrapped toplevel expressions to run on a worker.
 const WORKER_SETUP = Expr[]
 
 # Reimplementation of Distributed's internal `extract_imports`: pull out
@@ -108,7 +132,7 @@ _extract_imports(x) = _extract_imports!(Any[], x)
 """
     register_worker_setup!(ex::Expr, source_path)
 
-Record `ex` to run on every current and future worker, then apply it to all
+Record `ex` to run on all current and future workers, then apply it to all
 current processes. `source_path` is propagated so relative `include` resolves on
 the workers. Used by [`@worker_setup`](@ref).
 """
@@ -163,11 +187,39 @@ recorded [`@worker_setup`](@ref) expressions. The worker is pushed to the pool
 *only after* code loading completes, so it is never scheduled before it is
 ready. Failures (e.g. a worker dying mid-init) are logged and the worker is not
 pooled.
+
+Does nothing if the worker is already pooled or is being initialized by
+[`calibration_worker_pool`](@ref).
 """
 function initialize_worker(id)
+    _claim_worker(id) || return nothing
+    return _initialize_claimed_worker(id)
+end
+
+"""
+    _claim_worker(id)
+
+Claim worker `id` for initialization, returning whether this caller is the one
+that has to initialize it.
+
+Adding `id` to `INITIALIZING_WORKERS` under `POOL_LOCK` is what makes the claim
+exclusive: a worker is claimed by whichever of the `:register` hook and
+[`calibration_worker_pool`](@ref) reaches it first, and the other leaves it
+alone. Replaying the `@worker_setup` expressions twice would fail on the first
+`struct` among them.
+"""
+function _claim_worker(id)
     lock(POOL_LOCK) do
+        id in INITIALIZING_WORKERS && return false
+        id in GLOBAL_WORKER_POOL.workers && return false
         push!(INITIALIZING_WORKERS, id)
+        return true
     end
+end
+
+# Initialize a worker already claimed with `_claim_worker`, releasing the claim
+# when it is either pooled or given up on.
+function _initialize_claimed_worker(id)
     try
         Distributed.remotecall_wait(cd, id, pwd())
         Distributed.remotecall_eval(Main, id, :(using ClimaCalibrate, Logging))
@@ -180,8 +232,9 @@ function initialize_worker(id)
         for wrapped in setup
             Distributed.remotecall_wait(Core.eval, id, Main, wrapped)
         end
-        # Only now is the worker schedulable. Guard against a duplicate channel
-        # entry in case `default_worker_pool` already reconciled this worker.
+        # Only now is the worker schedulable. The membership check keeps a
+        # worker that reconnects under the same id out of the pool's channel
+        # twice
         lock(POOL_LOCK) do
             id in GLOBAL_WORKER_POOL.workers || push!(GLOBAL_WORKER_POOL, id)
         end
@@ -243,7 +296,7 @@ _pbs_worker_job_ids(jobname) = filter(
 """
     cancel_worker_jobs(jobname = worker_jobname())
 
-Cancel every scheduler job submitted for workers in this session with `scancel`
+Cancel all scheduler jobs submitted for workers in this session with `scancel`
 (Slurm) or `qdel` (PBS). This tears down both connected workers (by cancelling
 their allocation) and any still-pending jobs.
 
@@ -257,7 +310,7 @@ directly to tear down workers early.
 
 !!! note
     This intentionally does *not* call `rmprocs`. `add_workers` runs `addprocs`
-    on a background task that holds Distributed's global worker lock until every
+    on a background task that holds Distributed's global worker lock until all
     submitted job has connected (or been cancelled); `rmprocs` needs that same
     lock, so calling it here would deadlock whenever a job is still pending.
     Cancelling the scheduler jobs releases those workers directly.
@@ -458,19 +511,7 @@ function parse_slurm_worker_params(params::Dict)
         if string(k) == "o" || string(k) == "output"
             continue
         end
-        if length(string(k)) == 1
-            push!(worker_args, "-$k")
-            if length(v) > 0
-                push!(worker_args, v)
-            end
-        else
-            k2 = replace(string(k), "_" => "-")
-            if length(v) > 0
-                push!(worker_args, "--$k2=$v")
-            else
-                push!(worker_args, "--$k2")
-            end
-        end
+        append!(worker_args, slurm_flag_args(k, v))
     end
     return worker_args
 end
@@ -545,7 +586,7 @@ function poll_files_for_worker_startup(
                 end
             end
         end
-        # Stop once every job is accounted for (started or failed)
+        # Stop once all jobs are accounted for (started or failed)
         (length(registered) + length(failed) == ntasks) && break
         # Sleep to limit resource usage while waiting for jobs to start
         sleep(retry_delay)
@@ -649,7 +690,7 @@ function Distributed.launch(
     )
 end
 
-# Quote `s` for bash. Wrap the entire string in single quotes and replace every
+# Quote `s` for bash. Wrap the string in single quotes and replace each
 # existing single quote ' with its escaped version '\''
 shell_quote(s) = "'" * replace(string(s), "'" => "'\\''") * "'"
 
@@ -761,8 +802,14 @@ end
 """
     set_worker_logger()
 
-Loads `Logging` and sets the global logger to log to `worker_\$worker_id.log`.
-This function should be called from the worker process.
+Set the worker's global logger to write to `worker_\$worker_id.log` in its
+working directory.
+
+Call this from the worker process. [`add_workers`](@ref) does so for each
+worker it starts.
+
+# Returns
+The `SimpleLogger` that was installed.
 """
 function set_worker_logger()
     @eval Main using Logging
@@ -780,7 +827,10 @@ end
 Set the global logger to a simple file logger for the given workers.
 """
 function set_worker_loggers(workers = workers())
-    return map_remotecall_fetch(workers) do worker
+    # `workers` has to be passed as the keyword argument: as a positional
+    # argument it would become the argument forwarded to the closure, and the
+    # target list would silently fall back to all workers
+    return map_remotecall_fetch(; workers) do
         @eval Main begin
             using ClimaCalibrate
             set_worker_logger()
@@ -815,24 +865,24 @@ const DEFAULT_WALLTIME = 60
 default_cpu_kwargs(::SlurmManager) = (;
     cpus_per_task = 1,
     time = format_slurm_time(DEFAULT_WALLTIME),
-    backend_worker_kwargs(get_backend())...,
+    backend_worker_kwargs(backend_type())...,
 )
 default_cpu_kwargs(::PBSManager) = (;
     l_select = "ncpus=1",
     l_walltime = format_pbs_time(DEFAULT_WALLTIME),
-    backend_worker_kwargs(get_backend())...,
+    backend_worker_kwargs(backend_type())...,
 )
 
 default_gpu_kwargs(::SlurmManager) = (;
     gpus_per_task = 1,
     cpus_per_task = 4,
     time = format_slurm_time(DEFAULT_WALLTIME),
-    backend_worker_kwargs(get_backend())...,
+    backend_worker_kwargs(backend_type())...,
 )
 default_gpu_kwargs(::PBSManager) = (;
     l_select = "ngpus=1:ncpus=4",
     l_walltime = format_pbs_time(DEFAULT_WALLTIME),
-    backend_worker_kwargs(get_backend())...,
+    backend_worker_kwargs(backend_type())...,
 )
 
 # Resources for one allocation of `n` workers. The workers run as `n` background
@@ -852,11 +902,23 @@ backend_worker_kwargs(::Type{DerechoBackend}) =
 backend_worker_kwargs(::Type{GCPBackend}) = (; partition = "a3")
 backend_worker_kwargs(::Type{<:AbstractBackend}) = (;)
 
+"""
+    get_manager(cluster = :auto, nworkers = 1)
+
+Return the `ClusterManager` for `cluster`, which is one of `:slurm`, `:pbs`, or
+`:auto` to pick whichever scheduler's commands are on `PATH`.
+
+`:local` workers do not need a manager, so [`add_workers`](@ref) handles that
+case before calling this.
+"""
 function get_manager(cluster = :auto, nworkers = 1)
     if cluster == :slurm || (cluster == :auto && is_slurm_available())
         SlurmManager(nworkers)
     elseif cluster == :pbs || (cluster == :auto && is_pbs_available())
         PBSManager(nworkers)
+    elseif cluster == :auto
+        error("Neither Slurm nor PBS was detected on this machine. Pass \
+              `cluster = :local` to `add_workers` to start workers locally.")
     else
         error(
             "Unknown cluster type: $cluster. Valid options are :auto, :pbs, :slurm, or :local",
@@ -887,7 +949,7 @@ when the process exits (via an `atexit` hook); call [`cancel_worker_jobs`](@ref)
 to tear them down earlier.
 
 Use [`@worker_setup`](@ref) (instead of `@everywhere`) to load model code so
-that workers joining later are initialized correctly.
+that workers joining later get the same setup.
 
 # Arguments
 - `nworkers::Int`: The number of worker processes to add.
@@ -902,6 +964,25 @@ that workers joining later are initialized correctly.
   appropriately for the cluster system
 - `workers_per_node::Int = 1`: Number of workers to run per node.
 - `kwargs`: Other kwargs can be passed directly through to `addprocs`.
+
+# Returns
+A `Task` running the submission. `wait` on it to block until all workers have
+been submitted; the workers themselves join the pool as they connect.
+
+# Examples
+```julia
+# On a cluster: four GPU workers, each its own allocation
+wait(ClimaCalibrate.add_workers(4; time = 120))
+
+# Locally, for debugging
+wait(ClimaCalibrate.add_workers(2; cluster = :local))
+
+# On a cluster that charges for whole nodes, four workers per allocation
+wait(ClimaCalibrate.add_workers(8; workers_per_node = 4))
+```
+
+See also [`@worker_setup`](@ref), [`cancel_worker_jobs`](@ref),
+[`calibration_worker_pool`](@ref).
 """
 function add_workers(
     nworkers;
@@ -997,6 +1078,6 @@ end
 
 # Fallback for other manager types
 function process_time_parameter(_, time::Int, kwargs)
-    # For other manager types, just pass through the kwargs unchanged
+    # For other manager types, pass through the kwargs unchanged
     return kwargs
 end

@@ -31,16 +31,15 @@ it is guaranteed that
 6. the dimension units are the same,
 7. the dimension values are the same,
 8. the coordinates where the NaNs are dropped are the same.
+
+`FT` is the element type of the samples. Access the samples and metadata with
+`get_samples` and `get_metadata`.
 """
 struct SampleCollection{
     FT <: AbstractFloat,
     METADATA <: ClimaAnalysis.Var.Metadata,
 }
-    """A matrix of FT values where each column represents a single sample. A
-    single sample may represent multiple variables."""
     samples::Matrix{FT}
-
-    """A matrix of ClimaAnalysis.Metadata."""
     metadata::Matrix{METADATA}
 end
 
@@ -307,7 +306,7 @@ end
 Generate samples from a vector of `OutputVar`s by windowing the times of the
 `OutputVar`s in `vars` using `time_ranges`.
 
-Each sample has every `OutputVar` in `vars`, but the times are windowed
+Each sample has all `OutputVar`s in `vars`, but the times are windowed
 according to `time_ranges`. The matrix of samples has element type `FT`
 (defaults to `Float32`).
 """
@@ -325,6 +324,18 @@ function SampleBuilder.build_samples_by_times(
         time_left, time_right = time_range
         time_left <= time_right || error(
             "The starting date/time ($time_left) should be before the ending date/time ($time_right)",
+        )
+    end
+
+    # Overlapping windows share time slices, so the resulting samples are
+    # correlated. That biases the covariance the samples are usually built to
+    # estimate, and a generated list of windows gives no sign of the overlap
+    sorted_ranges = sort(collect(time_ranges); by = first)
+    for (left, right) in zip(sorted_ranges[1:(end - 1)], sorted_ranges[2:end])
+        last(left) < first(right) || @warn(
+            "Time ranges $left and $right overlap, so the samples built from \
+             them share time slices and are not independent.",
+            maxlog = 1
         )
     end
 

@@ -9,7 +9,7 @@ include(
         "utils.jl",
     ),
 )
-backend = ClimaCalibrate.get_backend()
+backend = ClimaCalibrate.backend_type()
 @assert backend <: ClimaCalibrate.HPCBackend
 directives = Dict{Symbol, Any}(:time => 5, :ntasks => 1, :cpus_per_task => 1)
 if backend == ClimaCalibrate.DerechoBackend
@@ -35,150 +35,103 @@ end
 
 interruption_model_interface, io = mktemp(@__DIR__)
 
-struct CancelModelInterface <: ClimaCalibrate.AbstractModelInterface end
+struct CancelModelInterface <: ClimaCalibrate.AbstractModelInterface
+    model_interface_filepath::String
+end
 ClimaCalibrate.forward_model(::CancelModelInterface, i, m) = m == 1 && exit()
+ClimaCalibrate.model_interface_filepath(interface::CancelModelInterface) =
+    interface.model_interface_filepath
 model_interface_str = """
 import ClimaCalibrate
-struct CancelModelInterface <: ClimaCalibrate.AbstractModelInterface end
+struct CancelModelInterface <: ClimaCalibrate.AbstractModelInterface
+    model_interface_filepath::String
+end
 ClimaCalibrate.forward_model(::CancelModelInterface, i, m) =
     m == 1 && exit()
+ClimaCalibrate.model_interface_filepath(interface::CancelModelInterface) =
+    interface.model_interface_filepath
 """
 write(io, model_interface_str)
 close(io)
 
-"""
-    make_ekp(
-    rng_seed,
-    prior,
-    ensemble_size,
-    observation,
-    variance;
-    ekp_kwargs...,
-)
+# Each phase below writes to a directory of its own, created fresh. Reusing one
+# directory meant deleting and recreating it under the jobs the previous phase
+# still had open: on a cluster filesystem a member then read `interface.jld2` as
+# missing and `eki_file.jld2` as truncated, and the `rm` itself hit ENOTEMPTY
+# against the `.nfs*` files those jobs left behind. `cleanup = false` keeps the
+# directories for the CI artifact upload
+mkpath(output_dir)
+interrupted_dir =
+    mktempdir(output_dir; prefix = "interrupted_", cleanup = false)
+hpc_dir = mktempdir(output_dir; prefix = "hpc_", cleanup = false)
+julia_dir = mktempdir(output_dir; prefix = "julia_", cleanup = false)
 
-A convenience constructor for making a `EnsembleKalmanProcess` object.
-"""
-function make_ekp(
-    rng_seed,
-    prior,
-    ensemble_size,
-    observation,
-    variance;
-    ekp_kwargs...,
-)
-    Random.seed!(rng_seed)
-    rng_ekp = Random.MersenneTwister(rng_seed)
-    eki = EKP.EnsembleKalmanProcess(
-        EKP.construct_initial_ensemble(rng_ekp, prior, ensemble_size),
-        observation,
-        variance,
-        EKP.Inversion();
-        rng = rng_ekp,
-        ekp_kwargs...,
-    )
-    return eki
-end
+eki = make_ekp(prior, observation, variance; verbose = true)
 
-rng_seed = 1234
-eki = make_ekp(
-    rng_seed,
-    prior,
-    ensemble_size,
-    observation,
-    variance;
-    verbose = true,
-)
-
-ClimaCalibrate.initialize(eki, prior, output_dir)
+ClimaCalibrate.initialize(eki, prior, interrupted_dir)
 
 backend = backend(hpc_config)
-experiment_dir = dirname(Base.active_project())
+cancel_interface = CancelModelInterface(interruption_model_interface)
 
-# run_iteration assumes this object exists
-JLD2.save_object(joinpath(output_dir, "interface.jld2"), CancelModelInterface())
 ClimaCalibrate.Calibration.run_iteration(
     backend,
+    cancel_interface,
     1,
     ensemble_size,
-    output_dir,
-    interruption_model_interface,
-    experiment_dir,
-    "",
+    interrupted_dir,
 )
 
 @testset "Test model checkpoints with interruptions" begin
     for m in 1:ensemble_size
-        @test m == 1 ? ClimaCalibrate.model_started(output_dir, 1, m) :
-              ClimaCalibrate.model_completed(output_dir, 1, m)
-        rm(ClimaCalibrate.checkpoint_path(output_dir, 1, m))
+        @test m == 1 ? ClimaCalibrate.model_started(interrupted_dir, 1, m) :
+              ClimaCalibrate.model_completed(interrupted_dir, 1, m)
+        rm(ClimaCalibrate.checkpoint_path(interrupted_dir, 1, m))
     end
 end
 
-ekp = make_ekp(
-    rng_seed,
-    prior,
-    ensemble_size,
-    observation,
-    variance;
-    localization_method = EKP.Localizers.NoLocalization(),
-    accelerator = EKP.DefaultAccelerator(),
-    scheduler = EKP.DefaultScheduler(),
-)
-backend = ClimaCalibrate.get_backend()
+ekp = make_ekp(prior, observation, variance)
+backend = ClimaCalibrate.backend_type()
 eki = ClimaCalibrate.Calibration.calibrate(
     backend(hpc_config),
     ekp,
-    SurfaceFluxModelInterface(),
+    SurfaceFluxModelInterface(hpc_dir, ensemble_size),
     n_iterations,
     prior,
-    output_dir,
+    hpc_dir,
 )
 
-@test ClimaCalibrate.last_completed_iteration(output_dir) == n_iterations
+@test ClimaCalibrate.last_completed_iteration(hpc_dir) == n_iterations
 
 @testset "Test model checkpoints for completion" begin
     for m in 1:ensemble_size
-        @test ClimaCalibrate.model_completed.(output_dir, 1, m)
+        @test ClimaCalibrate.model_completed.(hpc_dir, 1, m)
     end
 end
 
-test_sf_calibration_output(eki, prior, observation)
-
-# Remove previous output - this is not necessary but safe for tests
-rm(output_dir, recursive = true)
+test_sf_calibration_output(eki, prior, observation, variance)
 
 # Pure Julia calibration, this should run anywhere
-ekp = make_ekp(
-    rng_seed,
-    prior,
-    ensemble_size,
-    observation,
-    variance;
-    localization_method = EKP.Localizers.NoLocalization(),
-    accelerator = EKP.DefaultAccelerator(),
-    scheduler = EKP.DefaultScheduler(),
-)
+ekp = make_ekp(prior, observation, variance)
 julia_eki = ClimaCalibrate.Calibration.calibrate(
     JuliaBackend(),
     ekp,
-    SurfaceFluxModelInterface(),
+    SurfaceFluxModelInterface(julia_dir, ensemble_size),
     n_iterations,
     prior,
-    output_dir,
+    julia_dir,
 )
-test_sf_calibration_output(julia_eki, prior, observation)
+test_sf_calibration_output(julia_eki, prior, observation, variance)
 
 compare_g_ensemble(eki, julia_eki)
 
-theta_star_vec =
-    (; coefficient_a_m_businger = 4.7, coefficient_a_h_businger = 4.7)
+theta_star_vec = (; coefficient_a_m_businger = 4.7)
 
 convergence_plot(
     eki,
     prior,
     theta_star_vec,
-    ["coefficient_a_m_businger", "coefficient_a_h_businger"],
-    output_dir,
+    ["coefficient_a_m_businger"],
+    hpc_dir,
 )
 
-g_vs_iter_plot(eki, output_dir)
+g_vs_iter_plot(eki, hpc_dir)
