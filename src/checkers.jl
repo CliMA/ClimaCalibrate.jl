@@ -1,7 +1,21 @@
+"""
+    ClimaCalibrate.Checker
+
+The validation checks that [`ClimaCalibrate.EnsembleBuilder`](@ref) runs when
+matching model output against an observation.
+
+Each checker answers one question about an `OutputVar` and the `Metadata` it is
+being matched to: do the short names agree, the units, the dimension names,
+their units, their values. `GEnsembleBuilder` runs a default set of them; pass
+others with the `checkers` keyword argument, or define your own by subtyping
+`AbstractChecker` and implementing [`check`](@ref).
+
+Requires ClimaAnalysis and NaNStatistics to be loaded.
+"""
 module Checker
 
 """
-    abstract type AbstractChecker end
+    AbstractChecker
 
 An object that performs validation checks between the simulation data and
 metadata from observational data. This is used by `GEnsembleBuilder` to validate
@@ -22,6 +36,15 @@ Checker.check(::YourChecker,
 ```
 
 and return `true` or `false`.
+
+Subtypes:
+- [`ShortNameChecker`](@ref): the short names agree.
+- [`DimNameChecker`](@ref): the dimension names agree.
+- [`DimUnitsChecker`](@ref): the dimension units agree.
+- [`UnitsChecker`](@ref): the units agree.
+- [`DimValuesChecker`](@ref): the dimension values agree.
+- [`SequentialIndicesChecker`](@ref): the matched dates are sequential.
+- [`SignChecker`](@ref): the proportion of positive values agrees.
 
 !!! note "What is var and metadata?"
 
@@ -115,7 +138,13 @@ function check(
     data = nothing,
     verbose = false,
 )
-    error("Not yet implemented!")
+    error("No `Checker.check` method for $(nameof(typeof(checker))). The \
+          checkers that ship with ClimaCalibrate live in a package extension, \
+          so load ClimaAnalysis and NaNStatistics first: \
+          `import ClimaAnalysis, NaNStatistics`. If \
+          $(nameof(typeof(checker))) is your own checker, define \
+          `ClimaCalibrate.Checker.check(::$(nameof(typeof(checker))), var, \
+          metadata; data, verbose)`.")
 end
 
 end

@@ -85,7 +85,41 @@ function ObservationRecipe.covariance(
             min_cosd_lat = covar_estimator.min_cosd_lat,
         )
     end
+    _check_diagonal(diag_cov, _metadata_of_first_sample(sample_collection))
     return Diagonal(diag_cov)
+end
+
+"""
+    _check_diagonal(diag_cov, all_metadata)
+
+Error if any diagonal entry of a covariance matrix is zero, negative, or `NaN`.
+
+EKP inverts this matrix, so a degenerate entry surfaces much later as a linear
+algebra failure with no indication of which observation caused it. A zero
+variance means an entry does not vary across the samples at all (a constant
+field, or a single distinct value); a `NaN` means every sample was `NaN` there.
+Both usually come from a preprocessing mistake. When they do not,
+`regularization` or `model_error_scale` fixes them.
+"""
+function _short_name_of_entry(index, all_metadata)
+    ranges = _get_indices_of_metadata(all_metadata)
+    i = findfirst(r -> index in r, ranges)
+    return isnothing(i) ? nothing : ClimaAnalysis.short_name(all_metadata[i])
+end
+
+function _check_diagonal(diag_cov, all_metadata)
+    bad = findall(v -> !isfinite(v) || v <= 0, diag_cov)
+    isempty(bad) && return nothing
+
+    culprit = _short_name_of_entry(first(bad), all_metadata)
+    error(
+        "The estimated covariance has $(length(bad)) non-positive or NaN \
+        diagonal entries, the first at index $(first(bad))\
+        $(isnothing(culprit) ? "" : " (short name $culprit)"). A zero variance \
+        means that entry does not vary across the samples, and a NaN means \
+        every sample was NaN there. Check the preprocessing, or add \
+        `regularization` or `model_error_scale` to the covariance estimator.",
+    )
 end
 
 """
@@ -154,6 +188,18 @@ function _check_metadata_represent_seasons(metadata_mat)
                 "There are more than 4 combinations of season and year identified for a single variable",
             )
 
+            # A window shorter than a year covers fewer than four seasons.
+            # That is allowed, since calibrating against DJF and JJA alone is a
+            # valid choice, but the variance is then estimated for those
+            # seasons only
+            length(season_and_year_vec) < 4 && @warn(
+                "Each sample covers $(length(season_and_year_vec)) season(s) \
+                 ($(join(first.(season_and_year_vec), ", "))) rather than a \
+                 full year. The covariance is estimated for those seasons \
+                 only.",
+                maxlog = 1
+            )
+
             # The limitation of this is that we specify what constitutes a year
             # worth of seasons
             allequal(last.(season_and_year_vec)) ||
@@ -185,6 +231,13 @@ function ObservationRecipe.covariance(
 )
     stacked_sample_matrix = copy(get_samples(sample_collection))
     metadata = _metadata_of_first_sample(sample_collection)
+
+    n_samples = size(stacked_sample_matrix, 2)
+    n_samples >= 2 || error(
+        "SVDplusDCovariance needs at least 2 samples to estimate a covariance; \
+        got $n_samples. Window the time series into more samples with \
+        `SampleBuilder.build_samples_by_times`.",
+    )
 
     # Apply latitude weights first so that both the SVD and the model error
     # scale (the mean) are computed from the weighted matrix.
@@ -231,7 +284,40 @@ function ObservationRecipe.covariance(
         model_error_scale,
     )
 
-    return EKP.SVDplusD(gamma_low_rank, model_error_scale + regularization)
+    d_term = model_error_scale + regularization
+    _check_d_term(d_term.diag, metadata, n_samples)
+    return EKP.SVDplusD(gamma_low_rank, d_term)
+end
+
+"""
+    _check_d_term(d_diag, all_metadata, n_samples)
+
+Warn if the D term of an `SVDplusD` covariance has entries that are zero or not
+finite while the SVD term is rank deficient, which leaves the sum singular.
+
+The sample covariance of `n` samples has rank at most `n - 1`, so with no more
+samples than observation entries the SVD term is singular on its own and the D
+term is what makes the sum invertible. D is
+`(model_error_scale * mean)^2 + regularization`, so it is zero wherever the
+sample mean is zero and `regularization` is zero, and zero everywhere when both
+are zero.
+"""
+function _check_d_term(d_diag, all_metadata, n_samples)
+    n_samples <= length(d_diag) || return nothing
+
+    bad = findall(v -> !isfinite(v) || v <= 0, d_diag)
+    isempty(bad) && return nothing
+
+    culprit = _short_name_of_entry(first(bad), all_metadata)
+    @warn "The D term of this SVDplusDCovariance has $(length(bad)) zero or \
+           NaN diagonal entries, the first at index $(first(bad))\
+           $(isnothing(culprit) ? "" : " (short name $culprit)"). With \
+           $n_samples samples for $(length(d_diag)) observation entries the \
+           SVD term is rank deficient, so EKP will not be able to invert the \
+           covariance. Set `model_error_scale` or `regularization` to a \
+           positive value; `model_error_scale` alone leaves a zero wherever \
+           the sample mean is zero." maxlog = 1
+    return nothing
 end
 
 """
@@ -285,13 +371,20 @@ function create_regularization(
     regularization_vals_vec = []
     for (i, indices) in enumerate(indices_vec)
         var_model_error_scale_vec = view(model_error_scale_vec, indices)
-        # Check that there is a sufficient number of samples (e.g. if qtl =
-        # 0.05, there should be at least 20 samples for a meaningful
-        # quantile computation)
-        length(var_model_error_scale_vec) < 1 / qtl &&
-            error("Insufficient samples for computing quantile")
+        # The quantile is taken over the variable's flattened entries, so the
+        # variable needs at least 1/qtl of them for the result to mean anything
+        # (with qtl = 0.05, at least 20 entries)
+        length(var_model_error_scale_vec) < 1 / qtl && error(
+            "QuantileRegularization with qtl = $qtl needs a variable with at \
+            least $(ceil(Int, 1 / qtl)) entries to take a meaningful quantile, \
+            but variable $i has only $(length(var_model_error_scale_vec)). Use \
+            a larger `qtl` or a scalar `regularization`.",
+        )
         qtl_for_var = FT(Statistics.quantile(var_model_error_scale_vec, qtl))
-        qtl_for_var ≈ 0.0 && error(
+        # A tolerance here is an absolute threshold on a squared quantity, and
+        # with the Float32 samples that `build_samples` produces by default it
+        # rejects the small values that a variable in SI units can have
+        iszero(qtl_for_var) && error(
             "Zero found for the quantile ($qtl) of the model error scale for the variable ($(ClimaAnalysis.short_name(metadata[i]))). The model error scale ($(covar_estimator.model_error_scale)) might be too small",
         )
         push!(regularization_vals_vec, qtl_for_var)
@@ -341,21 +434,27 @@ end
         sample_collection::SampleCollection,
         i::Integer;
         name = nothing,
+        covariance = nothing,
     )
 
 Return an `EKP.Observation` with the `i`th sample of `sample_collection` as the
 observation, a covariance matrix defined by `covar_estimator`, `name`
 determined from the short names of the observation, and metadata.
 
-!!! note "Metadata"
-    Metadata in `EKP.observation` is only added with versions of
-    EnsembleKalmanProcesses later than v2.4.2.
+The covariance is the same for every sample in a collection, so pass a
+precomputed one as `covariance` when building several observations from one
+collection.
+
+The metadata is what lets `GEnsembleBuilder` line the model output up with the
+observation, and what `reconstruct_vars` and `reconstruct_g` use to turn the
+flattened vectors back into `OutputVar`s.
 """
 function ObservationRecipe.observation(
     covar_estimator::AbstractCovarianceEstimator,
     sample_collection::SampleCollection,
     i::Integer;
     name = nothing,
+    covariance = nothing,
 )
     total_samples = num_samples(sample_collection)
     1 <= i <= total_samples || error(
@@ -368,7 +467,20 @@ function ObservationRecipe.observation(
         "There are OutputVar(s) with no short name. You will not be able to use GEnsembleBuilder"
     )
 
-    covar = ObservationRecipe.covariance(covar_estimator, sample_collection)
+    # The covariance does not depend on which sample is the observation, so
+    # building a series of observations from one collection can estimate it once
+    # and pass it in rather than repeating the SVD for every sample
+    covar = if isnothing(covariance)
+        ObservationRecipe.covariance(covar_estimator, sample_collection)
+    else
+        size(covariance, 1) == length(stacked_sample) || error(
+            "The covariance is $(size(covariance, 1))x$(size(covariance, 2)), \
+            but the sample has $(length(stacked_sample)) entries. EKP checks \
+            neither, so a covariance from a different collection surfaces \
+            later as a dimension mismatch inside EKP.",
+        )
+        covariance
+    end
 
     # Concatenate names and separating them with a semicolon
     isnothing(name) &&
