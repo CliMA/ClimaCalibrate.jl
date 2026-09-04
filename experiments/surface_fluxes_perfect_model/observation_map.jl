@@ -1,5 +1,4 @@
 using Statistics
-import YAML
 import JLD2
 import ClimaCalibrate: observation_map, path_to_ensemble_member
 

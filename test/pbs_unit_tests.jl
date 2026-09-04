@@ -3,14 +3,15 @@ using Test
 import ClimaCalibrate
 
 @testset "Submit PBS job" begin
-    backend_type = ClimaCalibrate.get_backend()
-    if !(backend_type <: ClimaCalibrate.DerechoBackend)
-        @info "Backend identified is $backend_type which is not a DerechoBackend. Skipping submitting a PBS job"
+    cluster_backend = ClimaCalibrate.backend_type()
+    if !(cluster_backend <: ClimaCalibrate.DerechoBackend)
+        @info "Backend identified is $cluster_backend, which is not a \
+               DerechoBackend. Skipping submitting a PBS job"
         return
     end
 
     # Need the backend to submit the job
-    backend = backend_type(; directives = [:time => 1])
+    backend = cluster_backend(; directives = [:time => 1])
 
     job_script = """
     #!/bin/bash
@@ -40,8 +41,21 @@ import ClimaCalibrate
         # qstat, so we need to wait longer
         # If the test is flaky, increase the time to wait for
         wait_for(job, 180)
-        @test ClimaCalibrate.job_status(job) == ClimaCalibrate.Backend.COMPLETED
+        # Whether PBS records a qdel'd job with the error substate depends on
+        # how far it got, so only assert that it is no longer pending or running
         @test ClimaCalibrate.iscompleted(job)
+    end
+
+    @testset "A PBS job that fails is reported as failed" begin
+        failing_script = """
+        #!/bin/bash
+        #PBS -l walltime=00:01:00
+        exit 1
+        """
+        job = ClimaCalibrate.submit_job(backend, failing_script)
+        wait_for(job, 240)
+        @test ClimaCalibrate.isfailed(job)
+        @test !ClimaCalibrate.issuccess(job)
     end
 
     @testset "Submit multiple PBS jobs and cancel them" begin

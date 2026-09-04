@@ -9,7 +9,7 @@ include(
         "utils.jl",
     ),
 )
-backend = ClimaCalibrate.get_backend()
+backend = ClimaCalibrate.backend_type()
 @assert backend <: ClimaCalibrate.HPCBackend
 directives = Dict{Symbol, Any}(:time => 5, :ntasks => 1, :cpus_per_task => 1)
 if backend == ClimaCalibrate.DerechoBackend
@@ -35,13 +35,21 @@ end
 
 interruption_model_interface, io = mktemp(@__DIR__)
 
-struct CancelModelInterface <: ClimaCalibrate.AbstractModelInterface end
+struct CancelModelInterface <: ClimaCalibrate.AbstractModelInterface
+    model_interface_filepath::String
+end
 ClimaCalibrate.forward_model(::CancelModelInterface, i, m) = m == 1 && exit()
+ClimaCalibrate.model_interface_filepath(interface::CancelModelInterface) =
+    interface.model_interface_filepath
 model_interface_str = """
 import ClimaCalibrate
-struct CancelModelInterface <: ClimaCalibrate.AbstractModelInterface end
+struct CancelModelInterface <: ClimaCalibrate.AbstractModelInterface
+    model_interface_filepath::String
+end
 ClimaCalibrate.forward_model(::CancelModelInterface, i, m) =
     m == 1 && exit()
+ClimaCalibrate.model_interface_filepath(interface::CancelModelInterface) =
+    interface.model_interface_filepath
 """
 write(io, model_interface_str)
 close(io)
@@ -92,18 +100,16 @@ eki = make_ekp(
 ClimaCalibrate.initialize(eki, prior, output_dir)
 
 backend = backend(hpc_config)
-experiment_dir = dirname(Base.active_project())
+cancel_interface = CancelModelInterface(interruption_model_interface)
 
-# run_iteration assumes this object exists
-JLD2.save_object(joinpath(output_dir, "interface.jld2"), CancelModelInterface())
+# The job script each member runs loads the interface from here
+JLD2.save_object(joinpath(output_dir, "interface.jld2"), cancel_interface)
 ClimaCalibrate.Calibration.run_iteration(
     backend,
+    cancel_interface,
     1,
     ensemble_size,
     output_dir,
-    interruption_model_interface,
-    experiment_dir,
-    "",
 )
 
 @testset "Test model checkpoints with interruptions" begin
@@ -113,6 +119,11 @@ ClimaCalibrate.Calibration.run_iteration(
         rm(ClimaCalibrate.checkpoint_path(output_dir, 1, m))
     end
 end
+
+# The interrupted iteration above wrote a first iteration of its own, and
+# `initialize` keeps the stored one. This calibration is compared against a
+# `JuliaBackend` run below, so it starts from a directory of its own
+rm(output_dir, recursive = true)
 
 ekp = make_ekp(
     rng_seed,
@@ -124,7 +135,7 @@ ekp = make_ekp(
     accelerator = EKP.DefaultAccelerator(),
     scheduler = EKP.DefaultScheduler(),
 )
-backend = ClimaCalibrate.get_backend()
+backend = ClimaCalibrate.backend_type()
 eki = ClimaCalibrate.Calibration.calibrate(
     backend(hpc_config),
     ekp,

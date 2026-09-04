@@ -17,7 +17,7 @@ nprocs = 3
 # adds itself to the global pool once started. The calibration begins with an
 # empty pool and picks up workers as they join
 if nworkers() == 1
-    if ClimaCalibrate.get_backend() == ClimaCalibrate.DerechoBackend
+    if ClimaCalibrate.backend_type() == ClimaCalibrate.DerechoBackend
         ClimaCalibrate.add_workers(
             nprocs;
             cluster = :pbs,
@@ -60,9 +60,14 @@ ClimaCalibrate.Calibration.run_iteration(
     output_dir,
 )
 
+# Member 1 exits, which takes down the worker running it along with the other
+# members that worker had in flight. How many that is depends on the machine, so
+# the test is that each member is left with a checkpoint a restart can read, and
+# that the member which exited is not marked complete.
 @testset "Test model checkpoints with interruptions" begin
+    @test ClimaCalibrate.model_started(output_dir, 1, 1)
     for m in 1:ensemble_size
-        @test m == 1 ? ClimaCalibrate.model_started(output_dir, 1, m) :
+        @test ClimaCalibrate.model_started(output_dir, 1, m) ||
               ClimaCalibrate.model_completed(output_dir, 1, m)
         rm(ClimaCalibrate.checkpoint_path(output_dir, 1, m))
     end
@@ -76,6 +81,11 @@ ClimaCalibrate.@worker_setup include(
         "model_interface.jl",
     ),
 )
+
+# The interrupted iteration above wrote a first iteration of its own, and
+# `initialize` keeps the stored one. The calibration below is checked against
+# the ensemble it is given, so it starts from a directory of its own
+rm(output_dir, recursive = true)
 
 rng_seed = 1234
 Random.seed!(rng_seed)
