@@ -87,24 +87,18 @@ ClimaCalibrate.@worker_setup include(
 # the ensemble it is given, so it starts from a directory of its own
 rm(output_dir, recursive = true)
 
-rng_seed = 1234
-Random.seed!(rng_seed)
-rng_ekp = Random.MersenneTwister(rng_seed)
-user_initial_ensemble = EKP.construct_initial_ensemble(prior, ensemble_size)
 ekp = EKP.EnsembleKalmanProcess(
-    user_initial_ensemble,
     observation,
     variance,
-    EKP.Inversion();
-    rng = rng_ekp,
-    localization_method = EKP.Localizers.NoLocalization(),
-    accelerator = EKP.DefaultAccelerator(),
+    EKP.Unscented(prior);
+    # `Unscented` defaults to a scheduler that stops once the misfit target is
+    # reached, which would end the run before `n_iterations`
     scheduler = EKP.DefaultScheduler(),
 )
 eki = ClimaCalibrate.Calibration.calibrate(
     ClimaCalibrate.WorkerBackend(),
     ekp,
-    SurfaceFluxModelInterface(),
+    SurfaceFluxModelInterface(output_dir, ensemble_size),
     n_iterations,
     prior,
     output_dir,
@@ -114,14 +108,13 @@ eki = ClimaCalibrate.Calibration.calibrate(
 
 test_sf_calibration_output(eki, prior, observation)
 
-theta_star_vec =
-    (; coefficient_a_m_businger = 4.7, coefficient_a_h_businger = 4.7)
+theta_star_vec = (; coefficient_a_m_businger = 4.7)
 
 convergence_plot(
     eki,
     prior,
     theta_star_vec,
-    ["coefficient_a_m_businger", "coefficient_a_h_businger"],
+    ["coefficient_a_m_businger"],
     output_dir,
 )
 
@@ -132,13 +125,13 @@ g_vs_iter_plot(eki, output_dir)
     @test last_iter == n_iterations
     ClimaCalibrate.Calibration.run_iteration(
         ClimaCalibrate.WorkerBackend(),
-        SurfaceFluxModelInterface(),
+        SurfaceFluxModelInterface(output_dir, ensemble_size),
         last_iter + 1,
         ensemble_size,
         output_dir,
     )
     G_ensemble = ClimaCalibrate.observation_map(
-        SurfaceFluxModelInterface(),
+        SurfaceFluxModelInterface(output_dir, ensemble_size),
         last_iter + 1,
     )
     ClimaCalibrate.save_G_ensemble(output_dir, last_iter + 1, G_ensemble)

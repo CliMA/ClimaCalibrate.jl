@@ -358,22 +358,38 @@ The [Calibration Tutorial](literate_example.md) is a complete example that runs
 locally, and shows the changes needed to run the ensemble on
 [`WorkerBackend`](@ref) workers.
 
-Another example experiment can be found in the package repo under
-`experiments/surface_fluxes_perfect_model`.
-This experiment uses the
-[SurfaceFluxes.jl](https://github.com/CliMA/SurfaceFluxes.jl) package to
-generate a physical model that calculates the Monin Obukhov turbulent surface
-fluxes based on idealized atmospheric and surface conditions. Since this is a
-"perfect model" example, the same model is used to generate synthetic
-observations using its default parameters and a small amount of noise. These
-synthetic observations are considered to be the ground truth, which is used to
-assess the model ensembles' performance when parameters are drawn from the prior
-parameter distributions.
+Another example experiment lives in the package repo under
+`experiments/surface_fluxes_perfect_model`. It uses the
+[SurfaceFluxes.jl](https://github.com/CliMA/SurfaceFluxes.jl) package to compute
+the Monin-Obukhov turbulent surface fluxes for a set of idealized profiles, and
+calibrates one Businger coefficient, `coefficient_a_m_businger`, against the
+profile-averaged friction velocity.
 
-It is a perfect-model calibration, using its own output as observational data.
-By default, it runs 20 ensemble members for 6 iterations. This example can be
-run on the most common backend, the [`JuliaBackend`](@ref), with the following
-script:
+The observation comes from the same model run with its default parameters, which
+is what makes it a perfect-model calibration. It carries a 2% error, and the
+calibration is given that error as its noise covariance. The prior is centered
+at 3.5, while the observation was generated with 4.7, so the ensemble starts
+somewhere it has to travel from.
+
+One observable constrains one parameter. `coefficient_a_h_businger` moves the
+friction velocity in almost the same direction as `coefficient_a_m_businger`, so
+a single number cannot tell the two apart, and calibrating both would leave the
+ensemble free to slide along that ridge. Separating them takes a second
+observable that responds to the heat flux.
+
+It calibrates with
+[unscented Kalman inversion](https://clima.github.io/EnsembleKalmanProcesses.jl/dev/unscented_kalman_inversion/),
+which places its members on a quadrature stencil around the current mean rather
+than drawing them at random. One parameter therefore needs three members, and
+the whole calibration costs 30 forward model runs over its 10 iterations. The
+error falls from 40 to 0.8, and the mean parameter climbs from 3.5 to within 0.2
+of the 4.7 the observation was generated with. An unscented ensemble does not
+collapse: the stencil narrows onto the posterior covariance and holds there,
+still spanning 4.7, which is the statement of how well one noisy observation
+pins the parameter down.
+
+This example runs on the most common backend, the [`JuliaBackend`](@ref), with
+the following script:
 
 ```julia
 import ClimaCalibrate
@@ -382,46 +398,45 @@ import EnsembleKalmanProcesses as EKP
 include(joinpath(pkgdir(ClimaCalibrate), "experiments", "surface_fluxes_perfect_model", "utils.jl"))
 @show ensemble_size n_iterations observation variance prior
 
-# Construct the initial ensemble and EKP object
-initial_ensemble = EKP.construct_initial_ensemble(prior, ensemble_size)
-ekp = EKP.EnsembleKalmanProcess(
-    initial_ensemble,
-    observation,
-    variance,
-    EKP.Inversion(),
-    EKP.default_options_dict(EKP.Inversion()),
-)
+# Unscented Kalman inversion places its members on a quadrature stencil, so it
+# builds its own ensemble from the prior
+ekp = EKP.EnsembleKalmanProcess(observation, variance, EKP.Unscented(prior))
 
 output_dir = "my_experiment"
 mkpath(output_dir)
 eki = ClimaCalibrate.calibrate(
     JuliaBackend(),
     ekp,
-    SurfaceFluxModelInterface(),
+    SurfaceFluxModelInterface(output_dir, ensemble_size),
     n_iterations,
     prior,
     output_dir,
 )
 
-theta_star_vec =
-    (; coefficient_a_m_businger = 4.7, coefficient_a_h_businger = 4.7)
+theta_star_vec = (; coefficient_a_m_businger = 4.7)
 
 convergence_plot(
     eki,
     prior,
     theta_star_vec,
-    ["coefficient_a_m_businger", "coefficient_a_h_businger"],
+    ["coefficient_a_m_businger"],
     output_dir,
 )
 
 g_vs_iter_plot(eki, output_dir)
 ```
 
-`convergence_plot` shows each parameter converging on the value that generated
-the synthetic observations, with the ensemble spread contracting around it:
+`convergence_plot` shows the error, the spread, and the three members of the
+stencil in unconstrained and constrained space. The dashed line marks the 4.7
+the observation was generated with, which the stencil still spans at the end.
+Both figures are generated when these docs are built, so they show what the
+code on this page does:
 
 ![Convergence of coefficient_a_m_businger](assets/sf_convergence_coefficient_a_m_businger.png)
 
-`g_vs_iter_plot` shows the forward map evaluations approaching the observation:
+`g_vs_iter_plot` shows what each member's forward model returns. The red line is
+the observation the calibration fits, and the blue line is what the model
+returns at the parameter the observation was generated with. The gap between
+them is the 2% error the observation carries:
 
 ![Forward map evaluations by iteration](assets/sf_scatter_iter.png)

@@ -15,6 +15,8 @@ Literate.markdown(
     joinpath(@__DIR__, "src"),
 )
 
+include(joinpath(@__DIR__, "surface_fluxes_figures.jl"))
+
 ClimaCalibrateClimaAnalysisExt =
     Base.get_extension(ClimaCalibrate, :ClimaCalibrateClimaAnalysisExt)
 makedocs(

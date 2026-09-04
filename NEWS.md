@@ -223,6 +223,24 @@ main
   `ext/`. `test_undocumented_names` and `test_persistent_tasks` are now run too.
 - The end-to-end and initialization tests pass an `rng` to
   `EnsembleKalmanProcess` and check reproducibility and convergence directly.
+- The surface-fluxes example calibrates `coefficient_a_m_businger` alone with
+  unscented Kalman inversion, against a synthetic observation that carries a 2%
+  error, from a prior centered on 3.5 while the observation was generated with
+  4.7. One parameter takes a stencil of three members, so the calibration costs
+  30 forward model runs over 10 iterations, which the docs build runs to
+  generate the two figures on the quickstart page.
+- The experiment runs on SurfaceFluxes v1.2, which replaced the thermodynamic
+  state objects its forward model was built on with a call that takes the state
+  variables. The docs environment pins the same version. It also calibrated
+  `coefficient_a_h_businger`, which moves the profile-averaged `ustar` in almost
+  the same direction, so one observable left the pair unidentified and the
+  ensemble free to slide along a ridge. The observation carried no error at all:
+  the argument that adds it defaults to `false` and was never passed, and what
+  the calibration was given as its noise covariance was the variance of `ustar`
+  across profiles that are all the same case.
+- `SurfaceFluxModelInterface` holds the output directory and the ensemble size.
+  The forward model read a hardcoded path, so the script in the quickstart
+  failed for any other `output_dir`.
 - `test/visualization.jl` now checks that each recipe plots the data it was
   asked for.
 - The docs build now loads both trigger packages for the ClimaAnalysis
