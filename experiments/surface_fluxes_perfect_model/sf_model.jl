@@ -3,121 +3,101 @@ import SurfaceFluxes as SF
 import SurfaceFluxes.UniversalFunctions as UF
 import SurfaceFluxes.Parameters as SFPP
 import ClimaParams as CP
-import Thermodynamics as TD
-import RootSolvers as RS
 import JLD2
-using LinearAlgebra: I
+import Random
 
 """
-    generate_G_preliminaries()
+    generate_G_preliminaries(FT)
 
-Generate the necessary (stationary) inputs, that are passed to the surface fluxes model.
-These could be initial conditions, boundary conditions and stationary parameters for time-dependent model.
+Return the settings the surface fluxes model needs beyond the calibrated
+parameters: the roughness lengths, the gustiness, and the discretization.
 
+The roughness lengths are held fixed at 1e-2 m, since this experiment
+calibrates the Businger coefficients rather than the surface.
 """
 function generate_G_preliminaries(FT)
-    uf_params = UF.BusingerParams
-    scheme = SF.LayerAverageScheme()
-    # we are not calibrating the roughness lengths (z0) here, so we set them to a constant value
-    z0_momentum = Array{FT}([1e-2])
-    z0_thermal = Array{FT}([1e-2])
-    maxiter = 10
-    param_set = SFPP.SurfaceFluxesParameters(FT, UF.BusingerParams)
-    tol_neutral = FT(SF.Parameters.cp_d(param_set) / 10)
-    gryanik_noniterative = false
-    return (
-        uf_params = uf_params,
-        scheme = scheme,
-        z0_momentum = z0_momentum,
-        z0_thermal = z0_thermal,
-        maxiter = maxiter,
-        tol_neutral = tol_neutral,
-        gryanik_noniterative = gryanik_noniterative,
+    config = SF.SurfaceFluxConfig(
+        SF.ConstantRoughnessParams{FT}(z0m = FT(1e-2), z0s = FT(1e-2)),
+        SF.ConstantGustinessSpec(FT(1)),
     )
+    return (; config, scheme = SF.LayerAverageScheme())
 end
 
 """
-    assemble_surface_conditions(thermo_params, prof_int, prof_sfc, z0m, z0b)
+    MODEL_ERROR_FRACTION
 
-Prepare the surface state structs for the surface fluxes model.
+The standard deviation of the model error, as a fraction of `ustar`.
+
+A climate model reports a statistic of a chaotic trajectory, so two runs of the
+same configuration return different numbers, and the loss the calibration sees
+is rough rather than smooth. This idealized model is deterministic, so it stands
+in for that with an error drawn per set of parameters. Drawing it from the
+parameters rather than from a fresh seed is what keeps a calibration
+reproducible: two backends running the same member get the same number.
 """
-function assemble_surface_conditions(
-    thermo_params,
-    prof_int,
-    prof_sfc,
-    z0m,
-    z0b,
+const MODEL_ERROR_FRACTION = 0.02
+
+"""
+    obtain_ustar(FT, x_inputs, model_config; return_ustar = false, model_error = true)
+
+Obtain the friction velocity, ustar, of each profile from the surface fluxes
+model, and write it to `model_config["output_dir"]`.
+
+`model_config["toml"]` holds the parameter files that set the Businger
+coefficients, which is how the calibration passes an ensemble member its
+parameters. `model_error` adds [`MODEL_ERROR_FRACTION`](@ref); the observation
+is generated without it, so that the misfit at the true parameters is the
+observation error and the model error together, which is what the calibration
+is given as its noise covariance.
+"""
+function obtain_ustar(
+    FT,
+    x_inputs,
+    model_config;
+    return_ustar = false,
+    model_error = true,
 )
-    ts_sfc =
-        TD.PhaseEquil_ρTq(thermo_params, prof_sfc.ρ, prof_sfc.T, prof_sfc.q)
-    ts_int =
-        TD.PhaseEquil_ρTq(thermo_params, prof_int.ρ, prof_int.T, prof_int.q)
-
-    state_in = SF.StateValues(prof_int.z, (prof_int.u, prof_int.v), ts_int)
-    state_sfc = SF.StateValues(prof_sfc.z, (prof_sfc.u, prof_sfc.v), ts_sfc)
-    return SF.ValuesOnly(state_in, state_sfc, z0m, z0b)
-end
-
-"""
-    obtain_ustar(FT, x_inputs, model_config; return_ustar = false)
-
-Obtain the frictional velocity, ustar, from the surface fluxes model.
-"""
-function obtain_ustar(FT, x_inputs, model_config; return_ustar = false)
-
-    # dict containing theta
     toml_dict = CP.create_toml_dict(
         FT;
         override_file = CP.merge_toml_files(model_config["toml"]),
     )
-
-    # extract model inputs, x
-    (; profiles_sfc, profiles_int) = x_inputs
-
-    # generate stationary model parameters
-    (;
-        scheme,
-        z0_momentum,
-        z0_thermal,
-        maxiter,
-        tol_neutral,
-        gryanik_noniterative,
-    ) = generate_G_preliminaries(FT)
-
-    sch = scheme
     param_set = SFPP.SurfaceFluxesParameters(toml_dict, UF.BusingerParams)
-    ustar_array = Array{FT}(
-        undef,
-        length(profiles_int),
-        length(z0_momentum),
-        length(z0_thermal),
-    )
+    (; config, scheme) = generate_G_preliminaries(FT)
+
+    (; profiles_sfc, profiles_int) = x_inputs
+    ustar_array = Array{FT}(undef, length(profiles_int))
     @inbounds for (ii, prof_int) in enumerate(profiles_int)
         prof_sfc = profiles_sfc[ii]
-        @inbounds for (kk, z0m) in enumerate(z0_momentum)
-            @inbounds for (ll, z0b) in enumerate(z0_thermal)
-                sc_states = assemble_surface_conditions(
-                    param_set.thermo_params,
-                    prof_int,
-                    prof_sfc,
-                    z0m,
-                    z0b,
-                )
-                sc = SF.surface_conditions(
-                    param_set,
-                    sc_states,
-                    sch;
-                    maxiter,
-                    tol_neutral,
-                    soltype = RS.VerboseSolution(),
-                    noniterative_stable_sol = gryanik_noniterative,
-                )
-
-                ustar_array[ii, kk, ll] = sc.ustar
-            end
-        end
+        # The surface temperature and humidity are prescribed, so they are
+        # passed as the initial guess with no callback to update them
+        conditions = SF.surface_fluxes(
+            param_set,
+            prof_int.T,
+            prof_int.q,
+            FT(0),
+            FT(0),
+            prof_int.ρ,
+            prof_sfc.T,
+            prof_sfc.q,
+            FT(0),
+            prof_int.z - prof_sfc.z,
+            FT(0),
+            (prof_int.u, prof_int.v),
+            (prof_sfc.u, prof_sfc.v),
+            nothing,
+            config,
+            scheme,
+        )
+        ustar_array[ii] = conditions.ustar
     end
-    # save ustar_array to file
+
+    # One draw for the whole profile set, since it stands in for the error of a
+    # single model run rather than for scatter between profiles
+    if model_error
+        rng = Random.MersenneTwister(hash(param_set.ufp.a_m))
+        ustar_array .*= 1 + FT(MODEL_ERROR_FRACTION) * randn(rng, FT)
+    end
+
     JLD2.save_object(
         joinpath(model_config["output_dir"], "model_ustar_array.jld2"),
         ustar_array,

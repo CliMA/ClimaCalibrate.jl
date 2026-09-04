@@ -1,3 +1,21 @@
+"""
+    ClimaCalibrate.ObservationRecipe
+
+Estimate a noise covariance from a `SampleCollection` and build an
+`EKP.Observation` from it.
+
+Three estimators are available: [`ScalarCovariance`](@ref) for a multiple of the
+identity, [`SeasonalDiagonalCovariance`](@ref) for the per-season variance
+across years, and [`SVDplusDCovariance`](@ref) for a low-rank sample
+covariance plus a diagonal term. All of them take samples built by
+[`ClimaCalibrate.SampleBuilder`](@ref).
+
+Also reconstructs the flattened vectors back into `OutputVar`s
+([`reconstruct_vars`](@ref), [`reconstruct_g`](@ref)), so a calibration's
+observations and forward map output can be inspected.
+
+Requires ClimaAnalysis and NaNStatistics to be loaded.
+"""
 module ObservationRecipe
 
 export ScalarCovariance,
@@ -15,7 +33,7 @@ export ScalarCovariance,
     reconstruct_vars
 
 """
-    abstract type AbstractCovarianceEstimator end
+    AbstractCovarianceEstimator
 
 An object that estimates the noise covariance matrix from the samples in a
 `SampleCollection`.
@@ -35,23 +53,31 @@ ObservationRecipe.covariance(
 and return a noise covariance matrix. The `SampleCollection` carries the matrix
 of flattened samples and their metadata. The covariance matrix does not depend
 on which sample is chosen as the observation.
+
+Subtypes:
+- [`ScalarCovariance`](@ref): a multiple of the identity.
+- [`SeasonalDiagonalCovariance`](@ref): the per-season variance across samples.
+- [`SVDplusDCovariance`](@ref): a low-rank sample covariance plus a diagonal
+  term.
 """
 abstract type AbstractCovarianceEstimator end
 
 """
     ScalarCovariance <: AbstractCovarianceEstimator
 
-Contain the necessary information to construct the scalar covariance matrix.
+Covariance estimator that returns a multiple of the identity.
+
+`FT1` and `FT2` are the element types of `scalar` and `min_cosd_lat`.
+
+# Fields
+- `scalar`: Scalar to multiply the identity matrix by.
+- `use_latitude_weights`: Whether to apply latitude weighting.
+- `min_cosd_lat`: The minimum cosine weight when using latitude weighting `[-]`.
 """
 struct ScalarCovariance{FT1 <: AbstractFloat, FT2 <: AbstractFloat} <:
        AbstractCovarianceEstimator
-    """Scalar to multiply the identity matrix by"""
     scalar::FT1
-
-    """Use latitude weights"""
     use_latitude_weights::Bool
-
-    """The minimum cosine weight when using latitude weighting"""
     min_cosd_lat::FT2
 end
 
@@ -66,8 +92,7 @@ Create a `ScalarCovariance` which specifies how the covariance matrix should be
 formed. When used with `ObservationRecipe.observation` or
 `ObservationRecipe.covariance`, return a `Diagonal` matrix.
 
-Keyword arguments
-=====================
+# Keyword Arguments
 
 - `scalar`: Scalar value to multiply the identity matrix by.
 
@@ -101,25 +126,28 @@ end
 """
     SeasonalDiagonalCovariance <: AbstractCovarianceEstimator
 
-Contain the necessary information to construct a diagonal covariance matrix
-whose entries represent seasonal covariances from `ClimaAnalysis.OutputVar`s.
+Covariance estimator whose diagonal is the per-season variance across the
+samples of a `SampleCollection`.
+
+`FT1`, `FT2`, and `FT3` are the element types of `model_error_scale`,
+`regularization`, and `min_cosd_lat`.
+
+# Fields
+- `model_error_scale`: A model error scale term added to the diagonal of the
+  covariance matrix.
+- `regularization`: A regularization term added to the diagonal of the
+  covariance matrix.
+- `use_latitude_weights`: Whether to apply latitude weighting.
+- `min_cosd_lat`: The minimum cosine weight when using latitude weighting `[-]`.
 """
 struct SeasonalDiagonalCovariance{
     FT1 <: AbstractFloat,
     FT2 <: AbstractFloat,
     FT3 <: AbstractFloat,
 } <: AbstractCovarianceEstimator
-    """A model error scale term added to the diagonal of the covariance
-    matrix"""
     model_error_scale::FT1
-
-    """A regularization term added to the diagonal of the covariance matrix"""
     regularization::FT2
-
-    """Use latitude weights"""
     use_latitude_weights::Bool
-
-    """The minimum cosine weight when using latitude weighting"""
     min_cosd_lat::FT3
 end
 
@@ -136,11 +164,14 @@ should be formed. When used with `ObservationRecipe.observation` or
 `ObservationRecipe.covariance`, return a `Diagonal` matrix.
 
 The samples used to compute the covariance matrix come from the
-`SampleCollection`, where each sample is one year of seasonal statistics. `NaN`s
-are ignored when computing the seasonal variance.
+`SampleCollection`, where each sample is one year of seasonal statistics.
 
-Keyword arguments
-=====================
+`NaN`s are dropped when the samples are built, not here: `SampleBuilder` removes
+them while flattening and requires the same coordinates to be dropped in every
+sample, so a `NaN` whose position varies between samples is an error rather than
+something silently ignored.
+
+# Keyword Arguments
 
 - `model_error_scale`: Noise from the model error added to the covariance
   matrix. This is `(model_error_scale * seasonal_mean).^2`, where
@@ -148,7 +179,9 @@ Keyword arguments
   season (DJF, MAM, JJA, SON).
 
 - `regularization`: A diagonal matrix of the form `regularization * I` is added
-  to the covariance matrix.
+  to the covariance matrix. It is added *before* latitude weighting, so with
+  `use_latitude_weights = true` the effective regularization varies with
+  latitude, unlike [`SVDplusDCovariance`](@ref), which adds it afterwards.
 
 - `use_latitude_weights`: If `true`, then latitude weighting is applied to the
   covariance matrix. Latitude weighting is multiplying the values along the
@@ -194,8 +227,7 @@ The same quantile is used for each `OutputVar` when making the observation.
 
 This is used for the `SVDplusDCovariance` matrix.
 
-Examples
-========
+# Examples
 
 In the example below, a regularization using the 0.05 quantile of the model
 error scale for each variable is initialized.
@@ -215,8 +247,22 @@ end
 """
     SVDplusDCovariance <: AbstractCovarianceEstimator
 
-Contain the necessary information to construct a `EKP.SVDplusD` covariance
-matrix from `ClimaAnalysis.OutputVar`s.
+Covariance estimator that returns an `EKP.SVDplusD`: a low-rank sample
+covariance plus a diagonal term.
+
+`FT1`, `FT2`, and `FT3` are the element types of `model_error_scale`,
+`regularization`, and `min_cosd_lat`; `R` is the type of `rank`.
+
+# Fields
+- `model_error_scale`: A model error scale term added to the diagonal of the
+  covariance matrix.
+- `regularization`: A regularization term added to the diagonal of the
+  covariance matrix, either a scalar or a
+  [`QuantileRegularization`](@ref).
+- `use_latitude_weights`: Whether to apply latitude weighting.
+- `min_cosd_lat`: The minimum cosine weight when using latitude weighting `[-]`.
+- `rank`: Rank of the singular value decomposition, or `nothing` to infer it
+  from the data.
 """
 struct SVDplusDCovariance{
     FT1 <: AbstractFloat,
@@ -224,20 +270,10 @@ struct SVDplusDCovariance{
     FT3 <: AbstractFloat,
     R <: Union{Integer, Nothing},
 } <: AbstractCovarianceEstimator
-    """A model error scale term added to the diagonal of the covariance
-    matrix"""
     model_error_scale::FT1
-
-    """A regularization term added to the diagonal of the covariance matrix"""
     regularization::FT2
-
-    """Use latitude weights"""
     use_latitude_weights::Bool
-
-    """The minimum cosine weight when using latitude weighting"""
     min_cosd_lat::FT3
-
-    """Rank of the singular value decomposition (SVD)"""
     rank::R
 end
 
@@ -270,8 +306,7 @@ The samples used to compute the covariance matrix come from the
     on. As a result, if one were to use this covariance matrix with
     `model_error_scale`, the covariance matrix will not make sense.
 
-Keyword arguments
-=====================
+# Keyword Arguments
 
 - `model_error_scale`: Noise from the model error added to the covariance
   matrix. This is `(model_error_scale * mean(samples, dims = 2)).^2`, where
@@ -325,22 +360,142 @@ function SVDplusDCovariance(;
     )
 end
 
+"""
+    covariance(covar_estimator, sample_collection)
+
+Estimate the observational noise covariance from `sample_collection`.
+
+The result does not depend on which sample is used as the observation. See
+[`ScalarCovariance`](@ref), [`SeasonalDiagonalCovariance`](@ref), and
+[`SVDplusDCovariance`](@ref).
+
+# Examples
+```julia
+import ClimaAnalysis, NaNStatistics
+estimator = ClimaCalibrate.ObservationRecipe.SVDplusDCovariance(;
+    regularization = 1e-3,
+)
+covar = ClimaCalibrate.ObservationRecipe.covariance(estimator, samples)
+```
+
+See also [`observation`](@ref).
+"""
 function covariance end
 
+"""
+    observation(covar_estimator, sample_collection, i; name, covariance)
+
+Build an `EKP.Observation` from the `i`th sample of `sample_collection`, with a
+noise covariance estimated by `covar_estimator`.
+
+The covariance is the same for every sample in a collection, so pass a
+precomputed one as `covariance` when building several observations from one
+collection.
+
+The observation carries the metadata of its samples, which is what
+[`ClimaCalibrate.EnsembleBuilder`](@ref) uses to line model output up with it,
+and what the `reconstruct_*` functions use to turn the flattened vectors back
+into `OutputVar`s.
+
+# Examples
+```julia
+import ClimaAnalysis, NaNStatistics
+obs = ClimaCalibrate.ObservationRecipe.observation(estimator, samples, 1)
+
+# For several observations from one collection, estimate the covariance once
+covar = ClimaCalibrate.ObservationRecipe.covariance(estimator, samples)
+observations = map(1:ClimaCalibrate.SampleBuilder.num_samples(samples)) do i
+    ClimaCalibrate.ObservationRecipe.observation(
+        estimator,
+        samples,
+        i;
+        covariance = covar,
+    )
+end
+```
+
+See also [`covariance`](@ref), [`reconstruct_vars`](@ref).
+"""
 function observation end
 
+"""
+    short_names(obs)
+
+Return the short names of the variables in an `EKP.Observation`, in the order
+they were stacked.
+
+Requires ClimaAnalysis and NaNStatistics to be loaded.
+"""
 function short_names end
 
+"""
+    seasonally_aligned_yearly_sample_date_ranges(var)
+
+Return the `(start, stop)` date ranges that split `var` into one sample per
+seasonal year, starting at December.
+
+Pass the result to `SampleBuilder.build_samples_by_times` to build the samples
+that [`SeasonalDiagonalCovariance`](@ref) expects.
+
+Requires ClimaAnalysis and NaNStatistics to be loaded.
+"""
 function seasonally_aligned_yearly_sample_date_ranges end
 
+"""
+    reconstruct_g(ekp, iter)
+
+Return the G ensemble matrix of iteration `iter` as a matrix of
+`ClimaAnalysis.OutputVar`s, one row per variable and one column per ensemble
+member.
+
+Requires ClimaAnalysis and NaNStatistics to be loaded, and observations built by
+this module.
+"""
 function reconstruct_g end
 
+"""
+    reconstruct_g_mean(ekp, iter)
+
+Return the mean forward map evaluation of iteration `iter` as a vector of
+`ClimaAnalysis.OutputVar`s.
+
+Requires ClimaAnalysis and NaNStatistics to be loaded, and observations built by
+this module.
+"""
 function reconstruct_g_mean end
 
+"""
+    reconstruct_g_mean_final(ekp)
+
+Return the mean forward map evaluation of the last completed iteration as a
+vector of `ClimaAnalysis.OutputVar`s.
+
+Requires ClimaAnalysis and NaNStatistics to be loaded, and observations built by
+this module.
+"""
 function reconstruct_g_mean_final end
 
+"""
+    reconstruct_diag_cov(obs)
+
+Return the diagonal of an observation's noise covariance as a vector of
+`ClimaAnalysis.OutputVar`s, so the noise can be plotted alongside the data.
+
+Only meaningful for a diagonal covariance. Requires ClimaAnalysis and
+NaNStatistics to be loaded.
+"""
 function reconstruct_diag_cov end
 
+"""
+    reconstruct_vars(obs)
+
+Return the observation itself as a vector of `ClimaAnalysis.OutputVar`s.
+
+This undoes the flattening that [`ClimaCalibrate.SampleBuilder`](@ref) applied,
+so an observation can be plotted or compared against model output.
+
+Requires ClimaAnalysis and NaNStatistics to be loaded.
+"""
 function reconstruct_vars end
 
 function _get_minibatch_indices_for_nth_iteration end

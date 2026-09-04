@@ -1,3 +1,14 @@
+"""
+    ClimaCalibrate.Calibration
+
+The calibration loop itself.
+
+[`calibrate`](@ref) writes the ensemble members' parameters, runs the forward
+model for each member on the chosen backend, evaluates the observation map, and
+updates the ensemble, repeating until it runs out of iterations or EKP
+terminates. What it writes goes under a single output directory, which is also
+what it reads to resume an interrupted run.
+"""
 module Calibration
 
 import ClimaCalibrate
@@ -15,7 +26,7 @@ include("ekp_interface.jl")
 
 """
     calibrate(
-        backend::HPCBackend,
+        backend,
         ekp::EKP.EnsembleKalmanProcess,
         interface::AbstractModelInterface,
         n_iterations,
@@ -26,20 +37,35 @@ include("ekp_interface.jl")
 Run a full calibration with `ekp` and `prior` for `n_iterations` on the given
 `backend`, storing the results of the calibration in `output_dir`.
 
-The work of each ensemble member which is running the forward model is done by
-submitting a job to the `backend`. The file path returned by
-[`ClimaCalibrate.model_interface_filepath`](@ref) and project directory
-`experiment_dir` should contain all the dependencies to run the forward model.
-The job begins by running `julia --project=\$experiment_dir -e
-'include(\$model_interface_filepath())'` and running the forward model.
+The loop is the same for every backend: write the ensemble members' parameters,
+run the forward model for each member, evaluate the observation map, and update
+the ensemble. Only the middle step differs, and that is what the backend
+selects. See [`JuliaBackend`](@ref), [`WorkerBackend`](@ref), and
+[`HPCBackend`](@ref).
 
-The `interface` is serialized to `interface.jld2` in `output_dir`, so that HPC
-job scripts can load and pass it to `forward_model`.
+If `output_dir` already contains a calibration, it is resumed: completed
+iterations are skipped, as are ensemble members that recorded a completed
+forward model. Pass a fresh `output_dir` to start over.
 
-For more information about the `HPCBackend`, see [`HPCBackend`](@ref).
+# Returns
+The `EnsembleKalmanProcess` at the end of the run.
+
+# Examples
+```julia
+ekp = ClimaCalibrate.calibrate(
+    ClimaCalibrate.JuliaBackend(),
+    ekp,
+    MyModelInterface(output_dir, ensemble_size),
+    10,
+    prior,
+    output_dir,
+)
+```
+
+See also [`initialize`](@ref), [`last_completed_iteration`](@ref).
 """
 function calibrate(
-    backend::HPCBackend,
+    backend::Backend.AbstractBackend,
     ekp::EKP.EnsembleKalmanProcess,
     interface::AbstractModelInterface,
     n_iterations,
@@ -47,68 +73,131 @@ function calibrate(
     output_dir,
 )
     output_dir = abspath(output_dir)
-    experiment_dir = abspath(ClimaCalibrate.experiment_dir(interface))
-    model_interface_fp =
-        abspath(ClimaCalibrate.model_interface_filepath(interface))
 
     ensemble_size = EKP.get_N_ens(ekp)
     @info "Initializing calibration" n_iterations ensemble_size output_dir
     ekp = initialize(ekp, prior, output_dir)
+    initialize_backend!(backend, interface, output_dir)
 
-    # Validation checks for output_dir, experiment_dir, and model_interface
-    @assert isdir(output_dir) "Output directory does not exist: $output_dir"
-    @assert isdir(experiment_dir) "Experiment directory does not exist: $experiment_dir"
-    @assert isfile(model_interface_fp) "Model interface file does not exist: $model_interface_fp"
-
-    # Save interface object for HPC job scripts to load
-    JLD2.save_object(joinpath(output_dir, "interface.jld2"), interface)
+    terminated_at = terminated_iteration(output_dir)
+    if !isnothing(terminated_at)
+        @info "The scheduler terminated this calibration at iteration \
+               $terminated_at, so there is nothing left to run"
+        return load_latest_ekp(output_dir)
+    end
 
     first_iter = last_completed_iteration(output_dir) + 1
+    if first_iter > n_iterations
+        @info "$(first_iter - 1) iterations are already complete in \
+               $output_dir, so there is nothing left to run"
+        return load_latest_ekp(output_dir)
+    end
+
     for iter in first_iter:n_iterations
         @info "Iteration $iter"
-        run_iteration(
-            backend,
-            iter,
-            ensemble_size,
-            output_dir,
-            model_interface_fp,
-            experiment_dir,
-            ClimaCalibrate.exeflags(interface),
-        )
+        run_iteration(backend, interface, iter, ensemble_size, output_dir)
         @info "Completed iteration $iter, updating ensemble"
         ekp = load_ekp_struct(output_dir, iter)
         terminate =
             observation_map_and_update!(ekp, output_dir, iter, prior, interface)
-        !isnothing(terminate) && break
+        if !isnothing(terminate)
+            write_terminated(output_dir, iter)
+            break
+        end
     end
     return ekp
 end
 
 """
+    initialize_backend!(backend, interface::AbstractModelInterface, output_dir)
+
+Prepare `backend` to run a calibration in `output_dir`.
+
+Most backends need nothing beyond a usable output directory. The `HPCBackend`s
+also have to serialize the model interface for their job scripts to load, and to
+register the exit hook that cancels submitted jobs.
+"""
+function initialize_backend!(
+    ::Backend.AbstractBackend,
+    ::AbstractModelInterface,
+    output_dir,
+)
+    return nothing
+end
+
+function initialize_backend!(
+    backend::HPCBackend,
+    interface::AbstractModelInterface,
+    output_dir,
+)
+    experiment_dir = abspath(ClimaCalibrate.experiment_dir(interface))
+    isdir(experiment_dir) || throw(
+        ArgumentError("Experiment directory does not exist: $experiment_dir"),
+    )
+
+    model_interface_fp =
+        abspath(ClimaCalibrate.model_interface_filepath(interface))
+    isfile(model_interface_fp) || throw(
+        ArgumentError(
+            "Model interface file does not exist: $model_interface_fp",
+        ),
+    )
+
+    # Each ensemble member's job runs in a fresh process, so it loads the
+    # interface from here
+    JLD2.save_object(joinpath(output_dir, "interface.jld2"), interface)
+
+    # Killing the driver process would otherwise leave the submitted ensemble
+    # members running and billing
+    Backend.cancel_jobs_at_exit(backend)
+    return nothing
+end
+
+"""
+    check_failure_rate(n_failed, ensemble_size, backend, iter)
+
+Halt the calibration if more than `failure_rate(backend)` of the iteration's
+ensemble members failed.
+"""
+function check_failure_rate(n_failed, ensemble_size, backend, iter)
+    allowed = Backend.failure_rate(backend)
+    iter_failure_rate = n_failed / ensemble_size
+    if iter_failure_rate > allowed
+        error("Execution halted: iteration $iter had a \
+              $(round(iter_failure_rate * 100; digits = 2))% failure rate \
+              ($n_failed of $ensemble_size members), exceeding the maximum \
+              allowed threshold of $(allowed * 100)%.")
+    elseif n_failed > 0
+        @warn "Iteration $iter had $n_failed failed ensemble member(s) out of \
+               $ensemble_size"
+    end
+    return nothing
+end
+
+"""
     run_iteration(
         backend::HPCBackend,
+        interface::AbstractModelInterface,
         iter,
         ensemble_size,
         output_dir,
-        model_interface_filepath,
-        experiment_dir,
-        exeflags,
     )
 
-Run the `iter`th iteration.
-
-This function makes a job script for the `HPCBackend`, submits each job, and
-waits for each job to complete (succeed or fail).
+Run the `iter`th iteration by submitting one scheduler job per ensemble member
+and waiting for each to finish, successfully or not.
 """
 function run_iteration(
     backend::HPCBackend,
+    interface::AbstractModelInterface,
     iter,
     ensemble_size,
     output_dir,
-    model_interface_filepath,
-    experiment_dir,
-    exeflags,
 )
+    experiment_dir = abspath(ClimaCalibrate.experiment_dir(interface))
+    model_interface_filepath =
+        abspath(ClimaCalibrate.model_interface_filepath(interface))
+    exeflags = ClimaCalibrate.exeflags(interface)
+
     # For each ensemble member, generate the job script that will be run by the backends
     job_scripts = map(1:ensemble_size) do member
         generate_job_script_for_ensemble_member(
@@ -137,10 +226,17 @@ function run_iteration(
         # This should not be possible but manually deleting files in the output
         # directory could lead to this
         @info "All jobs for this iteration are already completed"
-    else
-        wait_for_jobs(jobs, output_dir, iter)
-        report_status(jobs, iter, output_dir)
+        return nothing
     end
+
+    statuses = wait_for_jobs(
+        jobs,
+        output_dir,
+        iter;
+        job_timeout = Backend.job_timeout(backend),
+    )
+    n_failed = report_status(statuses, jobs, iter, output_dir)
+    check_failure_rate(n_failed, ensemble_size, backend, iter)
     return nothing
 end
 
@@ -232,17 +328,32 @@ end
     wait_for_jobs(
         jobs::Vector{T},
         output_dir,
-        iter,
+        iter;
+        job_timeout = Backend.JOB_TIMEOUT,
     ) where {T <: Union{Backend.JobInfo, Nothing}}
 
-Wait for the `jobs` to run to completion.
+Wait for the `jobs` to run to completion and return their final statuses, with
+`nothing` for the members that were already complete before this iteration
+started.
+
+Each job is queried once per poll, since a query shells out to the scheduler.
+On PBS that means running `qstat`.
+
+A job that has been running for longer than `job_timeout` seconds ends the
+iteration: the remaining jobs are cancelled and an error is raised. PBS reports
+an unreachable job as running, so a scheduler outage would otherwise block
+forever. The clock starts when a job leaves the queue, so a long wait for an
+allocation does not count against it.
 """
 function wait_for_jobs(
     jobs::Vector{T},
     output_dir,
-    iter,
+    iter;
+    job_timeout = Backend.JOB_TIMEOUT,
 ) where {T <: Union{Backend.JobInfo, Nothing}}
+    statuses = Vector{Union{Backend.JobStatus, Nothing}}(nothing, length(jobs))
     completed_jobs = Set{Int}()
+    t_running = Dict{Int, Float64}()
     try
         while length(completed_jobs) < length(jobs)
             for (m, job) in enumerate(jobs)
@@ -253,52 +364,80 @@ function wait_for_jobs(
                     continue
                 end
 
-                if Backend.isfailed(job)
+                status = Backend.job_status(job)
+                statuses[m] = status
+                status == Backend.PENDING || get!(t_running, m, time())
+
+                Backend.iscompleted(status) || continue
+
+                if Backend.isfailed(status)
                     log_member_error(output_dir, iter, m)
-                    push!(completed_jobs, m)
-                elseif Backend.issuccess(job)
+                else
                     @info "Ensemble member $m complete"
-                    push!(completed_jobs, m)
                 end
+                # The exit hook cancels what this backend submitted, and a
+                # finished job does not need a `scancel`
+                Backend.mark_job_finished!(job)
+                push!(completed_jobs, m)
             end
-            sleep(5)
+
+            if length(completed_jobs) < length(jobs)
+                overdue = filter(
+                    m -> time() - t_running[m] > job_timeout,
+                    collect(keys(t_running)),
+                )
+                setdiff!(overdue, completed_jobs)
+                if !isempty(overdue)
+                    error("Members $(join(sort(overdue), ", ")) of iteration \
+                          $iter have been running for more than \
+                          $(job_timeout)s. Check that the scheduler is \
+                          reachable, or raise `job_timeout` on the backend.")
+                end
+                sleep(5)
+            end
         end
     catch e
-        jobs = filter(!isnothing, jobs)
-        Backend.cancel_job.(jobs)
+        Backend.cancel_job.(filter(!isnothing, jobs))
         if !(e isa InterruptException)
             @error "Pipeline crashed outside of a model run. Stacktrace:" exception =
                 (e, catch_backtrace())
         end
+        # Rethrow so the caller aborts instead of running the observation map on
+        # an ensemble that never finished
+        rethrow(e)
     end
 
-    return nothing
+    return statuses
 end
 
 """
-    report_status(jobs::Vector, iter, output_dir)
+    report_status(statuses, jobs::Vector, iter, output_dir)
 
 Report the status of the iteration for the `jobs` that ran.
+
+Return the number of failed members.
+
+A member counts as failed if the scheduler said so *or* if it never wrote a
+"completed" checkpoint. The checkpoint is the more reliable of the two: a
+scheduler can lose the record of a job, and a batch script can exit successfully
+even though the forward model inside it did not.
 """
-function report_status(jobs::Vector, iter, output_dir)
-    # On Derecho, this is very slow because of repeated calls to job_status
-    jobs = filter(!isnothing, jobs)
-    if !all(Backend.iscompleted.(jobs))
-        error(
-            "Some jobs are not complete: $(filter(!Backend.iscompleted, jobs))",
-        )
+function report_status(statuses, jobs::Vector, iter, output_dir)
+    ran = findall(!isnothing, jobs)
+    isempty(ran) && return 0
+
+    failed_members = filter(ran) do m
+        scheduler_failed =
+            !isnothing(statuses[m]) && Backend.isfailed(statuses[m])
+        return scheduler_failed || !model_completed(output_dir, iter, m)
     end
 
-    jobs_are_failing = Backend.isfailed.(jobs)
-    if all(jobs_are_failing)
-        error(
-            """Full ensemble for iteration $iter has failed. See model logs in
-$(abspath(path_to_iteration(output_dir, iter)))""",
-        )
-    elseif any(jobs_are_failing)
-        @warn "Failed ensemble members: $(findall(Backend.isfailed, jobs))"
+    if !isempty(failed_members)
+        @warn "Failed ensemble members for iteration $iter: \
+               $failed_members. See model logs in \
+               $(abspath(path_to_iteration(output_dir, iter)))"
     end
-    return nothing
+    return length(failed_members)
 end
 
 """
@@ -310,54 +449,17 @@ function log_member_error(output_dir, iteration, member)
     member_log = path_to_model_log(output_dir, iteration, member)
     warn_str = """Ensemble member $member raised an error. See model log at \
     $(abspath(member_log)) for stacktrace"""
-    stacktrace = replace(readchomp(member_log), "\\n" => "\n")
-    warn_str = warn_str * ": \n$stacktrace"
-    @warn warn_str
-end
-
-"""
-    calibrate(
-        backend::WorkerBackend,
-        ekp::EKP.EnsembleKalmanProcess,
-        interface::AbstractModelInterface,
-        n_iterations,
-        prior,
-        output_dir,
-    )
-
-Run a full calibration with `ekp` and `prior` for `n_iterations` on the given
-`backend`, storing the results of the calibration in `output_dir`.
-
-For more information about the `WorkerBackend`, see [`WorkerBackend`](@ref).
-"""
-function calibrate(
-    backend::WorkerBackend,
-    ekp::EKP.EnsembleKalmanProcess,
-    interface::AbstractModelInterface,
-    n_iterations,
-    prior,
-    output_dir,
-)
-    output_dir = abspath(output_dir)
-
-    ensemble_size = EKP.get_N_ens(ekp)
-    @info "Initializing calibration" n_iterations ensemble_size output_dir
-    ekp = initialize(ekp, prior, output_dir)
-
-    # Validation checks for output_dir
-    @assert isdir(output_dir) "Output directory does not exist: $output_dir"
-
-    first_iter = last_completed_iteration(output_dir) + 1
-    for iter in first_iter:n_iterations
-        @info "Iteration $iter"
-        run_iteration(backend, interface, iter, ensemble_size, output_dir)
-        @info "Completed iteration $iter, updating ensemble"
-        ekp = load_ekp_struct(output_dir, iter)
-        terminate =
-            observation_map_and_update!(ekp, output_dir, iter, prior, interface)
-        !isnothing(terminate) && break
+    # A job the scheduler rejected outright never produces a log. Reading it
+    # unconditionally would throw from inside the polling loop and be reported
+    # as a crash of the calibration itself
+    if isfile(member_log)
+        stacktrace = replace(readchomp(member_log), "\\n" => "\n")
+        warn_str = warn_str * ": \n$stacktrace"
+    else
+        warn_str = warn_str * ", but no log was written. The job may have been \
+                   rejected by the scheduler before it started."
     end
-    return ekp
+    @warn warn_str
 end
 
 """
@@ -441,17 +543,7 @@ function run_iteration(
         end
     end
 
-    nfailures = nfailures[]
-    iter_failure_rate = nfailures / ensemble_size
-    (; failure_rate) = backend
-    if iter_failure_rate > failure_rate
-        throw(
-            ErrorException(
-                "Execution halted: Iteration $iter had a $(round(iter_failure_rate * 100; digits=2))% failure rate, exceeding the maximum allowed threshold of $(failure_rate * 100)%.",
-            ),
-        )
-    end
-
+    check_failure_rate(nfailures[], ensemble_size, backend, iter)
     return nothing
 end
 
@@ -483,55 +575,8 @@ function prepare_work_for_ensemble_member(iter, member, output_dir, interface)
 end
 
 """
-    calibrate(
-        backend::JuliaBackend,
-        ekp::EKP.EnsembleKalmanProcess,
-        interface::AbstractModelInterface,
-        n_iterations,
-        prior,
-        output_dir,
-    )
-
-Run a full calibration with `ekp` and `prior` for `n_iterations` on the given
-`backend`, storing the results of the calibration in `output_dir`.
-
-Calibration with the `JuliaBackend` does not support restarts.
-
-For more information about the `JuliaBackend`, see [`JuliaBackend`](@ref).
-"""
-function calibrate(
-    backend::JuliaBackend,
-    ekp::EKP.EnsembleKalmanProcess,
-    interface::AbstractModelInterface,
-    n_iterations,
-    prior,
-    output_dir,
-)
-    output_dir = abspath(output_dir)
-
-    ensemble_size = EKP.get_N_ens(ekp)
-    @info "Initializing calibration" n_iterations ensemble_size output_dir
-    ekp = initialize(ekp, prior, output_dir)
-
-    # Validation checks for output_dir
-    @assert isdir(output_dir) "Output directory does not exist: $output_dir"
-
-    first_iter = last_completed_iteration(output_dir) + 1
-    for iter in first_iter:n_iterations
-        @info "Iteration $iter"
-        run_iteration(backend, interface, iter, ensemble_size, output_dir)
-        @info "Completed iteration $iter, updating ensemble"
-        ekp = load_ekp_struct(output_dir, iter)
-        terminate =
-            observation_map_and_update!(ekp, output_dir, iter, prior, interface)
-        !isnothing(terminate) && break
-    end
-    return ekp
-end
-
-"""
     run_iteration(
-        ::JuliaBackend,
+        backend::JuliaBackend,
         interface::AbstractModelInterface,
         iter,
         ensemble_size,
@@ -542,7 +587,7 @@ Run the `iter`th iteration by completing the work of all the ensemble members
 sequentially.
 """
 function run_iteration(
-    ::JuliaBackend,
+    backend::JuliaBackend,
     interface::AbstractModelInterface,
     iter,
     ensemble_size,
@@ -555,17 +600,26 @@ function run_iteration(
 
     failures = 0
     foreach(1:ensemble_size) do m
+        # Checkpoint like the other backends do, so an interrupted iteration
+        # resumes where it stopped, and so an output directory produced here
+        # can be resumed by any backend
+        if model_completed(output_dir, iter, m)
+            @info "Skipping completed member $m (found checkpoint)"
+            return
+        elseif model_started(output_dir, iter, m)
+            @info "Resuming member $m (incomplete run detected)"
+        end
+        write_model_started(output_dir, iter, m)
         try
             ClimaCalibrate.forward_model(interface, iter, m)
+            write_model_completed(output_dir, iter, m)
             @info "Completed member $m"
         catch e
             failures += 1
             on_error(e)
         end
     end
-    if failures == ensemble_size
-        error("Full ensemble has failed, aborting calibration.")
-    end
+    check_failure_rate(failures, ensemble_size, backend, iter)
     return nothing
 end
 

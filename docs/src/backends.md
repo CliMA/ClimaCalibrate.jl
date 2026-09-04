@@ -66,3 +66,65 @@ If your model requires just one CPU core or GPU, the best backend is the
 If your forward model requires parallelization across multiple cores or GPUs,
 choose one of the HPC cluster backends. These allow you to allocate more
 resources to each forward model using Slurm or PBS.
+
+## Job status
+
+An `HPCBackend` reports an ensemble member's job as one of four
+[`JobStatus`](@ref) values:
+
+| Status | Meaning |
+|---|---|
+| `PENDING` | Queued, waiting to be scheduled |
+| `RUNNING` | Executing |
+| `COMPLETED` | Finished successfully |
+| `FAILED` | Finished with an error, or was cancelled, timed out, or ran out of memory |
+
+Query one with [`job_status`](@ref), or with the predicates
+[`ispending`](@ref), [`isrunning`](@ref), [`issuccess`](@ref),
+[`isfailed`](@ref), and [`iscompleted`](@ref), which accept either a
+[`JobInfo`](@ref) or a `JobStatus`. Each `JobInfo` query shells out to the
+scheduler, so ask for the status once and test the result rather than calling
+several predicates on the job.
+
+### How it is determined
+
+On **Slurm**, `squeue` only lists jobs that are still queued or running, so it
+answers `PENDING` and `RUNNING`. Once a job leaves the queue, its outcome comes
+from `sacct`: `COMPLETED` maps to success, and `FAILED`, `CANCELLED`, `TIMEOUT`,
+`OUT_OF_MEMORY`, `NODE_FAIL`, `BOOT_FAIL`, `DEADLINE`, `PREEMPTED`, and
+`REVOKED` all map to `FAILED`. A state the package does not recognize is treated
+as a failure, not a success.
+
+!!! note "Slurm accounting must be enabled"
+    Distinguishing a successful job from a failed one requires `sacct`. If your
+    cluster has no accounting database, ClimaCalibrate falls back to the member's
+    checkpoint file, which is written by the forward model itself.
+
+On **PBS**, `qstat` reports a `job_state` and a `substate`. `Q`, `H`, `W`, `T`,
+and `M` are `PENDING`; `R`, `S`, `B`, and `E` are `RUNNING`; `F` and `X` are
+finished, and are `FAILED` rather than `COMPLETED` when the substate is 93,
+which is how PBS records a job that exited with an error.
+
+If the scheduler cannot be reached, the job is reported as still running and a
+warning is logged. That is right for a transient outage. A permanent one would
+block forever, so a member that has been running for longer than the backend's
+[`job_timeout`](@ref ClimaCalibrate.Backend.job_timeout) ends the iteration, and
+the remaining jobs are cancelled. The default is 24 hours, and a model that runs
+longer than that needs a larger one:
+
+```julia
+backend = ClimaCalibrate.CaltechHPCBackend(;
+    directives = [:time => 60 * 48, :ntasks => 1],
+    job_timeout = 60 * 60 * 48,
+)
+```
+
+The clock starts when a job leaves the queue, so a long wait for an allocation
+does not count against it.
+
+### The checkpoint is the final word
+
+Whatever the scheduler says, a member that did not write a `completed`
+checkpoint is counted as failed. A batch script can exit successfully while the
+model inside it did not, and a scheduler can lose the record of a job, so the
+checkpoint the forward model writes itself is the more reliable signal.

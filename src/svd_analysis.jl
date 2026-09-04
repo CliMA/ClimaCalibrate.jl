@@ -164,29 +164,56 @@ end
 """
     analyze_residual(ekp, iter; n_eigenvectors = 3)
 
-Analyze the model-data residual (y - G(u)) at iteration `iter` of an EKP calibration
-using the top eigenvectors of the noise covariance.
+Analyze the model-data residual `y - G(u)` at iteration `iter` using the leading
+eigenvectors of the observational noise covariance.
 
-The noise covariance is obtained via `EKP.get_obs_noise_cov` with `build = false`,
-so it works with any `StructuredMatrix` type supported by EKP (`SVD`, `Diagonal`,
+Projecting the residual onto those eigenvectors and normalizing by the
+corresponding eigenvalues turns it into z-scores, so a value much larger than
+one means the residual has structure the noise model does not account for. A
+high structured energy in one variable points at that variable's observation or
+its part of the observation map.
+
+The noise covariance comes from `EKP.get_obs_noise_cov` with `build = false`, so
+this works with any `StructuredMatrix` EKP supports (`SVD`, `Diagonal`,
 `SVDplusD`), not only `SVDplusD`.
 
-Returns a named tuple with:
-- `normalized_projections`: `(n_eigenvectors × n_variables)` matrix of z-scores
-  per variable (values >> 1 indicate mismatch beyond noise)
-- `structured_energy`: normalized whitened energy across all variables (≈ 1 under noise model)
-- `structured_energy_by_variable`: per-variable whitened energy
-- `residual_norm_by_variable`: `norm(diff[rᵥ])` for each variable
-- `metadata`: vector of `ClimaAnalysis.Var.Metadata` for each variable, in the
-  same order as the columns of `normalized_projections` and elements of
-  `structured_energy_by_variable` and `residual_norm_by_variable`
+# Arguments
+- `ekp`: The `EKP.EnsembleKalmanProcess` to analyze.
+- `iter`: Which iteration's residual to analyze.
 
-Requires ClimaAnalysis to be loaded.
+# Keyword Arguments
+- `n_eigenvectors = 3`: How many leading eigenvectors to project onto.
+
+# Returns
+A `NamedTuple` with:
+- `normalized_projections`: `(n_eigenvectors × n_variables)` matrix of z-scores
+  per variable `[-]`. Values much greater than one indicate mismatch beyond the
+  noise model.
+- `structured_energy`: Normalized whitened energy across all variables `[-]`,
+  approximately one under the noise model.
+- `structured_energy_by_variable`: The same, per variable `[-]`.
+- `residual_norm_by_variable`: `norm(diff[rᵥ])` for each variable.
+- `metadata`: A `ClimaAnalysis.Var.Metadata` per variable, in the same order as
+  the columns of `normalized_projections` and the elements of
+  `structured_energy_by_variable` and `residual_norm_by_variable`.
+
+# Examples
+```julia
+import ClimaAnalysis   # required
+result = ClimaCalibrate.analyze_residual(ekp, 3; n_eigenvectors = 3)
+result.structured_energy
+```
+
+!!! note
+    Requires ClimaAnalysis to be loaded, and observations built by
+    [`ClimaCalibrate.ObservationRecipe`](@ref), whose metadata is used to
+    attribute the residual to individual variables.
 """
 function analyze_residual(ekp, iter; n_eigenvectors = 3)
     obs_series = EKP.get_observation_series(ekp)
-    N_iters = EKP.get_N_iterations(ekp)
-    obs_noise_cov = EKP.get_obs_noise_cov(obs_series, N_iters; build = false)
+    # The covariance must come from the same minibatch as `g` and the metadata
+    # below, otherwise the eigenvectors describe a different observation
+    obs_noise_cov = EKP.get_obs_noise_cov(obs_series, iter; build = false)
     linear_map = _create_compact_linear_map(obs_noise_cov)
     result, _ = partialschur(linear_map; nev = n_eigenvectors)
     eigvalues, eigvectors = partialeigen(result)

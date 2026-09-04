@@ -25,8 +25,7 @@ This tutorial will not go into details on how to construct the
 ### Backend system
 
 !!! note "Backends"
-    For more information about the backend system, refer to the documentation
-    [here](@ref Backends).
+    For more information about the backend system, see [Backends](@ref Backends).
 
 There are three different kind of backends which are [`JuliaBackend`](@ref),
 [`WorkerBackend`](@ref), and the HPC cluster backends.
@@ -107,14 +106,17 @@ Your forward model must implement the
 Since this function only takes in the iteration and member numbers, there are
 some hooks to obtain parameters and the output directory:
 
-- [`ClimaCalibrate.Calibration.path_to_ensemble_member`](@ref) returns the
-  ensemble member's output directory,
+- [`path_to_ensemble_member(output_dir, iteration, member)`](@ref
+  ClimaCalibrate.path_to_ensemble_member) returns the ensemble member's output
+  directory, which is where the forward model should write.
+- [`parameter_path(output_dir, iteration, member)`](@ref
+  ClimaCalibrate.parameter_path) returns the ensemble member's parameter file,
+  which can be read with TOML or passed to ClimaParams.
 
-which can be used to set the forward model's output directory.
-
-- [`ClimaCalibrate.Calibration.parameter_path`](@ref) returns the ensemble
-member's parameter file, which can be loaded in via TOML or passed to
-ClimaParams.
+Put `output_dir` and anything else the model needs in the fields of your
+`AbstractModelInterface` subtype. That object is what gets sent to a worker or
+serialized into a job script, so anything not in it will not be there when the
+forward model runs.
 
 #### Observation map
 
@@ -149,7 +151,7 @@ Here is a simple template for the `observation_map`:
 function ClimaCalibrate.observation_map(interface, iteration)
     # This assumes the output_dir is a field of interface
     (; output_dir) = interface
-    ekp = JLD2.load_object(ClimaCalibrate.ekp_path(output_dir, iteration))
+    ekp = ClimaCalibrate.load_ekp_struct(output_dir, iteration)
     ensemble_size = EKP.get_N_ens(ekp)
     G_ensemble = ClimaCalibrate.g_ens_matrix(ekp)
     for member in 1:ensemble_size
@@ -311,8 +313,9 @@ Each file in the output directory serves a specific purpose:
   `forward_model`.
 - `G_ensemble.jld2`: The G ensemble matrix produced by the observation map
   **after** all forward models in the iteration complete.
-- `checkpoint.txt`: A flag file written when a member's forward model completes
-  successfully, used to skip completed members on restart.
+- `checkpoint.txt`: Records whether a member's forward model has `started` or
+  `completed`. On a restart, completed members are skipped and the rest are
+  rerun.
 - `prior.jld2`: The prior distribution, saved once in `iteration_001`.
 
 The JLD2 files can be loaded using
@@ -351,26 +354,46 @@ checking each model's checkpoint file and the flag it contains.
 
 ## Example Calibrations
 
-The [example tutorial](https://clima.github.io/ClimaCalibrate.jl/dev/literate_example/)
-provides a clear calibration example that can be run locally using the
-[`WorkerBackend`](@ref).
+The [Calibration Tutorial](literate_example.md) is a complete example that runs
+locally, and shows the changes needed to run the ensemble on
+[`WorkerBackend`](@ref) workers.
 
-Another example experiment can be found in the package repo under
-`experiments/surface_fluxes_perfect_model`.
-This experiment uses the
-[SurfaceFluxes.jl](https://github.com/CliMA/SurfaceFluxes.jl) package to
-generate a physical model that calculates the Monin Obukhov turbulent surface
-fluxes based on idealized atmospheric and surface conditions. Since this is a
-"perfect model" example, the same model is used to generate synthetic
-observations using its default parameters and a small amount of noise. These
-synthetic observations are considered to be the ground truth, which is used to
-assess the model ensembles' performance when parameters are drawn from the prior
-parameter distributions.
+Another example experiment lives in the package repo under
+`experiments/surface_fluxes_perfect_model`. It uses the
+[SurfaceFluxes.jl](https://github.com/CliMA/SurfaceFluxes.jl) package to compute
+the Monin-Obukhov turbulent surface fluxes for a set of idealized profiles, and
+calibrates one Businger coefficient, `coefficient_a_m_businger`, against the
+profile-averaged friction velocity.
 
-It is a perfect-model calibration, using its own output as observational data.
-By default, it runs 20 ensemble members for 8 iterations. This example can be
-run on the most common backend, the [`JuliaBackend`](@ref), with the following
-script:
+The observation comes from the same model run with its default parameters, which
+is what makes it a perfect-model calibration. It carries a 2% error. The model
+carries another 2%, standing in for the internal variability that makes a
+climate model return a different statistic on every run, and the calibration is
+given the two together as its noise covariance. The prior is centered at 3.5,
+while the observation was generated with 4.7, so the ensemble starts somewhere
+it has to travel from.
+
+One observable constrains one parameter. `coefficient_a_h_businger` moves the
+friction velocity in almost the same direction as `coefficient_a_m_businger`, so
+a single number cannot tell the two apart, and calibrating both would leave the
+ensemble free to slide along that ridge. Separating them takes a second
+observable that responds to the heat flux.
+
+It calibrates with
+[unscented Kalman inversion](https://clima.github.io/EnsembleKalmanProcesses.jl/dev/unscented_kalman_inversion/),
+which places its members on a quadrature stencil around the current mean rather
+than drawing them at random. One parameter therefore needs three members, and
+the whole calibration costs three forward model runs per iteration. The
+error falls from 20 to below 1 and the mean parameter climbs from 3.5 to within
+0.2 of the 4.7 the observation was generated with, which is as close as the
+noise allows. The scheduler stops the run once the misfit reaches the size of
+the noise, usually a few iterations short of the ten requested. An unscented
+ensemble does not collapse: the stencil narrows onto the posterior covariance
+and holds there, still spanning 4.7, which is the statement of how well one
+noisy observation pins the parameter down.
+
+This example runs on the most common backend, the [`JuliaBackend`](@ref), with
+the following script:
 
 ```julia
 import ClimaCalibrate
@@ -379,37 +402,71 @@ import EnsembleKalmanProcesses as EKP
 include(joinpath(pkgdir(ClimaCalibrate), "experiments", "surface_fluxes_perfect_model", "utils.jl"))
 @show ensemble_size n_iterations observation variance prior
 
-# Construct the initial ensemble and EKP object
-initial_ensemble = EKP.construct_initial_ensemble(prior, ensemble_size)
-ekp = EKP.EnsembleKalmanProcess(
-    initial_ensemble,
-    observation,
-    variance,
-    EKP.Inversion(),
-    EKP.default_options_dict(EKP.Inversion()),
-)
+# Unscented Kalman inversion places its members on a quadrature stencil, so it
+# builds its own ensemble from the prior
+ekp = EKP.EnsembleKalmanProcess(observation, variance, EKP.Unscented(prior))
 
 output_dir = "my_experiment"
 mkpath(output_dir)
 eki = ClimaCalibrate.calibrate(
     JuliaBackend(),
     ekp,
-    SurfaceFluxModelInterface(),
+    SurfaceFluxModelInterface(output_dir, ensemble_size),
     n_iterations,
     prior,
     output_dir,
 )
 
-theta_star_vec =
-    (; coefficient_a_m_businger = 4.7, coefficient_a_h_businger = 4.7)
+theta_star_vec = (; coefficient_a_m_businger = 4.7)
 
 convergence_plot(
     eki,
     prior,
     theta_star_vec,
-    ["coefficient_a_m_businger", "coefficient_a_h_businger"],
+    ["coefficient_a_m_businger"],
     output_dir,
 )
 
 g_vs_iter_plot(eki, output_dir)
+
+loss_landscape_plot(
+    observation,
+    variance,
+    output_dir;
+    calibrated = only(EKP.get_ϕ_mean_final(prior, eki)),
+)
 ```
+
+`convergence_plot` shows the error, the spread, and the three members of the
+stencil in unconstrained and constrained space. The dashed line marks the 4.7
+the observation was generated with, which the stencil still spans at the end.
+Both figures are generated when these docs are built, so they show what the
+code on this page does:
+
+![Convergence of coefficient_a_m_businger](assets/sf_convergence_coefficient_a_m_businger.png)
+
+`g_vs_iter_plot` shows what each member's forward model returns. The red line is
+the observation the calibration fits, and the blue line is what the model
+returns at the parameter the observation was generated with. The gap between
+them is the error the observation carries:
+
+![Forward map evaluations by iteration](assets/sf_scatter_iter.png)
+
+`loss_landscape_plot` sweeps the parameter and plots the loss the calibration is
+descending, the covariance-weighted misfit that `EKP.get_error` reports. The
+grey curve is the loss a model without internal variability would present, and
+the black curve is the one this calibration sees:
+
+![The loss landscape](assets/sf_loss_landscape.png)
+
+The model error turns a smooth bowl into a landscape whose local minima are
+everywhere, and a method that followed the local slope would stop at whichever
+one it started nearest. An ensemble Kalman method does not follow the slope. It
+fits a linear map between the parameters and the model output over the whole
+ensemble, so the model error, which is uncorrelated between members, averages
+out of that fit, and the update follows the shape of the underlying bowl. What
+it recovers is the minimum to within the noise: the ensemble settles about 0.2
+from the generating value, which is the width the noise leaves in the parameter,
+and reports a posterior spread of about that size rather than collapsing onto
+one of the local minima. The error also stops falling monotonically, since each
+iteration lands on a different draw of the model error.

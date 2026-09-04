@@ -4,17 +4,17 @@ import ClimaCalibrate: g_ens_matrix
 """
     MetadataInfo{METADATA <: Metadata}
 
-An object that stores the metadata of the observation, the index of the
-metadata, and the corresponding range to fill out in the G ensemble matrix.
+One observation's metadata, together with where it belongs in the G ensemble
+matrix.
+
+# Fields
+- `index`: The metadata's position among all the metadata.
+- `range`: The rows of the G ensemble matrix this metadata fills.
+- `metadata`: The metadata itself, for the current minibatch.
 """
 struct MetadataInfo{METADATA <: Metadata}
-    """The index of the metadata of all metadata"""
     index::Int64
-
-    """The indices of column of the current G ensemble matrix to fill out"""
     range::UnitRange{Int64}
-
-    """A single metadata from the metadata for the current minibatch"""
     metadata::METADATA
 end
 
@@ -27,31 +27,29 @@ An object to help build G ensemble matrix by using the metadata stored in the
 `GEnsembleBuilder` takes in preprocessed `OutputVar`s and automatically
 constructs the corresponding G ensemble matrix for the current iteration of the
 calibration.
+
+`FT` is the element type of the G ensemble matrix.
+
+# Fields
+- `g_ens`: The G ensemble matrix that the observation map returns.
+- `obs_data`: The observation for the current iteration.
+- `metadata_by_short_name`: Maps each short name to the metadata associated with
+  it.
+- `metadata_vec`: The metadata, ordered as the observations are combined.
+- `completed`: Tracks which entries of the G ensemble matrix have been filled,
+  sized number of metadata for the minibatch by number of ensemble members.
+- `checkers`: The checkers used to validate an `OutputVar` against the metadata.
 """
 struct GEnsembleBuilder{
     FT <: AbstractFloat,
     METADATAINFO <: MetadataInfo,
     T <: Tuple{Vararg{AbstractChecker}},
 }
-    """G ensemble matrix that is returned by the observation map"""
     g_ens::Matrix{FT}
-
-    """Observational data for the current iteration"""
     obs_data::Vector{FT}
-
-    """Dictionary which map short name to a vector of metadata associated with
-       the short name"""
     metadata_by_short_name::Dict{String, Vector{METADATAINFO}}
-
-    """A vector of metadata info ordered by how the observations are combined"""
     metadata_vec::Vector{METADATAINFO}
-
-    """A bit matrix which keeps track of which entries are filled out in the
-    G ensemble matrix. The size of this matrix is the number of metadata for the
-    minibatch by the number of ensemble members"""
     completed::BitMatrix
-
-    """A list of checkers used to check the OutputVar to the list of metadata"""
     checkers::T
 end
 
@@ -456,9 +454,9 @@ function Base.show(io::IO, g_ens_builder::GEnsembleBuilder)
     for row in rows
         for i in eachindex(row)
             if i < length(row)
-                print(rpad(row[i], col_widths[i] + 2))
+                print(io, rpad(row[i], col_widths[i] + 2))
             else
-                print(row[i])
+                print(io, row[i])
             end
         end
         print(io, "\n")

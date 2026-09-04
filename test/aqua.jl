@@ -2,6 +2,12 @@ using Test
 using ClimaCalibrate
 using Aqua
 
+# Loading the extension trigger packages is what puts ext/ in scope for Aqua's
+# ambiguity, piracy, and unbound-argument checks
+import ClimaAnalysis
+import NaNStatistics
+import CairoMakie
+
 @testset "Aqua tests (performance)" begin
     ua = Aqua.detect_unbound_args_recursively(ClimaCalibrate)
     @test length(ua) == 0
@@ -26,6 +32,11 @@ end
     Aqua.test_deps_compat(ClimaCalibrate)
     Aqua.test_project_extras(ClimaCalibrate)
     Aqua.test_piracies(ClimaCalibrate)
+    # Catches exported names that have no docstring, which `checkdocs =
+    # :exports` in the docs build cannot: Documenter only checks exports that
+    # are already documented
+    Aqua.test_undocumented_names(ClimaCalibrate)
+    Aqua.test_persistent_tasks(ClimaCalibrate)
 end
 
 nothing

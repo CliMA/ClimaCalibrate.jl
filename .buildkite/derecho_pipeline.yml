@@ -29,13 +29,25 @@ steps:
     - echo "--- HPCBackend Calibration"
     - julia --project=experiments/surface_fluxes_perfect_model test/hpc_backend.jl
     artifact_paths: output/surface_fluxes_perfect_model/*
-    # The tests submit PBS jobs which can be flaky if it takes too long for
-    # the PBS jobs to run
-    soft_fail: true
+    # These tests submit PBS jobs, which fail when the queue is busy
+    # enough that a job does not start within the test's wait. Retrying covers
+    # that; marking the step soft-failing would instead report a green build
+    # for a `calibrate`, `submit_job`, or `job_status` failure as well.
+    retry:
+      automatic:
+        - exit_status: "*"
+          limit: 2
 
   - label: "PBS job controller unit tests"
     command: julia --project=experiments/surface_fluxes_perfect_model test/pbs_unit_tests.jl
-    soft_fail: true
+    # These tests submit PBS jobs, which fail when the queue is busy
+    # enough that a job does not start within the test's wait. Retrying covers
+    # that; marking the step soft-failing would instead report a green build
+    # for a `calibrate`, `submit_job`, or `job_status` failure as well.
+    retry:
+      automatic:
+        - exit_status: "*"
+          limit: 2
 
   - label: "PBSManager tests"
     command: julia --project=experiments/surface_fluxes_perfect_model test/pbs_manager_unit_tests.jl

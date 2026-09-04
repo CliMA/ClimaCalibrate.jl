@@ -1,3 +1,18 @@
+"""
+    ClimaCalibrate.Backend
+
+Where an ensemble member's forward model runs, and how it is submitted.
+
+A backend is the only thing that changes when a calibration moves from a laptop
+to a cluster: [`JuliaBackend`](@ref) runs members one at a time in the current
+process, [`WorkerBackend`](@ref) distributes them over Distributed.jl workers,
+and each [`HPCBackend`](@ref) submits one scheduler job per member.
+
+This module also holds the scheduler plumbing the HPC backends need: the job
+configs ([`SlurmConfig`](@ref), [`PBSConfig`](@ref)), job submission and
+cancellation ([`submit_job`](@ref), [`cancel_job`](@ref)), and job status
+([`JobStatus`](@ref), [`job_status`](@ref)).
+"""
 module Backend
 
 import Distributed
@@ -10,6 +25,7 @@ export HPCBackend,
     GCPBackend,
     ClimaGPUBackend,
     CaltechHPCBackend,
+    backend_type,
     get_backend,
     JobInfo,
     JobStatus,
@@ -22,10 +38,31 @@ export HPCBackend,
     submit_job,
     requeue_job,
     cancel_job,
+    cancel_jobs_at_exit,
+    job_records,
+    write_job_script,
     make_job_script
 
 include("backends/config.jl")
 
+"""
+    AbstractBackend
+
+Where an ensemble member's forward model runs.
+
+The backend is the only thing that changes when a calibration moves from a
+laptop to a cluster; `calibrate` dispatches on it to run an iteration's members.
+
+Subtypes:
+- [`JuliaBackend`](@ref): one member at a time, in the current process.
+- [`WorkerBackend`](@ref): members distributed over Distributed.jl workers.
+- [`HPCBackend`](@ref): one scheduler job per member.
+
+# Interface
+Subtypes must implement `Calibration.run_iteration(backend, interface, iter,
+ensemble_size, output_dir)` and have a `failure_rate` field. See
+[`failure_rate`](@ref).
+"""
 abstract type AbstractBackend end
 
 """
@@ -33,7 +70,7 @@ abstract type AbstractBackend end
 
 An enum representing the current status of a job.
 
-## Values
+# Values
 - `PENDING`: The job is queued and waiting to be scheduled.
 - `RUNNING`: The job is currently executing.
 - `COMPLETED`: The job finished running.
@@ -41,9 +78,16 @@ An enum representing the current status of a job.
 
 Use [`ispending`](@ref), [`isrunning`](@ref), [`issuccess`](@ref),
 [`isfailed`](@ref), and [`iscompleted`](@ref) to query the status of a
-[`JobInfo`](@ref).
+[`JobInfo`](@ref). Each of those queries the scheduler, so ask once and test the
+result rather than calling several of them on the same job.
 
-See also: [`job_status`](@ref).
+# Examples
+```julia
+status = ClimaCalibrate.job_status(job)
+ClimaCalibrate.iscompleted(status) && ClimaCalibrate.isfailed(status)
+```
+
+See also [`job_status`](@ref).
 """
 @enum JobStatus begin
     PENDING
@@ -53,20 +97,40 @@ See also: [`job_status`](@ref).
 end
 
 """
-    JuliaBackend
-
-The simplest backend to use.
-
-This is a singleton type and is meant for use in dispatch.
-"""
-struct JuliaBackend <: AbstractBackend end
-
-"""
     DEFAULT_FAILURE_RATE
 
-The default failure rate used by the `WorkerBackend`.
+The fraction of an iteration's ensemble members that may fail before the
+calibration is halted.
 """
 const DEFAULT_FAILURE_RATE = 0.5
+
+"""
+    JuliaBackend(; failure_rate = $DEFAULT_FAILURE_RATE)
+
+Run the ensemble members one at a time in the current process.
+
+# Keyword Arguments
+- `failure_rate::Float64`: The fraction of an iteration's ensemble members that
+  may fail before the calibration is halted `[-]`. The default is
+  $DEFAULT_FAILURE_RATE.
+
+# Examples
+```julia
+backend = ClimaCalibrate.JuliaBackend()
+tolerant = ClimaCalibrate.JuliaBackend(; failure_rate = 0.9)
+```
+"""
+Base.@kwdef struct JuliaBackend <: AbstractBackend
+    failure_rate::Float64 = DEFAULT_FAILURE_RATE
+end
+
+"""
+    failure_rate(backend)
+
+Return the fraction of an iteration's ensemble members that may fail before
+`backend` halts the calibration.
+"""
+failure_rate(backend::AbstractBackend) = backend.failure_rate
 
 """
     EMPTY_POOL_TIMEOUT
@@ -78,49 +142,104 @@ when no workers ever start.
 const EMPTY_POOL_TIMEOUT = 6 * 3600
 
 """
-    WorkerBackend
+    WorkerBackend(; failure_rate, worker_pool, empty_pool_timeout)
 
-Used to run calibrations on Distributed.jl's workers.
-For use on a Slurm cluster, see [`SlurmManager`](@ref) and for use on a PBS
-cluster, see [`PBSManager`](@ref).
+Run each ensemble member's forward model on a Distributed.jl worker.
 
-## Keyword Arguments for `WorkerBackend`
-- `failure_rate::Float64`: The threshold for the percentage of workers that can
-  fail before an iteration is stopped. The default is
+Members are handed to workers as they become free, so a calibration can start
+before every worker has connected. Add workers with [`add_workers`](@ref) on a
+cluster, or with `Distributed.addprocs` locally; see [`SlurmManager`](@ref) and
+[`PBSManager`](@ref) for the Slurm and PBS cluster managers.
+
+# Keyword Arguments
+- `failure_rate::Float64`: The fraction of an iteration's ensemble members that
+  may fail before the calibration is halted `[-]`. The default is
   $DEFAULT_FAILURE_RATE.
 - `worker_pool`: A worker pool created from the workers available.
 - `empty_pool_timeout::Int`: How long (in seconds) an iteration will wait on an
   empty worker pool before erroring, so an asynchronous calibration cannot hang
   forever when no workers ever start. Defaults to `$EMPTY_POOL_TIMEOUT`.
+
+# Examples
+```julia
+wait(ClimaCalibrate.add_workers(4; cluster = :local))
+ClimaCalibrate.@worker_setup include("my_model.jl")
+backend = ClimaCalibrate.WorkerBackend()
+```
 """
 Base.@kwdef struct WorkerBackend{WORKERPOOL <: Distributed.WorkerPool} <:
                    AbstractBackend
     failure_rate::Float64 = DEFAULT_FAILURE_RATE
-    worker_pool::WORKERPOOL = default_worker_pool()
+    worker_pool::WORKERPOOL = calibration_worker_pool()
     empty_pool_timeout::Int = EMPTY_POOL_TIMEOUT
 end
 
 """
     HPCBackend <: AbstractBackend
 
-An abstract type for high performance cluster backends.
+Backend that submits one scheduler job per ensemble member.
+
+Each job starts a fresh Julia process, includes the file returned by
+`ClimaCalibrate.model_interface_filepath`, and runs one member's forward model.
+Prefer this over [`WorkerBackend`](@ref) when forward models are long-running,
+need internal parallelism, or will not all fit in one allocation.
+
+Subtypes:
+- [`SlurmBackend`](@ref): the Slurm clusters.
+- [`DerechoBackend`](@ref): NSF NCAR Derecho, which uses PBS.
 """
 abstract type HPCBackend <: AbstractBackend end
+
+"""
+    SlurmBackend <: HPCBackend
+
+Abstract supertype for the clusters that use the Slurm scheduler:
+[`CaltechHPCBackend`](@ref), [`ClimaGPUBackend`](@ref), and
+[`GCPBackend`](@ref).
+
+Job submission, status queries, and cancellation are implemented once for this
+type; the concrete backends differ only in which modules they load and how they
+launch MPI.
+"""
 abstract type SlurmBackend <: HPCBackend end
+
+"""
+    JOB_TIMEOUT
+
+The default number of seconds an `HPCBackend` iteration waits for a running job
+before giving up, so that a scheduler which stops reporting cannot hang a
+calibration indefinitely.
+"""
+const JOB_TIMEOUT = 24 * 3600
+
+"""
+    job_timeout(backend::HPCBackend)
+
+Return the number of seconds `backend` waits for a running job before giving up.
+
+The clock starts when a job leaves the queue, so time spent waiting for an
+allocation does not count against it.
+"""
+job_timeout(backend::HPCBackend) = backend.job_timeout
 
 """
     JobInfo
 
-A struct containing the backend, job ID, and the job script that was run.
+A submitted scheduler job: which backend submitted it, its scheduler ID, and the
+script it runs.
+
+Returned by [`submit_job`](@ref), and the argument to [`job_status`](@ref),
+[`cancel_job`](@ref), and [`requeue_job`](@ref).
+
+# Fields
+- `backend`: The backend the job was submitted with.
+- `id`: The scheduler's job ID, an `Int64` for Slurm and a `String` for PBS.
+- `job_script`: The script that was submitted. [`write_job_script`](@ref)
+  writes it to a file, which shows what the scheduler was asked to run.
 """
 struct JobInfo
-    """The backend that the job was submitted with."""
     backend::HPCBackend
-
-    """Job ID of the Slurm (integer) or PBS (string) job."""
     id::Union{Int64, String}
-
-    """Job script that was submitted"""
     job_script::String
 end
 
@@ -143,132 +262,212 @@ function Base.show(io::IO, job::JobInfo)
 end
 
 """
-    CaltechHPCBackend
+    CaltechHPCBackend(config::SlurmConfig)
+    CaltechHPCBackend(; directives, modules, env_vars, failure_rate, job_timeout)
 
-Used for Caltech's
-[high-performance computing cluster](https://www.hpc.caltech.edu/).
+Submit one scheduler job per ensemble member to Caltech's [high-performance computing cluster](https://www.hpc.caltech.edu/).
+
+The second form builds the `SlurmConfig` from its keyword arguments.
+
+# Fields
+- `hpc_config`: Scheduler directives, modules, and environment variables for
+  each ensemble member's job. See [`SlurmConfig`](@ref).
+- `job_records`: The jobs submitted with this backend, in submission order.
+- `failure_rate`: The fraction of an iteration's ensemble members that may fail
+  before the calibration is halted `[-]`.
+- `job_timeout`: How long (in seconds) an iteration waits for a running job
+  before giving up `[s]`. The default is `$JOB_TIMEOUT` (24 hours).
+
+# Examples
+```julia
+backend = ClimaCalibrate.CaltechHPCBackend(;
+    directives = [:time => 60, :ntasks => 1, :cpus_per_task => 8],
+    modules = ["climacommon"],
+)
+```
+
+See also [`failure_rate`](@ref).
 """
 struct CaltechHPCBackend <: SlurmBackend
     hpc_config::SlurmConfig
     job_records::Vector{JobInfo}
+    failure_rate::Float64
+    job_timeout::Int
 end
 
-"""
-    CaltechHPCBackend(config::SlurmConfig)
+CaltechHPCBackend(
+    config::SlurmConfig;
+    failure_rate = DEFAULT_FAILURE_RATE,
+    job_timeout = JOB_TIMEOUT,
+) = CaltechHPCBackend(config, JobInfo[], failure_rate, job_timeout)
 
-Construct a `CaltechHPCBackend` for submitting jobs to Caltech's
-[high-performance computing cluster](https://www.hpc.caltech.edu/).
-
-See [`SlurmConfig`](@ref).
-"""
-function CaltechHPCBackend(config::SlurmConfig)
-    return CaltechHPCBackend(config, [])
-end
-
-"""
-    CaltechHPCBackend(; directives, modules, env_vars)
-
-Construct a `SlurmConfig` from the keyword arguments and use it to construct a
-`CaltechHPCBackend`.
-"""
-function CaltechHPCBackend(; directives = [], modules = [], env_vars = [])
-    return CaltechHPCBackend(SlurmConfig(; directives, modules, env_vars), [])
-end
+CaltechHPCBackend(;
+    directives = [],
+    modules = [],
+    env_vars = [],
+    failure_rate = DEFAULT_FAILURE_RATE,
+    job_timeout = JOB_TIMEOUT,
+) = CaltechHPCBackend(
+    SlurmConfig(; directives, modules, env_vars);
+    failure_rate,
+    job_timeout,
+)
 
 """
-    ClimaGPUBackend
+    ClimaGPUBackend(config::SlurmConfig)
+    ClimaGPUBackend(; directives, modules, env_vars, failure_rate, job_timeout)
 
-Used for CliMA's private GPU server.
+Submit one scheduler job per ensemble member to CliMA's private GPU server.
+
+The second form builds the `SlurmConfig` from its keyword arguments.
+
+# Fields
+- `hpc_config`: Scheduler directives, modules, and environment variables for
+  each ensemble member's job. See [`SlurmConfig`](@ref).
+- `job_records`: The jobs submitted with this backend, in submission order.
+- `failure_rate`: The fraction of an iteration's ensemble members that may fail
+  before the calibration is halted `[-]`.
+- `job_timeout`: How long (in seconds) an iteration waits for a running job
+  before giving up `[s]`. The default is `$JOB_TIMEOUT` (24 hours).
+
+# Examples
+```julia
+backend = ClimaCalibrate.ClimaGPUBackend(;
+    directives = [:time => 60, :ntasks => 1, :cpus_per_task => 8],
+    modules = ["climacommon"],
+)
+```
+
+See also [`failure_rate`](@ref).
 """
 struct ClimaGPUBackend <: SlurmBackend
     hpc_config::SlurmConfig
     job_records::Vector{JobInfo}
+    failure_rate::Float64
+    job_timeout::Int
 end
 
-"""
-    ClimaGPUBackend(config::SlurmConfig)
+ClimaGPUBackend(
+    config::SlurmConfig;
+    failure_rate = DEFAULT_FAILURE_RATE,
+    job_timeout = JOB_TIMEOUT,
+) = ClimaGPUBackend(config, JobInfo[], failure_rate, job_timeout)
 
-Construct a `ClimaGPUBackend` for submitting jobs to CliMA's private GPU server.
-
-See [`SlurmConfig`](@ref).
-"""
-function ClimaGPUBackend(config::SlurmConfig)
-    return ClimaGPUBackend(config, [])
-end
-
-"""
-    ClimaGPUBackend(; directives, modules, env_vars)
-
-Construct a `SlurmConfig` from the keyword arguments and use it to construct a
-`ClimaGPUBackend`.
-"""
-function ClimaGPUBackend(; directives = [], modules = [], env_vars = [])
-    return ClimaGPUBackend(SlurmConfig(; directives, modules, env_vars), [])
-end
+ClimaGPUBackend(;
+    directives = [],
+    modules = [],
+    env_vars = [],
+    failure_rate = DEFAULT_FAILURE_RATE,
+    job_timeout = JOB_TIMEOUT,
+) = ClimaGPUBackend(
+    SlurmConfig(; directives, modules, env_vars);
+    failure_rate,
+    job_timeout,
+)
 
 """
-    GCPBackend
+    GCPBackend(config::SlurmConfig)
+    GCPBackend(; directives, modules, env_vars, failure_rate, job_timeout)
 
-Used for CliMA's private GCP server.
+Submit one scheduler job per ensemble member to CliMA's private GCP server.
+
+The second form builds the `SlurmConfig` from its keyword arguments.
+
+# Fields
+- `hpc_config`: Scheduler directives, modules, and environment variables for
+  each ensemble member's job. See [`SlurmConfig`](@ref).
+- `job_records`: The jobs submitted with this backend, in submission order.
+- `failure_rate`: The fraction of an iteration's ensemble members that may fail
+  before the calibration is halted `[-]`.
+- `job_timeout`: How long (in seconds) an iteration waits for a running job
+  before giving up `[s]`. The default is `$JOB_TIMEOUT` (24 hours).
+
+# Examples
+```julia
+backend = ClimaCalibrate.GCPBackend(;
+    directives = [:time => 60, :ntasks => 1, :cpus_per_task => 8],
+    modules = ["climacommon"],
+)
+```
+
+See also [`failure_rate`](@ref).
 """
 struct GCPBackend <: SlurmBackend
     hpc_config::SlurmConfig
     job_records::Vector{JobInfo}
+    failure_rate::Float64
+    job_timeout::Int
 end
 
-"""
-    GCPBackend(config::SlurmConfig)
+GCPBackend(
+    config::SlurmConfig;
+    failure_rate = DEFAULT_FAILURE_RATE,
+    job_timeout = JOB_TIMEOUT,
+) = GCPBackend(config, JobInfo[], failure_rate, job_timeout)
 
-Construct a `GCPBackend` for submitting jobs to CliMA's private GCP server.
-
-See [`SlurmConfig`](@ref).
-"""
-function GCPBackend(config::SlurmConfig)
-    return GCPBackend(config, [])
-end
-
-"""
-    GCPBackend(; directives, modules, env_vars)
-
-Construct a `SlurmConfig` from the keyword arguments and use it to construct a
-`GCPBackend`.
-"""
-function GCPBackend(; directives = [], modules = [], env_vars = [])
-    return GCPBackend(SlurmConfig(; directives, modules, env_vars), [])
-end
+GCPBackend(;
+    directives = [],
+    modules = [],
+    env_vars = [],
+    failure_rate = DEFAULT_FAILURE_RATE,
+    job_timeout = JOB_TIMEOUT,
+) = GCPBackend(
+    SlurmConfig(; directives, modules, env_vars);
+    failure_rate,
+    job_timeout,
+)
 
 """
-    DerechoBackend
+    DerechoBackend(config::PBSConfig)
+    DerechoBackend(; directives, modules, env_vars, failure_rate, job_timeout)
 
-Used for NSF NCAR's
-[Derecho supercomputing system](https://ncar-hpc-docs.readthedocs.io/en/latest/compute-systems/derecho/).
+Submit one scheduler job per ensemble member to NSF NCAR's [Derecho supercomputing system](https://ncar-hpc-docs.readthedocs.io/en/latest/compute-systems/derecho/).
+
+The second form builds the `PBSConfig` from its keyword arguments.
+
+# Fields
+- `hpc_config`: Scheduler directives, modules, and environment variables for
+  each ensemble member's job. See [`PBSConfig`](@ref).
+- `job_records`: The jobs submitted with this backend, in submission order.
+- `failure_rate`: The fraction of an iteration's ensemble members that may fail
+  before the calibration is halted `[-]`.
+- `job_timeout`: How long (in seconds) an iteration waits for a running job
+  before giving up `[s]`. The default is `$JOB_TIMEOUT` (24 hours).
+
+# Examples
+```julia
+backend = ClimaCalibrate.DerechoBackend(;
+    directives = [:time => 60, :ntasks => 1, :cpus_per_task => 8],
+    modules = ["climacommon"],
+)
+```
+
+See also [`failure_rate`](@ref).
 """
 struct DerechoBackend <: HPCBackend
     hpc_config::PBSConfig
     job_records::Vector{JobInfo}
+    failure_rate::Float64
+    job_timeout::Int
 end
 
-"""
-    DerechoBackend(config::PBSConfig)
+DerechoBackend(
+    config::PBSConfig;
+    failure_rate = DEFAULT_FAILURE_RATE,
+    job_timeout = JOB_TIMEOUT,
+) = DerechoBackend(config, JobInfo[], failure_rate, job_timeout)
 
-Construct a `DerechoBackend` for submitting jobs to the Derecho supercomputing
-system.
-
-See [`PBSConfig`](@ref).
-"""
-function DerechoBackend(config::PBSConfig)
-    return DerechoBackend(config, [])
-end
-
-"""
-    DerechoBackend(; directives, modules, env_vars)
-
-Construct a `PBSConfig` from the keyword arguments and use it to construct a
-`DerechoBackend`.
-"""
-function DerechoBackend(; directives = [], modules = [], env_vars = [])
-    return DerechoBackend(PBSConfig(; directives, modules, env_vars), [])
-end
+DerechoBackend(;
+    directives = [],
+    modules = [],
+    env_vars = [],
+    failure_rate = DEFAULT_FAILURE_RATE,
+    job_timeout = JOB_TIMEOUT,
+) = DerechoBackend(
+    PBSConfig(; directives, modules, env_vars);
+    failure_rate,
+    job_timeout,
+)
 
 """
     job_records(backend::HPCBackend)
@@ -336,40 +535,53 @@ function requeue_job(job::JobInfo)
     end
 end
 
+# Each predicate has a `JobStatus` method as well as a `JobInfo` one. Querying a
+# `JobInfo` shells out to the scheduler, so a caller that needs more than one
+# predicate should call `job_status` once and ask about the result.
 """
     ispending(job::JobInfo)
+    ispending(status::JobStatus)
 
 Return `true` if `job` is pending (i.e. waiting to be scheduled).
 """
-ispending(job) = job_status(job) == PENDING
+ispending(status::JobStatus) = status == PENDING
+ispending(job::JobInfo) = ispending(job_status(job))
 
 """
     isrunning(job::JobInfo)
+    isrunning(status::JobStatus)
 
 Return `true` if `job` is currently running.
 """
-isrunning(job) = job_status(job) == RUNNING
+isrunning(status::JobStatus) = status == RUNNING
+isrunning(job::JobInfo) = isrunning(job_status(job))
 
 """
     issuccess(job::JobInfo)
+    issuccess(status::JobStatus)
 
 Return `true` if `job` completed successfully.
 """
-issuccess(job) = job_status(job) == COMPLETED
+issuccess(status::JobStatus) = status == COMPLETED
+issuccess(job::JobInfo) = issuccess(job_status(job))
 
 """
     isfailed(job::JobInfo)
+    isfailed(status::JobStatus)
 
 Return `true` if `job` failed.
 """
-isfailed(job) = job_status(job) == FAILED
+isfailed(status::JobStatus) = status == FAILED
+isfailed(job::JobInfo) = isfailed(job_status(job))
 
 """
     iscompleted(job::JobInfo)
+    iscompleted(status::JobStatus)
 
 Return `true` if `job` has finished, either successfully or with a failure.
 """
-iscompleted(job) = isfailed(job) || issuccess(job)
+iscompleted(status::JobStatus) = isfailed(status) || issuccess(status)
+iscompleted(job::JobInfo) = iscompleted(job_status(job))
 
 """
     cancel_jobs_at_exit(backend::HPCBackend)
@@ -378,10 +590,17 @@ Register an exit hook to cancel all jobs submitted by `backend` when the Julia
 process exits.
 """
 function cancel_jobs_at_exit(backend::HPCBackend)
+    # `calibrate` registers this, and a session may call `calibrate` more than
+    # once with the same backend. Registering the hook twice would cancel every
+    # job twice
+    backend in ATEXIT_REGISTERED_BACKENDS && return nothing
+    push!(ATEXIT_REGISTERED_BACKENDS, backend)
+
     cancel_backend_jobs = () -> begin
         for job in job_records(backend)
-            # For PBS jobs, checking if the job is completed can take a while,
-            # so we call cancel_job on every job even if the job is completed
+            # Asking the scheduler which jobs are still alive runs one `qstat`
+            # per job on PBS, so the polling loop records the ones it saw finish
+            job_finished(job) && continue
             cancel_job(job)
         end
     end
@@ -390,19 +609,44 @@ function cancel_jobs_at_exit(backend::HPCBackend)
 end
 
 """
-    get_backend()
+    mark_job_finished!(job::JobInfo)
+    job_finished(job::JobInfo)
 
-Get the ideal backend for running work and jobs.
+Record that `job` has left the scheduler, and read that record back.
 
-Each backend is found via `gethostname()`. Defaults to `JuliaBackend` if none is
-found.
+[`cancel_jobs_at_exit`](@ref) uses this to cancel the jobs that are still
+running when the process exits. Cancelling a finished job runs a `scancel` or
+`qdel` that reports an error the user can do nothing about.
 """
-function get_backend()
+mark_job_finished!(job::JobInfo) = (push!(FINISHED_JOBS, job); nothing)
+
+job_finished(job::JobInfo) = job in FINISHED_JOBS
+
+# Held by identity: `JobInfo` is compared field by field, and two members can
+# share a job script
+const FINISHED_JOBS = Base.IdSet{JobInfo}()
+
+# Backends whose jobs are already scheduled for cancellation at exit. Held by
+# identity: two backends with equal configs are still separate job pools
+const ATEXIT_REGISTERED_BACKENDS = Base.IdSet{HPCBackend}()
+
+"""
+    backend_type()
+
+Return the `AbstractBackend` *type* that suits the current machine, identified
+by `gethostname()`. Defaults to [`JuliaBackend`](@ref) when the host matches no
+known cluster.
+
+This returns a type, not a backend that `calibrate` accepts: the `HPCBackend`s
+need a config, so construct one with
+`backend_type()(; directives, modules, env_vars)`.
+"""
+function backend_type()
     # TODO: Add WorkerBackend as default if there are multiple workers
     HOSTNAMES = [
-        (r"^clima.gps.caltech.edu$", ClimaGPUBackend),
-        (r"^login[1-4].cm.cluster$", CaltechHPCBackend),
-        (r"^hpc-(\d\d)-(\d\d).cm.cluster$", CaltechHPCBackend),
+        (r"^clima\.gps\.caltech\.edu$", ClimaGPUBackend),
+        (r"^login[1-4]\.cm\.cluster$", CaltechHPCBackend),
+        (r"^hpc-\d\d-\d\d\.cm\.cluster$", CaltechHPCBackend),
         (r"^hpc\d+-slurm-login-\d+$", GCPBackend),
         (r"^hpc\d+-a\d+nodeset-\d+$", GCPBackend),
         (r"^cron$", DerechoBackend),  # Buildkite job launcher on Derecho
@@ -416,6 +660,21 @@ function get_backend()
     end
 
     return JuliaBackend
+end
+
+"""
+    get_backend()
+
+Deprecated alias for [`backend_type`](@ref).
+"""
+function get_backend()
+    Base.depwarn(
+        "`get_backend` returns a backend *type*, not a backend. It has been \
+        renamed to `backend_type` to say so. Construct a backend with \
+        `backend_type()(; directives, modules, env_vars)`.",
+        :get_backend,
+    )
+    return backend_type()
 end
 
 include("backends/slurm.jl")

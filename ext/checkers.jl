@@ -267,16 +267,27 @@ function Checker.check(
     checker::SignChecker,
     var::OutputVar,
     metadata::Metadata;
-    data,
+    data = nothing,
     verbose = false,
 )
-    obs_pos_proportion = mean(data .> 0)
+    isnothing(data) && error(
+        "SignChecker needs the observational data. Pass it as the `data` \
+        keyword argument to `Checker.check`",
+    )
 
     # This is inaccurate, because not all the values in var.data will end up in
     # the G ensemble matrix. See _match_dates for one case. However, the mean
     # should not change that much with additional times.
+    # Both proportions ignore NaNs, so that a partially masked field is not
+    # compared against a differently normalized one
+    obs_valid = @. !isnan(data)
     valid = @. !isnan(var.data)
-    sim_pos_proportion = sum(valid .& (var.data .> 0)) / sum(valid)
+    (iszero(count(obs_valid)) || iszero(count(valid))) && error(
+        "SignChecker cannot compare a variable that is entirely NaN (short \
+        name $(ClimaAnalysis.short_name(var)))",
+    )
+    obs_pos_proportion = count(obs_valid .& (data .> 0)) / count(obs_valid)
+    sim_pos_proportion = count(valid .& (var.data .> 0)) / count(valid)
 
     same_sign = abs(obs_pos_proportion - sim_pos_proportion) < checker.threshold
     !same_sign &&

@@ -1,5 +1,4 @@
 using Statistics
-import YAML
 import JLD2
 import ClimaCalibrate: observation_map, path_to_ensemble_member
 
@@ -15,8 +14,12 @@ experiment_dir = joinpath(
 Returns the observation map (from the raw model output to the observable y),
 as specified by process_member_data, for the given iteration.
 """
-function ClimaCalibrate.observation_map(::SurfaceFluxModelInterface, iteration)
+function ClimaCalibrate.observation_map(
+    interface::SurfaceFluxModelInterface,
+    iteration,
+)
     model_output = "model_ustar_array.jld2"
+    (; output_dir, ensemble_size) = interface
 
     dims = 1
     G_ensemble = Array{Float64}(undef, dims..., ensemble_size)
@@ -35,25 +38,13 @@ function ClimaCalibrate.observation_map(::SurfaceFluxModelInterface, iteration)
 end
 
 """
-    process_member_data(ustar; output_variance = false)
+    process_member_data(ustar)
 
-Process the data from a single ensemble member to obtain the observation.
-If `output_variance` is true, return the observation and its variance.
+Reduce one ensemble member's `ustar` profiles to the observable, their mean.
 
-This is used to transform the model output to the observation space.
-Note that the outputs need to have element type of Float64 for the EKP struct.
+The element type is `Float64`, which is what the `EnsembleKalmanProcess` holds.
 """
-function process_member_data(ustar; output_variance = false)
+process_member_data(ustar) = Float64[nanmean(ustar)]
 
-    profile_mean = nanmean(ustar)
-    observation = Float64[profile_mean]
-    if !(output_variance)
-        return observation
-    else
-        variance = Matrix{Float64}(undef, 1, 1)
-        variance[1] = nanvar(ustar)
-        return (; observation, variance)
-    end
-end
 nanmean(x) = mean(filter(!isnan, x))
 nanvar(x) = var(filter(!isnan, x))

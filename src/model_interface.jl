@@ -1,6 +1,5 @@
 import EnsembleKalmanProcesses as EKP
 import JLD2
-import YAML
 
 export AbstractModelInterface,
     forward_model,
@@ -50,14 +49,18 @@ For `HPCBackend`, the subtypes can also implement:
   passed to the Julia executable in the job script. The default implementation
   is to return the empty string.
 
-# Example
+# Examples
 
 ```julia
 struct MyModelInterface <: ClimaCalibrate.AbstractModelInterface
     config::String
 end
 
-function ClimaCalibrate.forward_model(interface::MyModelInterface, iteration, member)
+function ClimaCalibrate.forward_model(
+    interface::MyModelInterface,
+    iteration,
+    member,
+)
     # Run the model using interface.config
 end
 
@@ -75,6 +78,34 @@ Execute the forward model simulation with the given configuration.
 
 This function must be overridden by the user's model interface,
 dispatching on their subtype of `AbstractModelInterface`.
+
+The parameters EKP drew for this member are on disk, at
+[`parameter_path`](@ref); write the model's output somewhere
+[`observation_map`](@ref) can find it, conventionally under
+[`path_to_ensemble_member`](@ref).
+
+# Examples
+```julia
+function ClimaCalibrate.forward_model(
+    interface::MyModelInterface,
+    iteration,
+    member,
+)
+    member_dir = ClimaCalibrate.path_to_ensemble_member(
+        interface.output_dir,
+        iteration,
+        member,
+    )
+    parameters = ClimaCalibrate.parameter_path(
+        interface.output_dir,
+        iteration,
+        member,
+    )
+    run_my_model(; parameters, output_dir = member_dir)
+end
+```
+
+See also [`observation_map`](@ref).
 """
 function forward_model(interface::AbstractModelInterface, iteration, member)
     error("forward_model not implemented for $(nameof(typeof(interface)))")
@@ -84,8 +115,33 @@ end
     observation_map(interface::AbstractModelInterface, iteration)
 
 Run the observation map for the specified iteration.
+
 This function must be implemented for each calibration experiment,
 dispatching on the user's subtype of `AbstractModelInterface`.
+
+# Returns
+The G ensemble matrix: column `m` holds ensemble member `m`'s output, ordered to
+match the observation entry for entry. A member whose forward model failed
+should leave a column of `NaN`s.
+
+# Examples
+```julia
+function ClimaCalibrate.observation_map(interface::MyModelInterface, iteration)
+    (; output_dir, ensemble_size) = interface
+    G_ensemble = fill(NaN, n_observation_entries, ensemble_size)
+    for member in 1:ensemble_size
+        member_dir = ClimaCalibrate.path_to_ensemble_member(
+            output_dir,
+            iteration,
+            member,
+        )
+        G_ensemble[:, member] .= process_member_output(member_dir)
+    end
+    return G_ensemble
+end
+```
+
+See also [`forward_model`](@ref), [`postprocess_g_ensemble`](@ref).
 """
 function observation_map(interface::AbstractModelInterface, iteration)
     error("observation_map not implemented for $(nameof(typeof(interface)))")

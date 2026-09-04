@@ -19,21 +19,26 @@ include(joinpath(experiment_dir, "generate_data.jl"))
     using ClimaCalibrate
     import EnsembleKalmanProcesses.ParameterDistributions as PD
     output_dir = joinpath("output", "surface_fluxes_perfect_model")
-    prior_vec = [
-        PD.constrained_gaussian("coefficient_a_m_businger", 4.7, 0.5, 2, 6),
-        PD.constrained_gaussian("coefficient_a_h_businger", 4.6, 3, 0, 10),
-    ]
+    # `a_m` is the one Businger coefficient that the profile-averaged `ustar`
+    # constrains. Perturbing `a_h` moves `ustar` along the same direction, so a
+    # single number cannot tell the two apart, and calibrating both would leave
+    # the ensemble free to slide along that ridge. The prior is centered away
+    # from the value the observation was generated with, which is 4.7
+    prior_vec =
+        [PD.constrained_gaussian("coefficient_a_m_businger", 3.5, 1.0, 2, 6)]
     prior = PD.combine_distributions(prior_vec)
-    ensemble_size = 20
-    n_iterations = 6
+    # Unscented Kalman inversion places its members on a quadrature stencil of
+    # `2p + 1` points around the current mean, so one parameter needs three
+    # forward model runs per iteration
+    ensemble_size = 2 * PD.ndims(prior) + 1
+    n_iterations = 10
 
     experiment_dir = $experiment_dir
     include(joinpath(experiment_dir, "observation_map.jl"))
-    ustar = JLD2.load_object(
-        joinpath(experiment_dir, "data", "synthetic_ustar_array_noisy.jld2"),
-    )
-    (; observation, variance) =
-        process_member_data(ustar; output_variance = true)
+    observation =
+        JLD2.load_object(joinpath(experiment_dir, "data", "obs_mean.jld2"))
+    variance =
+        JLD2.load_object(joinpath(experiment_dir, "data", "obs_noise_cov.jld2"))
 
     model_interface = joinpath(experiment_dir, "model_interface.jl")
     include(model_interface)
@@ -45,21 +50,35 @@ end
 
 Test that the surface fluxes perfect model calibration converges.
 
-The final forward model output should approximately be equal to the
-observations, and parameter spread should decrease from the first to last
-iteration.
+The spread should narrow, the forward model should reproduce the observation to
+within the noise, and the calibrated `a_m` should be closer to the 4.7 the
+observation was generated with than the prior mean is.
 """
-function test_sf_calibration_output(eki, prior, observation)
+function test_sf_calibration_output(eki, prior, observation, variance)
     @testset "SurfaceFluxes calibration reproducibility tests" begin
         params = EKP.get_ϕ(prior, eki)
         spread = map(Statistics.var, params)
+        # The stencil narrows with the posterior covariance it is drawn from,
+        # and holds there: an unscented ensemble does not collapse, and a loss
+        # this rough leaves it with something to hold
+        @test last(spread) / first(spread) < 0.7
 
-        # Spread should be heavily decreased the ensemble has converged
-        @test last(spread) / first(spread) < 0.3
-
+        # The model error and the observation error are what separate the two,
+        # and the calibration is given their sum as its noise covariance
         forward_model_output = EKP.get_g_mean_final(eki)
         @show forward_model_output
-        @test all(isapprox.(forward_model_output, observation; rtol = 1e-2))
+        @test all(
+            abs.(forward_model_output .- observation) .<
+            3 * sqrt(only(variance)),
+        )
+
+        # The observation is one draw from a distribution whose width is 2% of
+        # `ustar`, so `a_m` lands near 4.7 rather than on it
+        a_m = only(EKP.get_ϕ_mean_final(prior, eki))
+        prior_mean = Statistics.mean(first(params))
+        @show a_m
+        @test abs(a_m - 4.7) < abs(prior_mean - 4.7)
+        @test isapprox(a_m, 4.7; atol = 0.5)
     end
 end
 
@@ -151,6 +170,110 @@ function convergence_plot(eki, prior, theta_star_vec, param_names, output_dir)
 end
 
 """
+    loss_landscape_plot(observation, variance, output_dir; kwargs...)
+
+Plot the loss the calibration minimizes, as a function of the parameter.
+
+The loss is the covariance-weighted misfit
+`(y - G(a_m))^2 / (sigma_obs^2 + sigma_model^2)`, which is the quantity
+`EKP.get_error` reports. Sweeping `a_m` over the prior range shows what the
+ensemble is descending, and how far the minimum sits from the value the
+observation was generated with.
+
+The plot is saved to `output_dir`.
+"""
+function loss_landscape_plot(
+    observation,
+    variance,
+    output_dir;
+    a_m_values = 2.0:0.01:6.0,
+    theta_star = 4.7,
+    calibrated = nothing,
+    prior_mean = 3.5,
+)
+    FT = Float32
+    x_inputs = load_profiles(
+        joinpath(experiment_dir, "data", "synthetic_profile_data.jld2"),
+    )
+    scratch = mktempdir()
+
+    function forward(a_m; model_error = true)
+        member = mktempdir(scratch)
+        parameters = joinpath(member, "parameters.toml")
+        open(parameters, "w") do io
+            println(io, "[coefficient_a_m_businger]")
+            println(io, "value = ", a_m)
+            println(io, "type = \"float\"")
+        end
+        config = Dict("output_dir" => member, "toml" => [parameters])
+        return nanmean(
+            obtain_ustar(
+                FT,
+                x_inputs,
+                config;
+                return_ustar = true,
+                model_error,
+            ),
+        )
+    end
+
+    y = only(observation)
+    Γ = only(variance)
+    g = [forward(a_m) for a_m in a_m_values]
+    loss = ((y .- g) .^ 2) ./ Γ
+    smooth_loss =
+        [(y - forward(a_m; model_error = false))^2 / Γ for a_m in a_m_values]
+
+    f = CairoMakie.Figure(size = (800, 400))
+    for (col, xlims, title) in (
+        (1, extrema(a_m_values), "Over the prior range"),
+        (2, (theta_star - 0.6, theta_star + 0.6), "Around the minimum"),
+    )
+        ax = CairoMakie.Axis(
+            f[1, col],
+            xlabel = "coefficient_a_m_businger",
+            ylabel = "Covariance-weighted misfit",
+            title = title,
+        )
+        CairoMakie.lines!(
+            ax,
+            a_m_values,
+            smooth_loss,
+            color = (:gray, 0.8),
+            label = "without model error",
+        )
+        CairoMakie.lines!(ax, a_m_values, loss, color = :black, label = "loss")
+        CairoMakie.vlines!(
+            ax,
+            [theta_star],
+            color = :red,
+            linestyle = :dash,
+            label = "generating value",
+        )
+        isnothing(calibrated) || CairoMakie.vlines!(
+            ax,
+            [calibrated],
+            color = :dodgerblue,
+            label = "calibrated",
+        )
+        CairoMakie.xlims!(ax, xlims...)
+        col == 1 && CairoMakie.vlines!(
+            ax,
+            [prior_mean],
+            color = :orange,
+            label = "prior mean",
+        )
+        col == 2 && CairoMakie.ylims!(ax, 0, 12)
+        col == 2 &&
+            CairoMakie.axislegend(ax; position = :lt, framevisible = false)
+    end
+
+    CairoMakie.save(joinpath(output_dir, "loss_landscape.png"), f)
+    @info "Loss landscape plot path: $(joinpath(output_dir, "loss_landscape.png"))"
+    return nothing
+end
+
+"""
     g_vs_iter_plot(eki, output_dir)
 
 Plot ensemble `ustar` values against iteration, with dashed reference lines for
@@ -161,9 +284,8 @@ The plot is saved to `output_dir`.
 function g_vs_iter_plot(eki, output_dir)
     f = CairoMakie.Figure()
     ax = CairoMakie.Axis(f[1, 1], xlabel = "Iteration", ylabel = "Model Ustar")
-    ustar_obs = JLD2.load_object(
-        joinpath(experiment_dir, "data", "synthetic_ustar_array_noisy.jld2"),
-    )
+    ustar_obs =
+        JLD2.load_object(joinpath(experiment_dir, "data", "obs_mean.jld2"))
 
     pkg_dir = pkgdir(ClimaCalibrate)
     x_data_file = joinpath(
@@ -182,12 +304,10 @@ function g_vs_iter_plot(eki, output_dir)
     model_config["output_dir"] = output_dir
     for iter in 1:(n_iterations + 1)
         for i in 1:ensemble_size
-            model_config["toml"] = [
-                joinpath(
-                    pkg_dir,
-                    ClimaCalibrate.parameter_path(output_dir, iter, i),
-                ),
-            ]
+            # `output_dir` is where the calibration wrote, which is where the
+            # parameters are, whether or not it sits under the package
+            model_config["toml"] =
+                [ClimaCalibrate.parameter_path(output_dir, iter, i)]
             ustar_mod =
                 obtain_ustar(FT, x_inputs, model_config, return_ustar = true)
 
@@ -198,13 +318,18 @@ function g_vs_iter_plot(eki, output_dir)
     CairoMakie.lines!(
         ax,
         [1, n_iterations + 1],
-        [nanmean(ustar_obs), nanmean(ustar_obs)],
+        [only(ustar_obs), only(ustar_obs)],
         color = :red,
         linestyle = :dash,
     )
     model_config["toml"] = []
-    ustar_mod_perfect_params =
-        obtain_ustar(FT, x_inputs, model_config, return_ustar = true)
+    ustar_mod_perfect_params = obtain_ustar(
+        FT,
+        x_inputs,
+        model_config,
+        return_ustar = true,
+        model_error = false,
+    )
     CairoMakie.lines!(
         ax,
         [1, n_iterations + 1],

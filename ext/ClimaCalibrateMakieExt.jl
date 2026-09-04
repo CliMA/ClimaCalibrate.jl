@@ -8,12 +8,10 @@ import ClimaCalibrate.Visualization:
     plot_g, plot_g!, plot_g_mean, plot_g_mean!, plot_obs, plot_obs!
 
 """
-    plot_g
+    Plot_G
 
-Plot members of the G ensemble matrix as line plots.
-
-If the `iter` keyword argument is not passed, then this plots the last completed
-G ensemble matrix. Otherwise, it plots the `iter`th G ensemble matrix.
+Makie recipe backing `plot_g` and `plot_g!`. Its attributes are listed below;
+see `plot_g` for what it draws.
 """
 Makie.@recipe Plot_G (ekp,) begin
     "Iteration of G ensemble matrix to plot. If `nothing`, then use the last
@@ -47,13 +45,10 @@ function Makie.plot!(g_ens_plot::Plot_G)
 end
 
 """
-    plot_g_mean
+    Plot_G_Mean
 
-Plot mean forward map evaluation as a line plot.
-
-If the `iter` keyword argument is not passed, then this plots the last mean
-forward map evaluation. Otherwise, it plots the `iter`th mean forward map
-evaluation.
+Makie recipe backing `plot_g_mean` and `plot_g_mean!`. Its attributes are listed
+below; see `plot_g_mean` for what it draws.
 """
 Makie.@recipe Plot_G_Mean (ekp,) begin
     "Iteration of the G ensemble matrix to plot. If `nothing`, then use the last
@@ -85,13 +80,10 @@ end
 
 
 """
-    plot_obs
+    Plot_Obs
 
-Plot the observations as a line plot.
-
-If the `iter` keyword argument is not passed, then this plots the observations
-for the last iteration. Otherwise, it plots the observations for the `iter`th
-iteration.
+Makie recipe backing `plot_obs` and `plot_obs!`. Its attributes are listed
+below; see `plot_obs` for what it draws.
 """
 Makie.@recipe Plot_Obs (ekp,) begin
     "Iteration of the G ensemble matrix to plot. If `nothing`, then use the last

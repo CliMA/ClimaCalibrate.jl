@@ -17,7 +17,7 @@ nprocs = 3
 # adds itself to the global pool once started. The calibration begins with an
 # empty pool and picks up workers as they join
 if nworkers() == 1
-    if ClimaCalibrate.get_backend() == ClimaCalibrate.DerechoBackend
+    if ClimaCalibrate.backend_type() == ClimaCalibrate.DerechoBackend
         ClimaCalibrate.add_workers(
             nprocs;
             cluster = :pbs,
@@ -60,9 +60,14 @@ ClimaCalibrate.Calibration.run_iteration(
     output_dir,
 )
 
+# Member 1 exits, which takes down the worker running it along with the other
+# members that worker had in flight. How many that is depends on the machine, so
+# the test is that each member is left with a checkpoint a restart can read, and
+# that the member which exited is not marked complete.
 @testset "Test model checkpoints with interruptions" begin
+    @test ClimaCalibrate.model_started(output_dir, 1, 1)
     for m in 1:ensemble_size
-        @test m == 1 ? ClimaCalibrate.model_started(output_dir, 1, m) :
+        @test ClimaCalibrate.model_started(output_dir, 1, m) ||
               ClimaCalibrate.model_completed(output_dir, 1, m)
         rm(ClimaCalibrate.checkpoint_path(output_dir, 1, m))
     end
@@ -77,24 +82,23 @@ ClimaCalibrate.@worker_setup include(
     ),
 )
 
-rng_seed = 1234
-Random.seed!(rng_seed)
-rng_ekp = Random.MersenneTwister(rng_seed)
-user_initial_ensemble = EKP.construct_initial_ensemble(prior, ensemble_size)
+# The interrupted iteration above wrote a first iteration of its own, and
+# `initialize` keeps the stored one. The calibration below is checked against
+# the ensemble it is given, so it starts from a directory of its own
+rm(output_dir, recursive = true)
+
 ekp = EKP.EnsembleKalmanProcess(
-    user_initial_ensemble,
     observation,
     variance,
-    EKP.Inversion();
-    rng = rng_ekp,
-    localization_method = EKP.Localizers.NoLocalization(),
-    accelerator = EKP.DefaultAccelerator(),
+    EKP.Unscented(prior);
+    # `Unscented` defaults to a scheduler that stops once the misfit target is
+    # reached, which would end the run before `n_iterations`
     scheduler = EKP.DefaultScheduler(),
 )
 eki = ClimaCalibrate.Calibration.calibrate(
     ClimaCalibrate.WorkerBackend(),
     ekp,
-    SurfaceFluxModelInterface(),
+    SurfaceFluxModelInterface(output_dir, ensemble_size),
     n_iterations,
     prior,
     output_dir,
@@ -102,16 +106,15 @@ eki = ClimaCalibrate.Calibration.calibrate(
 
 @test ClimaCalibrate.last_completed_iteration(output_dir) == n_iterations
 
-test_sf_calibration_output(eki, prior, observation)
+test_sf_calibration_output(eki, prior, observation, variance)
 
-theta_star_vec =
-    (; coefficient_a_m_businger = 4.7, coefficient_a_h_businger = 4.7)
+theta_star_vec = (; coefficient_a_m_businger = 4.7)
 
 convergence_plot(
     eki,
     prior,
     theta_star_vec,
-    ["coefficient_a_m_businger", "coefficient_a_h_businger"],
+    ["coefficient_a_m_businger"],
     output_dir,
 )
 
@@ -122,13 +125,13 @@ g_vs_iter_plot(eki, output_dir)
     @test last_iter == n_iterations
     ClimaCalibrate.Calibration.run_iteration(
         ClimaCalibrate.WorkerBackend(),
-        SurfaceFluxModelInterface(),
+        SurfaceFluxModelInterface(output_dir, ensemble_size),
         last_iter + 1,
         ensemble_size,
         output_dir,
     )
     G_ensemble = ClimaCalibrate.observation_map(
-        SurfaceFluxModelInterface(),
+        SurfaceFluxModelInterface(output_dir, ensemble_size),
         last_iter + 1,
     )
     ClimaCalibrate.save_G_ensemble(output_dir, last_iter + 1, G_ensemble)

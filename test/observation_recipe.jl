@@ -10,6 +10,7 @@ import Statistics: mean
 import LinearAlgebra: Diagonal, I
 import Statistics
 import NaNStatistics: nanvar, nanmean
+import Logging
 
 import EnsembleKalmanProcesses as EKP
 using EnsembleKalmanProcesses.ParameterDistributions
@@ -566,7 +567,9 @@ end
     @test isempty(svd_plus_d_covar_rank0.svd_cov.S)
 
     covar_estimator_rank10 = ObservationRecipe.SVDplusDCovariance(; rank = 10)
-    @test_logs (:warn, r"rank") ObservationRecipe.covariance(
+    # match_mode = :any because a covariance with no D term also warns that it
+    # is rank deficient
+    @test_logs (:warn, r"rank") match_mode = :any ObservationRecipe.covariance(
         covar_estimator_rank10,
         sample_collection,
     )
@@ -758,7 +761,7 @@ end
     small_var = ClimaAnalysis.average_season_across_time(small_var)
     small_sample_collection =
         SampleBuilder.build_samples_by_times([small_var], sample_date_ranges)
-    @test_throws r"Insufficient samples for computing quantile" ObservationRecipe.covariance(
+    @test_throws r"needs a variable with at least 20 entries" ObservationRecipe.covariance(
         covar_estimator_with_q_reg,
         small_sample_collection,
     )
@@ -1811,4 +1814,191 @@ end
     @test vars4[1].dims["lat"] == var3d.dims["lat"]
     @test vars4[1].dims["lon"] == var3d.dims["lon"]
     @test vars4[1].data == var3d.data[[1], :, :]
+end
+
+@testset "Covariance guards" begin
+    time = ClimaAnalysis.Utils.date_to_time.(
+        Dates.DateTime(2007, 12),
+        [Dates.DateTime(2007, 12) + Dates.Month(i) for i in 0:35],
+    )
+    lat = [-30.0, 30.0]
+
+    seasonal_var(data_fn) = ClimaAnalysis.average_season_across_time(
+        TemplateVar() |>
+        add_dim("time", time, units = "s") |>
+        add_dim("lat", lat, units = "degrees") |>
+        add_attribs(short_name = "hi", units = "K", start_date = "2007-12-1") |>
+        data_fn |>
+        initialize,
+    )
+
+    sample_date_ranges = [
+        (Dates.DateTime(i, 12, 1), Dates.DateTime(i + 1, 9, 1)) for
+        i in 2007:2009
+    ]
+    build(var) = SampleBuilder.build_samples_by_times(
+        [var],
+        sample_date_ranges;
+        FT = Float64,
+    )
+
+    varying_samples = build(seasonal_var(one_to_n_data(collected = true)))
+    constant_samples = build(seasonal_var(ones_data()))
+
+    @testset "A degenerate diagonal is reported, not passed to EKP" begin
+        # A field that does not vary between samples has zero variance, and a
+        # Diagonal with a zero entry is singular. Catching it here names the
+        # variable; reaching EKP with it fails there with an unrelated message
+        err = try
+            ObservationRecipe.covariance(
+                ObservationRecipe.SeasonalDiagonalCovariance(),
+                constant_samples,
+            )
+            nothing
+        catch e
+            e
+        end
+        @test err isa ErrorException
+        @test occursin("hi", err.msg)
+
+        # Regularization is the documented way out
+        @test ObservationRecipe.covariance(
+            ObservationRecipe.SeasonalDiagonalCovariance(regularization = 1.0),
+            constant_samples,
+        ) isa Diagonal
+    end
+
+    @testset "SVDplusDCovariance requires at least two samples" begin
+        one_sample = SampleBuilder.build_samples_by_times(
+            [seasonal_var(one_to_n_data(collected = true))],
+            sample_date_ranges[1:1];
+            FT = Float64,
+        )
+        @test_throws ErrorException ObservationRecipe.covariance(
+            ObservationRecipe.SVDplusDCovariance(),
+            one_sample,
+        )
+    end
+
+    @testset "SVDplusDCovariance warns when the D term is empty" begin
+        # Both terms of D default to zero, which leaves a rank-deficient
+        # covariance whenever there are fewer samples than entries
+        @test_logs (:warn, r"rank deficient") match_mode = :any ObservationRecipe.covariance(
+            ObservationRecipe.SVDplusDCovariance(),
+            varying_samples,
+        )
+        # Setting either term silences it
+        @test_logs min_level = Logging.Warn ObservationRecipe.covariance(
+            ObservationRecipe.SVDplusDCovariance(regularization = 1e-3),
+            varying_samples,
+        )
+    end
+
+    @testset "SVDplusDCovariance warns when an entry of D is zero" begin
+        # D is `(model_error_scale * mean)^2 + regularization`, so a model
+        # error scale on its own leaves a zero wherever the sample mean is
+        # zero. A field masked to zero over part of its domain is one such case
+        masked = seasonal_var(one_to_n_data(collected = true))
+        masked.data[:, 1] .= 0.0
+        zero_mean = build(masked)
+        @test_logs (:warn, r"zero or NaN") match_mode = :any ObservationRecipe.covariance(
+            ObservationRecipe.SVDplusDCovariance(model_error_scale = 0.05),
+            zero_mean,
+        )
+        @test_logs min_level = Logging.Warn ObservationRecipe.covariance(
+            ObservationRecipe.SVDplusDCovariance(
+                model_error_scale = 0.05,
+                regularization = 1e-8,
+            ),
+            zero_mean,
+        )
+    end
+
+    @testset "A quantile of a small variable is not read as zero" begin
+        # The quantile is of a squared quantity in the samples' element type,
+        # which is Float32 by default. A variable in SI units has small entries,
+        # and `eps(Float32)` as an absolute tolerance on the square rejects them
+        scaled = seasonal_var(one_to_n_data(collected = true))
+        scaled.data .*= 1e-5
+        small =
+            SampleBuilder.build_samples_by_times([scaled], sample_date_ranges)
+        covar = ObservationRecipe.covariance(
+            ObservationRecipe.SVDplusDCovariance(
+                model_error_scale = 0.05,
+                regularization = ObservationRecipe.QuantileRegularization(0.5),
+            ),
+            small,
+        )
+        @test covar isa EKP.SVDplusD
+    end
+
+    @testset "Overlapping sample windows are flagged" begin
+        long =
+            TemplateVar() |>
+            add_dim("time", collect(0.0:5.0), units = "s") |>
+            add_attribs(
+                short_name = "hi",
+                units = "K",
+                start_date = "2007-12-1",
+            ) |>
+            one_to_n_data(collected = true) |>
+            initialize
+
+        # Samples built from overlapping windows share time slices, so they are
+        # correlated and bias the covariance they are used to estimate
+        @test_logs (:warn, r"overlap") match_mode = :any SampleBuilder.build_samples_by_times(
+            long,
+            [(0.0, 3.0), (2.0, 5.0)],
+        )
+        @test_logs min_level = Logging.Warn SampleBuilder.build_samples_by_times(
+            long,
+            [(0.0, 2.0), (3.0, 5.0)],
+        )
+    end
+end
+
+@testset "A precomputed covariance is reused" begin
+    time = ClimaAnalysis.Utils.date_to_time.(
+        Dates.DateTime(2007, 12),
+        [Dates.DateTime(2007, 12) + Dates.Month(i) for i in 0:35],
+    )
+    var = ClimaAnalysis.average_season_across_time(
+        TemplateVar() |>
+        add_dim("time", time, units = "s") |>
+        add_dim("lat", [-30.0, 30.0], units = "degrees") |>
+        add_attribs(short_name = "hi", units = "K", start_date = "2007-12-1") |>
+        one_to_n_data(collected = true) |>
+        initialize,
+    )
+    samples = SampleBuilder.build_samples_by_times(
+        [var],
+        [
+            (Dates.DateTime(i, 12, 1), Dates.DateTime(i + 1, 9, 1)) for
+            i in 2007:2009
+        ];
+        FT = Float64,
+    )
+    estimator = ObservationRecipe.SeasonalDiagonalCovariance()
+    covar = ObservationRecipe.covariance(estimator, samples)
+
+    for i in 1:SampleBuilder.num_samples(samples)
+        with_covar = ObservationRecipe.observation(
+            estimator,
+            samples,
+            i;
+            covariance = covar,
+        )
+        @test EKP.get_obs_noise_cov(with_covar) == EKP.get_obs_noise_cov(
+            ObservationRecipe.observation(estimator, samples, i),
+        )
+    end
+
+    # EKP checks neither the size nor the shape of a covariance it is given, so
+    # one from another collection surfaces much later as a dimension mismatch
+    @test_throws ErrorException ObservationRecipe.observation(
+        estimator,
+        samples,
+        1;
+        covariance = covar[1:(end - 1), 1:(end - 1)],
+    )
 end

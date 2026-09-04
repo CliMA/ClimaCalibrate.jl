@@ -211,6 +211,24 @@ end
        #SBATCH --job-priority=preempt"""
 
     @test modules == "module load climacommon"
+
+    # Underscores are a Slurm spelling of the option *name* only. Rewriting
+    # them in the value would silently rename partitions and QOS names
+    underscore_config = ClimaCalibrate.SlurmConfig(;
+        directives = [
+            :time => 1,
+            :partition => "gpu_debug",
+            :qos => "high_priority",
+            :t => "00:10:00",
+        ],
+    )
+    underscore_directives =
+        ClimaCalibrate.Backend.generate_directives(underscore_config)
+    @test occursin("#SBATCH --partition=gpu_debug", underscore_directives)
+    @test occursin("#SBATCH --qos=high_priority", underscore_directives)
+    # Short options take a space, not an `=`
+    @test occursin("#SBATCH -t 00:10:00", underscore_directives)
+
     # Remove leading and trailing whitespaces to avoid using \" for quotation
     # marks
     @test env_vars == strip("""

@@ -3,12 +3,16 @@ export SlurmConfig, PBSConfig, AbstractHPCConfig
 import OrderedCollections: OrderedDict
 
 """
-    abstract type AbstractHPCConfig end
+    AbstractHPCConfig
 
-An abstract type for high-performance computing job configuration objects used
-by [`HPCBackend`](@ref)s when creating job scripts.
+Scheduler directives, modules, and environment variables for the jobs an
+[`HPCBackend`](@ref) submits.
 
-## Interface
+Subtypes:
+- [`SlurmConfig`](@ref): configuration for the Slurm clusters.
+- [`PBSConfig`](@ref): configuration for the PBS clusters.
+
+# Interface
 
 All subtypes of `AbstractHPCConfig` must have the following fields:
 - `directives::OrderedDict{Symbol, Any}`: Scheduler directives (e.g., resource
@@ -61,7 +65,7 @@ end
 Create a `SlurmConfig` specifying the `directives`, `modules`, and `env_vars`
 for `SlurmBackend`s.
 
-## Defaults
+# Defaults
 
 The default directive is
 - `:gpus_per_task`: 0.
@@ -70,7 +74,7 @@ The default environment variables are
 - `CLIMACOMMS_DEVICE`: "CPU" or "GPU" depending on the job directives,
 - `CLIMACOMMS_CONTEXT`: "MPI".
 
-## Examples
+# Examples
 
 This example creates a Slurm configuration for a job with a single task, using
 12 CPUs and 1 GPU, and a runtime of 720 minutes. It loads the latest version of
@@ -101,7 +105,8 @@ function SlurmConfig(;
         _parse_config_args(directives, modules, env_vars)
 
     # Format time
-    @assert haskey(directives, :time) "Slurm directives must include key :time"
+    haskey(directives, :time) ||
+        throw(ArgumentError("Slurm directives must include the key :time"))
     directives[:time] = format_slurm_time(directives[:time])
 
     # Add default directives
@@ -130,7 +135,7 @@ The supported directives are: `time`, `queue`, `ntasks`, `cpus_per_task`,
 naming convention (e.g., `time` instead of `walltime`). Any other directives
 provided will be ignored.
 
-## Defaults
+# Defaults
 
 The default directives are
 - `queue`: "main@desched1",
@@ -143,7 +148,7 @@ The default environment variables are
 - `CLIMACOMMS_DEVICE`: "CPU" or "GPU" depending on the job directives,
 - `CLIMACOMMS_CONTEXT`: "MPI".
 
-## Examples
+# Examples
 
 This example creates a PBS configuration for a job with a single task, using
 12 CPUs and 1 GPU, and a runtime of 720 minutes. It loads the latest version of
@@ -174,7 +179,8 @@ function PBSConfig(;
         _parse_config_args(directives, modules, env_vars)
 
     # Format time
-    @assert haskey(directives, :time) "PBS directives must include key :time"
+    haskey(directives, :time) ||
+        throw(ArgumentError("PBS directives must include the key :time"))
     directives[:time] = format_pbs_time(directives[:time])
 
     # Add default directives
@@ -320,13 +326,42 @@ scripts.
 """
 function generate_directives(config::SlurmConfig)
     (; directives) = config
-    slurm_directives = map(collect(directives)) do (k, v)
-        k = string(k)
-        flag = length(k) == 1 ? "-" : "--"
-        "#SBATCH $flag$(replace(k, "_" => "-"))=$(replace(string(v), "_" => "-"))"
-    end
+    slurm_directives = map(
+        ((k, v),) -> "#SBATCH $(format_slurm_flag(k, v))",
+        collect(directives),
+    )
     return join(slurm_directives, "\n")
 end
+
+"""
+    slurm_flag_args(key, value)
+
+Return a single Slurm option as a vector of command-line arguments.
+
+Underscores in `key` become dashes, since that is the Slurm spelling
+(`cpus_per_task` becomes `--cpus-per-task`). `value` is left untouched: it can
+contain underscores, as in a partition or QOS name. Single-letter
+keys are short options, which Slurm separates from their value with a space
+rather than an `=`, so they come back as two arguments.
+"""
+function slurm_flag_args(key, value)
+    key = string(key)
+    value = string(value)
+    if length(key) == 1
+        return isempty(value) ? ["-$key"] : ["-$key", value]
+    end
+    key = replace(key, "_" => "-")
+    return isempty(value) ? ["--$key"] : ["--$key=$value"]
+end
+
+"""
+    format_slurm_flag(key, value)
+
+Format a single Slurm option as it appears on an `#SBATCH` line.
+
+See [`slurm_flag_args`](@ref).
+"""
+format_slurm_flag(key, value) = join(slurm_flag_args(key, value), " ")
 
 """
     generate_directives(config::PBSConfig)

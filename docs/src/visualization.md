@@ -156,3 +156,29 @@ CairoMakie.Legend(
 
 fig
 ```
+
+## Residual diagnostics
+
+Plotting the ensemble tells you whether it is approaching the observation.
+[`analyze_residual`](@ref) tells you something more specific: how much of the
+remaining residual is *structured*, meaning aligned with the leading directions
+of the observational noise covariance, rather than noise-like.
+
+```julia
+import ClimaAnalysis   # required
+result = ClimaCalibrate.analyze_residual(ekp, iteration; n_eigenvectors = 3)
+result.structured_energy               # fraction of the residual in those directions
+result.structured_energy_by_variable   # the same, per variable
+result.residual_norm_by_variable       # which variable dominates the residual
+```
+
+It projects `obs - mean(G)` onto the leading eigenvectors of the noise
+covariance, normalized by the corresponding eigenvalues, so the projections are
+z-scores: a value much larger than one means the residual has structure the
+noise model does not account for. A high structured energy in one variable
+points at that variable's observation or its part of the observation map.
+
+This requires ClimaAnalysis to be loaded, and observations built by
+[`ObservationRecipe`](@ref), since it uses their metadata to attribute the
+residual to individual variables. It supports `SVD`, `Diagonal`, and `SVDplusD`
+covariances.

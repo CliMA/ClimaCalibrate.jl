@@ -1,3 +1,15 @@
+"""
+    ClimaCalibrate.EKPUtils
+
+Helpers for working with EnsembleKalmanProcesses.jl objects that do not
+depend on the rest of ClimaCalibrate.
+
+Covers building minibatchers and `ObservationSeries` from a vector of samples
+([`minibatcher_over_samples`](@ref), [`observation_series_from_samples`](@ref)),
+allocating a G ensemble matrix of the right shape ([`g_ens_matrix`](@ref)), and
+looking up which observations an iteration is being scored against
+([`get_observations_for_nth_iteration`](@ref)).
+"""
 module EKPUtils
 
 import EnsembleKalmanProcesses as EKP
@@ -14,9 +26,18 @@ _fixed_minibatcher_indices(n_batches, batch_size) =
 """
     minibatcher_over_samples(n_samples, batch_size)
 
-Create a `FixedMinibatcher` that divides `n_samples` into batches of size `batch_size`.
+Create a `FixedMinibatcher` that divides `n_samples` into batches of size
+`batch_size`.
 
-If `n_samples` is not divisible by `batch_size`, the remaining samples will be dropped.
+If `n_samples` is not divisible by `batch_size`, the remaining samples are
+dropped and a warning is emitted.
+
+# Examples
+```julia
+minibatcher = ClimaCalibrate.minibatcher_over_samples(10, 5)
+```
+
+See also [`observation_series_from_samples`](@ref).
 """
 function minibatcher_over_samples(n_samples::Int, batch_size::Int)
     n_samples <= 0 &&
@@ -48,7 +69,15 @@ end
 
 Create an `EKP.ObservationSeries` from a vector of `EKP.Observation` samples.
 
-If the number of samples is not divisible by `batch_size`, the remaining samples will be dropped.
+If the number of samples is not divisible by `batch_size`, the remaining samples
+are dropped.
+
+# Examples
+```julia
+obs_series = ClimaCalibrate.observation_series_from_samples(observations, 5)
+```
+
+See also [`minibatcher_over_samples`](@ref).
 """
 function observation_series_from_samples(
     samples::Vector{<:EKP.Observation},
@@ -70,8 +99,16 @@ end
 """
     g_ens_matrix(eki::EKP.EnsembleKalmanProcess{FT}) where {FT <: AbstractFloat}
 
-Construct a G ensemble matrix of type `FT` with all `NaN`s for the current
-iteration.
+Construct a G ensemble matrix of type `FT`, filled with `NaN`, sized for the
+current iteration's observation and ensemble.
+
+Starting from `NaN` means a member whose forward model failed is left as `NaN`,
+which is how EKP is told to ignore it.
+
+# Examples
+```julia
+G_ensemble = ClimaCalibrate.g_ens_matrix(ekp)
+```
 """
 function g_ens_matrix(
     eki::EKP.EnsembleKalmanProcess{FT},
@@ -97,6 +134,17 @@ function get_metadata_for_nth_iteration(obs_series::EKP.ObservationSeries, N)
 end
 
 """
+    _repeats_each_epoch(minibatcher)
+
+Return `true` if `minibatcher` gives every epoch the same minibatches, so that
+the schedule of an iteration that has not run yet is known in advance.
+"""
+_repeats_each_epoch(minibatcher) = false
+
+_repeats_each_epoch(minibatcher::EKP.FixedMinibatcher) =
+    EKP.get_method(minibatcher) == "order"
+
+"""
     get_observations_for_nth_iteration(obs_series::EKP.ObservationSeries, N)
 
 For the `N`th iteration, return a vector of the observation(s) being processed.
@@ -105,10 +153,21 @@ function get_observations_for_nth_iteration(
     obs_series::EKP.ObservationSeries,
     N,
 )
-    num_epochs = EKP.get_length_epoch(obs_series)
-    # EKP.get_minibatch fails with N > num_epochs, so we use mod1 to go back to
-    # the first epoch which seems consistent with what EKP does
-    minibatch_indices = EKP.get_minibatch(obs_series, mod1(N, num_epochs))
+    # A minibatcher that shuffles draws a different minibatch in each epoch, so
+    # the schedule for iteration `N` is the one EKP stored when it ran that
+    # iteration. EKP stores it up to the last iteration that has run
+    len_epoch = EKP.get_length_epoch(obs_series)
+    n_scheduled = length(EKP.get_minibatches(obs_series)) * len_epoch
+    if N > n_scheduled
+        _repeats_each_epoch(EKP.get_minibatcher(obs_series)) || error(
+            "Iteration $N has no minibatch: this `ObservationSeries` has been \
+            scheduled through iteration $n_scheduled, and its minibatcher \
+            draws a new order for each epoch. Pass an iteration that has \
+            already run.",
+        )
+        N = mod1(N, len_epoch)
+    end
+    minibatch_indices = EKP.get_minibatch(obs_series, N)
     minibatch_obs = EKP.get_observations(obs_series)[minibatch_indices]
     return minibatch_obs
 end

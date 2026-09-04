@@ -1,14 +1,13 @@
 # generate_data: generate true y, noise and x_inputs
 
-import SurfaceFluxes as SF
-import SurfaceFluxes.Parameters as SFPP
-import SurfaceFluxes.UniversalFunctions as UF
-import Thermodynamics as TD
-import SurfaceFluxes.Parameters: SurfaceFluxesParameters
+import Random
 using ClimaCalibrate
 
 pkg_dir = pkgdir(ClimaCalibrate)
-experiment_path = dirname(Base.active_project())
+# The path comes from the package, not from `Base.active_project()`: this file
+# is included from whichever environment the caller is working in
+experiment_path =
+    joinpath(pkg_dir, "experiments", "surface_fluxes_perfect_model")
 data_path = joinpath(experiment_path, "data")
 include(joinpath(experiment_path, "model_interface.jl"))
 FT = Float32
@@ -71,33 +70,55 @@ function save_profiles(
 end
 
 """
-    synthetic_observed_y(x_inputs; data_path = "data")
+    NOISE_FRACTION
 
-Generate synthetic observed y from the model truth.
+The standard deviation of the observation error, as a fraction of the observed
+`ustar`.
+
+An instrument reading of a turbulent flux carries an error of a few percent, and
+the calibration needs to be told what that error is: `EnsembleKalmanProcesses`
+weights the model-data misfit by it, and takes a step whose size it sets. What
+it is told is this error together with the model error, since the misfit
+contains both.
 """
-function synthetic_observed_y(x_inputs; data_path = "data", apply_noise = false)
+const NOISE_FRACTION = 0.02
+
+"""
+    synthetic_observed_y(x_inputs; data_path = "data", rng = Random.default_rng())
+
+Run the model with its default parameters, and return the `ustar` of each
+profile along with a noisy observation of their mean and the variance of that
+noise.
+
+The observation is one number drawn from `N(mean(ustar), (0.02 mean(ustar))^2)`,
+which is the perfect-model setup: the truth is known, and the calibration sees
+it through an instrument.
+"""
+function synthetic_observed_y(
+    x_inputs;
+    data_path = "data",
+    rng = Random.MersenneTwister(1234),
+)
     FT = typeof(x_inputs.profiles_int[1].T)
     config = Dict()
     config["toml"] = []
     config["output_dir"] = data_path
-    y = obtain_ustar(FT, x_inputs, config, return_ustar = true)
-    if apply_noise
-        # add noise to model truth to generate synthetic observations with some observation error
-        Γ = FT(0.003)^2 * I * (maximum(y) - minimum(y))
-        noise_dist = MvNormal(zeros(1), Γ)
-        apply_noise!(y, noise_dist) = y + rand(noise_dist)[1]
-        # broadcast the noise to each element of y
-        y_noisy = apply_noise!.(y, Ref(noise_dist))
-    else
-        y_noisy = deepcopy(y)
-    end
-    # save y to file
-    ustar = y_noisy
-    JLD2.save_object(
-        joinpath(data_path, "synthetic_ustar_array_noisy.jld2"),
-        ustar,
+    ustar = obtain_ustar(
+        FT,
+        x_inputs,
+        config,
+        return_ustar = true,
+        model_error = false,
     )
-    return y, y_noisy
+
+    truth = nanmean(ustar)
+    noise_sd = NOISE_FRACTION * truth
+    observation = Float64[truth + noise_sd * randn(rng)]
+    variance = Matrix{Float64}(undef, 1, 1)
+    variance[1] = noise_sd^2 + (MODEL_ERROR_FRACTION * truth)^2
+
+    JLD2.save_object(joinpath(data_path, "synthetic_ustar_array.jld2"), ustar)
+    return (; ustar, observation, variance)
 end
 
 data_files = [
@@ -109,27 +130,10 @@ if any(x -> !isfile(x), data_files)
     profile_file = "synthetic_profile_data.jld2"
     save_profiles(FT, data_path = data_path, x_data_file = profile_file)
 
-    # read x inputs
     x_inputs = load_profiles(joinpath(data_path, profile_file))
-
-    # generate synthetic observed y
-    y, y_noisy = synthetic_observed_y(x_inputs, data_path = data_path)
-
-    # save the mean of y_noisy to file
-    nanmean(x) = mean(filter(!isnan, x))
-    ustar = y_noisy
-    JLD2.save_object(
-        joinpath(data_path, "synthetic_ustar_array_noisy_mean.jld2"),
-        ustar,
-    )
-
-    # save the mean and variance of y_noisy to file
-    ustar = JLD2.load_object(
-        joinpath(data_path, "synthetic_ustar_array_noisy.jld2"),
-    )
     (; observation, variance) =
-        process_member_data(ustar; output_variance = true)
+        synthetic_observed_y(x_inputs, data_path = data_path)
+
     JLD2.save_object(joinpath(data_path, "obs_mean.jld2"), observation)
     JLD2.save_object(joinpath(data_path, "obs_noise_cov.jld2"), variance)
-
 end

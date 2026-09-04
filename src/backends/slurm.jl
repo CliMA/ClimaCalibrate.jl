@@ -34,7 +34,6 @@ function make_job_script(
     $(generate_env_vars(hpc_config))
 
     $mpiexec_string $job_body
-    exit 0
     """
     return slurm_script
 end
@@ -88,21 +87,95 @@ function submit_job(backend::SlurmBackend, job_script::String)
 end
 
 # https://slurm.schedmd.com/job_state_codes.html
-const PENDING_STATUSES = [
+const PENDING_STATUSES = Set([
     "PENDING",
     "CONFIGURING",
     "REQUEUE_FED",
     "REQUEUE_HOLD",
     "REQUEUED",
+    "RESV_DEL_HOLD",
+])
+const RUNNING_STATUSES = Set([
+    "RUNNING",
+    "COMPLETING",
+    "STAGE_OUT",
+    "SIGNALING",
+    "SUSPENDED",
+    "STOPPED",
     "RESIZING",
-]
-const RUNNING_STATUSES =
-    ["RUNNING", "COMPLETING", "STAGED", "SUSPENDED", "STOPPED", "RESIZING"]
+])
+const COMPLETED_STATUSES = Set(["COMPLETED"])
+const FAILED_STATUSES = Set([
+    "FAILED",
+    "CANCELLED",
+    "TIMEOUT",
+    "OUT_OF_MEMORY",
+    "NODE_FAIL",
+    "BOOT_FAIL",
+    "DEADLINE",
+    "PREEMPTED",
+    "REVOKED",
+    "SPECIAL_EXIT",
+    "LAUNCH_FAILED",
+])
+
+"""
+    _parse_slurm_state(output)
+
+Map a job state reported by `sacct` or `squeue` to a [`JobStatus`](@ref).
+
+Return `nothing` if `output` is empty or names a state we do not recognize, so
+that the caller can decide what an unrecognized state means.
+
+Slurm appends explanatory text to some states (`CANCELLED by 1234`), so only the
+first word is matched.
+
+# Examples
+```julia
+ClimaCalibrate.Backend._parse_slurm_state("CANCELLED by 40826")  # FAILED
+```
+"""
+function _parse_slurm_state(output)
+    tokens = split(strip(String(output)))
+    isempty(tokens) && return nothing
+    state = uppercase(first(tokens))
+    state in COMPLETED_STATUSES && return COMPLETED
+    state in FAILED_STATUSES && return FAILED
+    state in RUNNING_STATUSES && return RUNNING
+    state in PENDING_STATUSES && return PENDING
+    return nothing
+end
+
+"""
+    _sacct_state(id)
+
+Return the state `sacct` reports for the job allocation `id`, or `nothing` if
+`sacct` is unavailable or has no record of the job.
+
+`-X` restricts the output to the allocation itself, so that the `.batch` and
+`.extern` steps do not appear as extra lines.
+"""
+function _sacct_state(id)
+    isnothing(Sys.which("sacct")) && return nothing
+    cmd = `sacct -j $id -X --noheader --parsable2 --format=State`
+    output = try
+        readchomp(pipeline(ignorestatus(cmd); stderr = devnull))
+    catch e
+        @debug "sacct failed for job $id" exception = e
+        return nothing
+    end
+    isempty(strip(output)) && return nothing
+    return first(eachsplit(output, '\n'))
+end
 
 """
     job_status(::SlurmBackend, job::JobInfo)
 
 Return the status of `job`.
+
+`squeue` only lists jobs that are still queued or running, so a job that has
+left the queue is looked up with `sacct`, which is the only way to distinguish a
+job that succeeded from one that failed, timed out, or was cancelled.
 
 See [`JobStatus`](@ref).
 """
@@ -119,25 +192,44 @@ function job_status(::SlurmBackend, job::JobInfo)
     stderr = String(read(stderr))
     exit_code = process.exitcode
 
-    invalid_job_err = "slurm_load_jobs error: Invalid job id specified"
     @debug id status exit_code stderr
 
-    if status == "" && exit_code == 0 && stderr == ""
-        return COMPLETED
-    end
-    if exit_code != 0 && contains(stderr, invalid_job_err)
-        return COMPLETED
-    end
-
-    if any(str -> contains(status, str), PENDING_STATUSES)
-        return PENDING
+    # The job is still in the queue, so squeue is authoritative
+    queued_status = _parse_slurm_state(status)
+    if !isnothing(queued_status) && queued_status in (PENDING, RUNNING)
+        return queued_status
     end
 
-    if any(str -> contains(status, str), RUNNING_STATUSES)
+    # The job has left the queue. Only sacct can say whether it succeeded
+    sacct_state = _sacct_state(id)
+    if !isnothing(sacct_state)
+        sacct_status = _parse_slurm_state(sacct_state)
+        if isnothing(sacct_status)
+            @warn "Job ID $id has unknown state `$(strip(sacct_state))`. \
+                   Treating it as failed"
+            return FAILED
+        end
+        return sacct_status
+    end
+
+    !isnothing(queued_status) && return queued_status
+
+    # A squeue that could not reach the controller returns nothing at all,
+    # which is indistinguishable from a job that has left the queue. The job
+    # stays RUNNING so the loop keeps polling: a running member reported as
+    # complete would be counted as a failure by the checkpoint cross-check in
+    # `report_status`
+    if exit_code != 0 && !occursin("Invalid job id", stderr)
+        @warn "squeue failed for job $id with exit code $exit_code \
+               ($(strip(stderr))). Treating the job as still running" maxlog = 1
         return RUNNING
     end
 
-    @warn "Job ID $id has unknown status `$status`. Marking as completed"
+    # Neither squeue nor sacct knows about this job. Accounting may be disabled
+    # or the record may have been purged; the calibration cross-checks the
+    # member's checkpoint file, so report completion rather than blocking
+    @warn "Neither squeue nor sacct has a record of job $id. Assuming it \
+           finished; check the model log to see whether it succeeded" maxlog = 1
     return COMPLETED
 end
 
@@ -148,14 +240,13 @@ Cancel `job` by running the command `scancel`.
 """
 function cancel_job(::SlurmBackend, job::JobInfo)
     (; id) = job
-    try
-        run(`scancel $id`)
-        println("Cancelling slurm job $id")
-        return nothing
-    catch e
-        println("Failed to cancel slurm job $id: ", e)
-        return nothing
-    end
+    @info "Cancelling Slurm job $id"
+    # `scancel` exits nonzero for a job that has already finished, which is not
+    # something the caller can act on
+    process = run(pipeline(ignorestatus(`scancel $id`); stderr = devnull))
+    success(process) || @warn "scancel exited with $(process.exitcode) for \
+                               job $id, which may already have finished"
+    return nothing
 end
 
 """
