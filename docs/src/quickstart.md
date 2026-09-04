@@ -25,8 +25,7 @@ This tutorial will not go into details on how to construct the
 ### Backend system
 
 !!! note "Backends"
-    For more information about the backend system, refer to the documentation
-    [here](@ref Backends).
+    For more information about the backend system, see [Backends](@ref Backends).
 
 There are three different kind of backends which are [`JuliaBackend`](@ref),
 [`WorkerBackend`](@ref), and the HPC cluster backends.
@@ -107,14 +106,17 @@ Your forward model must implement the
 Since this function only takes in the iteration and member numbers, there are
 some hooks to obtain parameters and the output directory:
 
-- [`ClimaCalibrate.Calibration.path_to_ensemble_member`](@ref) returns the
-  ensemble member's output directory,
+- [`path_to_ensemble_member(output_dir, iteration, member)`](@ref
+  ClimaCalibrate.path_to_ensemble_member) returns the ensemble member's output
+  directory, which is where the forward model should write.
+- [`parameter_path(output_dir, iteration, member)`](@ref
+  ClimaCalibrate.parameter_path) returns the ensemble member's parameter file,
+  which can be read with TOML or passed to ClimaParams.
 
-which can be used to set the forward model's output directory.
-
-- [`ClimaCalibrate.Calibration.parameter_path`](@ref) returns the ensemble
-member's parameter file, which can be loaded in via TOML or passed to
-ClimaParams.
+Put `output_dir` and anything else the model needs in the fields of your
+`AbstractModelInterface` subtype. That object is what gets sent to a worker or
+serialized into a job script, so anything not in it will not be there when the
+forward model runs.
 
 #### Observation map
 
@@ -149,7 +151,7 @@ Here is a simple template for the `observation_map`:
 function ClimaCalibrate.observation_map(interface, iteration)
     # This assumes the output_dir is a field of interface
     (; output_dir) = interface
-    ekp = JLD2.load_object(ClimaCalibrate.ekp_path(output_dir, iteration))
+    ekp = ClimaCalibrate.load_ekp_struct(output_dir, iteration)
     ensemble_size = EKP.get_N_ens(ekp)
     G_ensemble = ClimaCalibrate.g_ens_matrix(ekp)
     for member in 1:ensemble_size
@@ -311,8 +313,9 @@ Each file in the output directory serves a specific purpose:
   `forward_model`.
 - `G_ensemble.jld2`: The G ensemble matrix produced by the observation map
   **after** all forward models in the iteration complete.
-- `checkpoint.txt`: A flag file written when a member's forward model completes
-  successfully, used to skip completed members on restart.
+- `checkpoint.txt`: Records whether a member's forward model has `started` or
+  `completed`. On a restart, completed members are skipped and the rest are
+  rerun.
 - `prior.jld2`: The prior distribution, saved once in `iteration_001`.
 
 The JLD2 files can be loaded using
@@ -351,9 +354,9 @@ checking each model's checkpoint file and the flag it contains.
 
 ## Example Calibrations
 
-The [example tutorial](https://clima.github.io/ClimaCalibrate.jl/dev/literate_example/)
-provides a clear calibration example that can be run locally using the
-[`WorkerBackend`](@ref).
+The [Calibration Tutorial](literate_example.md) is a complete example that runs
+locally, and shows the changes needed to run the ensemble on
+[`WorkerBackend`](@ref) workers.
 
 Another example experiment can be found in the package repo under
 `experiments/surface_fluxes_perfect_model`.
@@ -368,7 +371,7 @@ assess the model ensembles' performance when parameters are drawn from the prior
 parameter distributions.
 
 It is a perfect-model calibration, using its own output as observational data.
-By default, it runs 20 ensemble members for 8 iterations. This example can be
+By default, it runs 20 ensemble members for 6 iterations. This example can be
 run on the most common backend, the [`JuliaBackend`](@ref), with the following
 script:
 
@@ -413,3 +416,12 @@ convergence_plot(
 
 g_vs_iter_plot(eki, output_dir)
 ```
+
+`convergence_plot` shows each parameter converging on the value that generated
+the synthetic observations, with the ensemble spread contracting around it:
+
+![Convergence of coefficient_a_m_businger](assets/sf_convergence_coefficient_a_m_businger.png)
+
+`g_vs_iter_plot` shows the forward map evaluations approaching the observation:
+
+![Forward map evaluations by iteration](assets/sf_scatter_iter.png)

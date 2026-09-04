@@ -2,7 +2,7 @@
 CurrentModule = ClimaCalibrate.ObservationRecipe
 ```
 
-# ObservationRecipe
+# Building observations
 
 !!! warning
     If you are not using ClimaAnalysis, you can skip this page.
@@ -79,7 +79,7 @@ summary statistics, you build the samples with functions provided by the
 `SampleBuilder` module and pass a covariance estimator, the resulting
 `SampleCollection`, and the index of the sample to use as the observation to
 [`ObservationRecipe.observation`](@ref observation), as shown below. See the
-[Sample Builder](sample_builder.md) page for the details of
+[building samples](sample_builder.md) page for the details of
 [`build_samples_by_times`](@ref
 ClimaCalibrate.SampleBuilder.build_samples_by_times).
 
@@ -122,10 +122,6 @@ obs = ObservationRecipe.observation(covar_estimator, sample_collection, 1)
 ```
 
 ## Metadata
-
-!!! note
-    Metadata in `EKP.observation` is only added with versions of
-    EnsembleKalmanProcesses later than v2.4.2.
 
 When creating an observation with [`observation`](@ref), metadata is extracted
 from the `OutputVar`s and attached to the observation. The metadata for each
@@ -338,6 +334,18 @@ keyword argument. For `SVDplusDCovariance`, the `regularization` keyword
 argument can also be a [`QuantileRegularization`](@ref), which sets the
 regularization from a quantile of the model error scale instead of a fixed
 value.
+
+Both are accepted by `SeasonalDiagonalCovariance` and `SVDplusDCovariance`.
+[`ScalarCovariance`](@ref) takes neither: its diagonal is the `scalar` you give
+it, so there is nothing to inflate.
+
+!!! note "SVDplusDCovariance needs one of them"
+    `SVDplusDCovariance` builds a covariance of the form `SVD + D`, where `D` is
+    `(model_error_scale * mean(samples))^2 + regularization`. Both default to
+    zero, which leaves `D` empty. The SVD term alone has rank at most one less
+    than the number of samples, so with fewer samples than observation entries,
+    which is the usual case, the covariance is singular and EKP cannot invert
+    it. Set at least one of them to a positive value.
 
 **Q: How do I apply latitude weighting to the covariance matrix?**
 

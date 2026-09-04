@@ -2,7 +2,7 @@
 CurrentModule = ClimaCalibrate.SampleBuilder
 ```
 
-# SampleBuilder
+# Building samples
 
 !!! warning
     If you are not using ClimaAnalysis, you can skip this page.
@@ -92,10 +92,12 @@ Furthermore, for each row of `OutputVar`s, for dimensions that are not ignored,
 7. the dimension values are the same,
 8. the coordinates where the NaNs are dropped are the same.
 
-You can exclude dimensions from these checks with the `ignore_dims` keyword
-argument. This is useful when the samples are meant to differ along a dimension.
-For example, [`build_samples_by_times`](@ref) ignores the time dimension because
-each sample covers a different time range.
+The `Matrix` method takes an `ignore_dims` keyword argument that excludes
+dimensions from these checks, which is useful when the samples are meant to
+differ along a dimension. (The `OutputVar` and `Vector` methods each build a
+single sample, so they have nothing to compare and do not take it.) For example,
+[`build_samples_by_times`](@ref) ignores the time dimension because each sample
+covers a different time range.
 
 Keep in mind that a covariance estimator may need the values of a dimension to
 be the same across the samples. For example, latitude weighting applies the
@@ -202,5 +204,5 @@ first(col_vars)
 Once you have a `SampleCollection`, you pass a covariance estimator, the
 `SampleCollection`, and the index of the sample to use as the observation to
 [`observation`](@ref ClimaCalibrate.ObservationRecipe.observation) to build the
-`EKP.Observation` used in the calibration. See [Observation
-Recipes](observation_recipe.md) section for the available estimators.
+`EKP.Observation` used in the calibration. See
+[building observations](observation_recipe.md) for the available estimators.
