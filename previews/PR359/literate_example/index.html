@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Calibration Tutorial · ClimaCalibrate.jl</title><meta name="title" content="Calibration Tutorial · ClimaCalibrate.jl"/><meta property="og:title" content="Calibration Tutorial · ClimaCalibrate.jl"/><meta property="twitter:title" content="Calibration Tutorial · ClimaCalibrate.jl"/><meta name="description" content="Documentation for ClimaCalibrate.jl."/><meta property="og:description" content="Documentation for ClimaCalibrate.jl."/><meta property="twitter:description" content="Documentation for ClimaCalibrate.jl."/><script data-outdated-warner src="../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.63.2/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../search_index.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../">ClimaCalibrate.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../">Home</a></li><li><a class="tocitem" href="../concepts/">How a calibration works</a></li><li><a class="tocitem" href="../quickstart/">Getting Started</a></li><li class="is-active"><a class="tocitem" href>Calibration Tutorial</a><ul class="internal"><li><a class="tocitem" href="#Where-the-model-code-lives"><span>Where the model code lives</span></a></li><li><a class="tocitem" href="#The-prior"><span>The prior</span></a></li><li><a class="tocitem" href="#The-observation"><span>The observation</span></a></li><li><a class="tocitem" href="#Putting-it-together"><span>Putting it together</span></a></li><li><a class="tocitem" href="#Results"><span>Results</span></a></li><li><a class="tocitem" href="#Running-the-ensemble-in-parallel"><span>Running the ensemble in parallel</span></a></li><li><a class="tocitem" href="#Where-to-go-next"><span>Where to go next</span></a></li></ul></li><li><a class="tocitem" href="../backends/">Backends</a></li><li><a class="tocitem" href="../submit_scripts/">Writing submission scripts</a></li><li><input class="collapse-toggle" id="menuitem-7" type="checkbox"/><label class="tocitem" for="menuitem-7"><span class="docs-label">Observations</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../observations/">Overview</a></li><li><a class="tocitem" href="../sample_builder/">Building samples</a></li><li><a class="tocitem" href="../observation_recipe/">Building observations</a></li><li><a class="tocitem" href="../ensemble_builder/">Building the G ensemble matrix</a></li></ul></li><li><a class="tocitem" href="../visualization/">Visualization</a></li><li><a class="tocitem" href="../troubleshooting/">Troubleshooting</a></li><li><a class="tocitem" href="../howdoi/">How do I?</a></li><li><a class="tocitem" href="../api/">API</a></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li class="is-active"><a href>Calibration Tutorial</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Calibration Tutorial</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/CliMA/ClimaCalibrate.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/CliMA/ClimaCalibrate.jl/blob/main/docs/literate_example.jl" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Calibration-Tutorial"><a class="docs-heading-anchor" href="#Calibration-Tutorial">Calibration Tutorial</a><a id="Calibration-Tutorial-1"></a><a class="docs-heading-anchor-permalink" href="#Calibration-Tutorial" title="Permalink"></a></h1><p>This tutorial runs a complete calibration end to end, and then shows the three lines that change to distribute it across Julia workers.</p><p>The model is a damped harmonic oscillator. Its displacement is <span>$x(t) = e^{-\gamma t}\cos(\omega t)$</span>, and we calibrate the damping rate <span>$\gamma$</span> and the angular frequency <span>$\omega$</span> against a trajectory generated from known values. Any forward model would do: ClimaCalibrate calls only <code>forward_model</code> and <code>observation_map</code>.</p><pre><code class="language-julia hljs">import ClimaCalibrate as CAL
+import EnsembleKalmanProcesses as EKP
+import EnsembleKalmanProcesses.ParameterDistributions:
+    combine_distributions, constrained_gaussian
+import Statistics
+import CairoMakie</code></pre><h2 id="Where-the-model-code-lives"><a class="docs-heading-anchor" href="#Where-the-model-code-lives">Where the model code lives</a><a id="Where-the-model-code-lives-1"></a><a class="docs-heading-anchor-permalink" href="#Where-the-model-code-lives" title="Permalink"></a></h2><p>The forward model and the model interface go in their own file. That is what lets a worker or a scheduler job load them: both start as fresh Julia processes, and an <a href="../api/#ClimaCalibrate.Backend.HPCBackend"><code>HPCBackend</code></a> job script <code>include</code>s this file directly.</p><pre><code class="language-julia hljs">model_file =
+    joinpath(pkgdir(CAL), &quot;docs&quot;, &quot;src&quot;, &quot;assets&quot;, &quot;damped_oscillator.jl&quot;)
+include(model_file)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi"># Model code for the Calibration Tutorial.
+#
+# The forward model and the model interface live in their own file, which is
+# what a worker or a scheduler job loads to run an ensemble member.
+
+import ClimaCalibrate
+import JLD2
+import TOML
+
+&quot;&quot;&quot;
+    DampedOscillator(output_dir, ensemble_size, t)
+
+Model interface for a damped harmonic oscillator.
+
+The forward model and the observation map read their configuration from these
+fields, so the same object can be used on a worker or serialized into an HPC job
+script.
+&quot;&quot;&quot;
+struct DampedOscillator &lt;: ClimaCalibrate.AbstractModelInterface
+    &quot;&quot;&quot;Where the calibration writes its output.&quot;&quot;&quot;
+    output_dir::String
+
+    &quot;&quot;&quot;Number of ensemble members.&quot;&quot;&quot;
+    ensemble_size::Int
+
+    &quot;&quot;&quot;Times at which the oscillator&#39;s displacement is observed.&quot;&quot;&quot;
+    t::Vector{Float64}
+end
+
+&quot;&quot;&quot;
+    solve_oscillator(damping, frequency, t)
+
+Displacement of a unit-amplitude damped oscillator at times `t`.
+&quot;&quot;&quot;
+solve_oscillator(damping, frequency, t) =
+    @. exp(-damping * t) * cos(frequency * t)
+
+&quot;&quot;&quot;
+    ClimaCalibrate.forward_model(interface::DampedOscillator, iteration, member)
+
+Run the oscillator with this member&#39;s parameters and save its displacement.
+
+`forward_model` only receives the iteration and member numbers, so it reads the
+parameters EKP drew for this member from the file ClimaCalibrate wrote, and
+writes its output under the member&#39;s own directory.
+&quot;&quot;&quot;
+function ClimaCalibrate.forward_model(
+    interface::DampedOscillator,
+    iteration,
+    member,
+)
+    (; output_dir, t) = interface
+    member_path =
+        ClimaCalibrate.path_to_ensemble_member(output_dir, iteration, member)
+    parameters = TOML.parsefile(
+        ClimaCalibrate.parameter_path(output_dir, iteration, member),
+    )
+    damping = parameters[&quot;damping&quot;][&quot;value&quot;]
+    frequency = parameters[&quot;frequency&quot;][&quot;value&quot;]
+
+    displacement = solve_oscillator(damping, frequency, t)
+    JLD2.save_object(joinpath(member_path, &quot;displacement.jld2&quot;), displacement)
+    return displacement
+end
+
+&quot;&quot;&quot;
+    ClimaCalibrate.observation_map(interface::DampedOscillator, iteration)
+
+Collect every member&#39;s displacement into the G ensemble matrix.
+
+Column `m` holds member `m`&#39;s output, in the same order as the observation. A
+member whose forward model failed leaves a column of `NaN`s, which is how EKP is
+told to ignore it.
+&quot;&quot;&quot;
+function ClimaCalibrate.observation_map(interface::DampedOscillator, iteration)
+    (; output_dir, ensemble_size, t) = interface
+    G_ensemble = fill(NaN, length(t), ensemble_size)
+    for m in 1:ensemble_size
+        member_path =
+            ClimaCalibrate.path_to_ensemble_member(output_dir, iteration, m)
+        output = joinpath(member_path, &quot;displacement.jld2&quot;)
+        isfile(output) || continue
+        G_ensemble[:, m] .= JLD2.load_object(output)
+    end
+    return G_ensemble
+end</code></pre><p><code>forward_model</code> and <code>observation_map</code> receive only the iteration and member numbers. They read the output directory, the ensemble size, and the observation times from the fields of <code>DampedOscillator</code>. That configuration travels with the interface, so the same code works on a worker or inside a job script, where a global defined in your session will not exist.</p><p><code>forward_model</code> reads its parameters from the file ClimaCalibrate wrote for that member, at <a href="../api/#ClimaCalibrate.Calibration.parameter_path"><code>parameter_path</code></a>.</p><h2 id="The-prior"><a class="docs-heading-anchor" href="#The-prior">The prior</a><a id="The-prior-1"></a><a class="docs-heading-anchor-permalink" href="#The-prior" title="Permalink"></a></h2><p>Every parameter being calibrated needs a prior. <code>constrained_gaussian</code> takes a name, a mean, a standard deviation, and lower and upper bounds, and gives back a distribution that respects those bounds.</p><pre><code class="language-julia hljs">prior = combine_distributions([
+    constrained_gaussian(&quot;damping&quot;, 0.3, 0.3, 0, Inf),
+    constrained_gaussian(&quot;frequency&quot;, 2.5, 1.5, 0, Inf),
+])</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">ParameterDistribution with 2 entries
+  &#39;damping&#39;: Parameterized (Normal) [1 constraint]
+  &#39;frequency&#39;: Parameterized (Normal) [1 constraint]
+</code></pre><h2 id="The-observation"><a class="docs-heading-anchor" href="#The-observation">The observation</a><a id="The-observation-1"></a><a class="docs-heading-anchor-permalink" href="#The-observation" title="Permalink"></a></h2><p>This is a perfect-model experiment: the observation comes from the forward model itself, run with the parameters we want the calibration to recover.</p><pre><code class="language-julia hljs">t = collect(0.0:0.5:20.0)
+true_damping, true_frequency = 0.15, 2.0
+observation = solve_oscillator(true_damping, true_frequency, t)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">41-element Vector{Float64}:
+  1.0
+  0.5012619449174641
+ -0.35818090158018023
+ -0.7905250649855431
+ -0.4842311041681364
+  0.19495797886729177
+  0.6122316051190211
+  0.4459749227650169
+ -0.07985211160624137
+ -0.463907822848421
+  ⋮
+  0.07567903585136633
+ -0.0011174107471831273
+ -0.06625778077423831
+ -0.06546324377057568
+ -0.008599865373479933
+  0.04772316558971468
+  0.05524558632537297
+  0.014309310815802972
+ -0.033204890872611824</code></pre><p>The noise covariance says how much of the mismatch between model and observation to attribute to error rather than to the parameters. Here the observation is noise-free, so any small value will do; with real data this is the part that deserves care, and the <a href="../observations/#Observations">Observations</a> page covers it.</p><pre><code class="language-julia hljs">noise = 0.01 * EKP.I(length(t))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">41×41 LinearAlgebra.Diagonal{Float64, Vector{Float64}}:
+ 0.01   ⋅     ⋅     ⋅     ⋅     ⋅    …   ⋅     ⋅     ⋅     ⋅     ⋅     ⋅ 
+  ⋅    0.01   ⋅     ⋅     ⋅     ⋅        ⋅     ⋅     ⋅     ⋅     ⋅     ⋅ 
+  ⋅     ⋅    0.01   ⋅     ⋅     ⋅        ⋅     ⋅     ⋅     ⋅     ⋅     ⋅ 
+  ⋅     ⋅     ⋅    0.01   ⋅     ⋅        ⋅     ⋅     ⋅     ⋅     ⋅     ⋅ 
+  ⋅     ⋅     ⋅     ⋅    0.01   ⋅        ⋅     ⋅     ⋅     ⋅     ⋅     ⋅ 
+  ⋅     ⋅     ⋅     ⋅     ⋅    0.01  …   ⋅     ⋅     ⋅     ⋅     ⋅     ⋅ 
+  ⋅     ⋅     ⋅     ⋅     ⋅     ⋅        ⋅     ⋅     ⋅     ⋅     ⋅     ⋅ 
+  ⋅     ⋅     ⋅     ⋅     ⋅     ⋅        ⋅     ⋅     ⋅     ⋅     ⋅     ⋅ 
+  ⋅     ⋅     ⋅     ⋅     ⋅     ⋅        ⋅     ⋅     ⋅     ⋅     ⋅     ⋅ 
+  ⋅     ⋅     ⋅     ⋅     ⋅     ⋅        ⋅     ⋅     ⋅     ⋅     ⋅     ⋅ 
+ ⋮                             ⋮     ⋱  ⋮                             ⋮
+  ⋅     ⋅     ⋅     ⋅     ⋅     ⋅        ⋅     ⋅     ⋅     ⋅     ⋅     ⋅ 
+  ⋅     ⋅     ⋅     ⋅     ⋅     ⋅        ⋅     ⋅     ⋅     ⋅     ⋅     ⋅ 
+  ⋅     ⋅     ⋅     ⋅     ⋅     ⋅        ⋅     ⋅     ⋅     ⋅     ⋅     ⋅ 
+  ⋅     ⋅     ⋅     ⋅     ⋅     ⋅    …  0.01   ⋅     ⋅     ⋅     ⋅     ⋅ 
+  ⋅     ⋅     ⋅     ⋅     ⋅     ⋅        ⋅    0.01   ⋅     ⋅     ⋅     ⋅ 
+  ⋅     ⋅     ⋅     ⋅     ⋅     ⋅        ⋅     ⋅    0.01   ⋅     ⋅     ⋅ 
+  ⋅     ⋅     ⋅     ⋅     ⋅     ⋅        ⋅     ⋅     ⋅    0.01   ⋅     ⋅ 
+  ⋅     ⋅     ⋅     ⋅     ⋅     ⋅        ⋅     ⋅     ⋅     ⋅    0.01   ⋅ 
+  ⋅     ⋅     ⋅     ⋅     ⋅     ⋅    …   ⋅     ⋅     ⋅     ⋅     ⋅    0.01</code></pre><h2 id="Putting-it-together"><a class="docs-heading-anchor" href="#Putting-it-together">Putting it together</a><a id="Putting-it-together-1"></a><a class="docs-heading-anchor-permalink" href="#Putting-it-together" title="Permalink"></a></h2><p><code>calibrate</code> needs a backend, an <code>EnsembleKalmanProcess</code>, a model interface, a number of iterations, the prior, and an output directory.</p><pre><code class="language-julia hljs">ensemble_size = 20
+n_iterations = 8
+output_dir = mktempdir()
+
+interface = DampedOscillator(output_dir, ensemble_size, t)
+
+ekp = EKP.EnsembleKalmanProcess(
+    EKP.construct_initial_ensemble(prior, ensemble_size),
+    observation,
+    noise,
+    EKP.Inversion(),
+)
+
+ekp = CAL.calibrate(
+    CAL.JuliaBackend(),
+    ekp,
+    interface,
+    n_iterations,
+    prior,
+    output_dir,
+)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">EnsembleKalmanProcess
+  process    : Inversion
+  N_ens      : 20
+  N_par      : 2
+  n_iter     : 5
+  scheduler  : DataMisfitController
+  accelerator: NesterovAccelerator
+</code></pre><h2 id="Results"><a class="docs-heading-anchor" href="#Results">Results</a><a id="Results-1"></a><a class="docs-heading-anchor-permalink" href="#Results" title="Permalink"></a></h2><p>The ensemble mean should have moved towards the values the observation was generated with.</p><pre><code class="language-julia hljs">final = EKP.get_ϕ_mean_final(prior, ekp)
+(; damping = final[1], frequency = final[2]), (true_damping, true_frequency)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">((damping = 0.11969449922755798, frequency = 2.0082604311711822), (0.15, 2.0))</code></pre><p>The calibration can stop before <code>n_iterations</code> if EKP&#39;s scheduler decides it has converged, so ask the object how many iterations it ran.</p><pre><code class="language-julia hljs">completed = EKP.get_N_iterations(ekp)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">5</code></pre><p>The spread across the ensemble contracts as the data constrains the parameters:</p><pre><code class="language-julia hljs">spread =
+    [Statistics.var(EKP.get_ϕ(prior, ekp, i), dims = 2) for i in 1:completed]
+first(spread), last(spread)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">([0.10167918938619562; 1.5559834997308373;;], [0.000495149335588102; 0.0027838182975020117;;])</code></pre><p>Plotting the ensemble against the observation shows the same thing. The final iteration&#39;s members bracket the observation much more tightly than the first.</p><pre><code class="language-julia hljs">fig = CairoMakie.Figure(size = (800, 350))
+for (col, iter) in enumerate((1, completed))
+    ax = CairoMakie.Axis(
+        fig[1, col],
+        title = &quot;Iteration $iter&quot;,
+        xlabel = &quot;time&quot;,
+        ylabel = &quot;displacement&quot;,
+    )
+    G = EKP.get_g(ekp, iter)
+    for m in axes(G, 2)
+        CairoMakie.lines!(ax, t, G[:, m], color = (:grey, 0.4))
+    end
+    CairoMakie.lines!(ax, t, observation, color = :black, linewidth = 2)
+end
+fig</code></pre><img src="74f1eb1f.png" alt="Example block output"/><h2 id="Running-the-ensemble-in-parallel"><a class="docs-heading-anchor" href="#Running-the-ensemble-in-parallel">Running the ensemble in parallel</a><a id="Running-the-ensemble-in-parallel-1"></a><a class="docs-heading-anchor-permalink" href="#Running-the-ensemble-in-parallel" title="Permalink"></a></h2><p><a href="../api/#ClimaCalibrate.Backend.JuliaBackend"><code>JuliaBackend</code></a> runs the ensemble members one after another, which is enough while debugging and for a closed-form model like this one. For a forward model that takes minutes or hours, swap in a backend that runs the members at the same time. Nothing else about the calibration changes.</p><p>To spread the members across Julia workers, add the workers, load the model code on them, and pass a <a href="../api/#ClimaCalibrate.Backend.WorkerBackend"><code>WorkerBackend</code></a>:</p><pre><code class="language-julia hljs">using Distributed
+
+## `cluster = :local` starts workers as local processes; on a cluster, omit it
+## and each worker is requested from the scheduler as its own allocation
+wait(CAL.add_workers(4; cluster = :local))
+
+## Use `@worker_setup` rather than `Distributed.@everywhere`: workers join
+## asynchronously, so `@everywhere` would miss any that connect later and
+## leave them without the model code
+CAL.@worker_setup include($model_file)
+
+ekp = CAL.calibrate(
+    CAL.WorkerBackend(),
+    ekp,
+    interface,
+    n_iterations,
+    prior,
+    output_dir,
+)</code></pre><div class="admonition is-info" id="Why-this-block-is-not-executed-here-54944cb77e072106"><header class="admonition-header">Why this block is not executed here<a class="admonition-anchor" href="#Why-this-block-is-not-executed-here-54944cb77e072106" title="Permalink"></a></header><div class="admonition-body"><p>Documenter captures the output of each executed block, which deadlocks against <code>Distributed</code>&#39;s message handling. The code above is what to run in a script or the REPL; it is not run while this page is built.</p></div></div><p>To submit one scheduler job per ensemble member instead, pass an <a href="../api/#ClimaCalibrate.Backend.HPCBackend"><code>HPCBackend</code></a> such as <code>CAL.CaltechHPCBackend(; directives = ...)</code>. That backend also needs <a href="../api/#ClimaCalibrate.model_interface_filepath"><code>model_interface_filepath</code></a> implemented on the interface, so its job scripts know which file to <code>include</code>.</p><h2 id="Where-to-go-next"><a class="docs-heading-anchor" href="#Where-to-go-next">Where to go next</a><a id="Where-to-go-next-1"></a><a class="docs-heading-anchor-permalink" href="#Where-to-go-next" title="Permalink"></a></h2><ul><li><a href="../backends/#Backends">Backends</a> explains how to choose between these and how to move a working calibration onto a cluster.</li><li><a href="../troubleshooting/#Troubleshooting">Troubleshooting</a> covers what to do when a calibration does not converge, or fails partway through.</li><li>The <a href="../observations/#Observations">Observations</a> page covers building observations and noise covariances from real data.</li></ul><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../quickstart/">« Getting Started</a><a class="docs-footer-nextpage" href="../backends/">Backends »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.19.0 on <span class="colophon-date" title="Friday 4 September 2026 22:02">Friday 4 September 2026</span>. Using Julia version 1.12.7.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
