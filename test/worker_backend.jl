@@ -106,7 +106,7 @@ eki = ClimaCalibrate.Calibration.calibrate(
 
 @test ClimaCalibrate.last_completed_iteration(output_dir) == n_iterations
 
-test_sf_calibration_output(eki, prior, observation)
+test_sf_calibration_output(eki, prior, observation, variance)
 
 theta_star_vec = (; coefficient_a_m_businger = 4.7)
 

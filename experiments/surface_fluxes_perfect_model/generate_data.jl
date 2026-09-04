@@ -77,7 +77,9 @@ The standard deviation of the observation error, as a fraction of the observed
 
 An instrument reading of a turbulent flux carries an error of a few percent, and
 the calibration needs to be told what that error is: `EnsembleKalmanProcesses`
-weights the model-data misfit by it, and takes a step whose size it sets.
+weights the model-data misfit by it, and takes a step whose size it sets. What
+it is told is this error together with the model error, since the misfit
+contains both.
 """
 const NOISE_FRACTION = 0.02
 
@@ -101,13 +103,19 @@ function synthetic_observed_y(
     config = Dict()
     config["toml"] = []
     config["output_dir"] = data_path
-    ustar = obtain_ustar(FT, x_inputs, config, return_ustar = true)
+    ustar = obtain_ustar(
+        FT,
+        x_inputs,
+        config,
+        return_ustar = true,
+        model_error = false,
+    )
 
     truth = nanmean(ustar)
     noise_sd = NOISE_FRACTION * truth
     observation = Float64[truth + noise_sd * randn(rng)]
     variance = Matrix{Float64}(undef, 1, 1)
-    variance[1] = noise_sd^2
+    variance[1] = noise_sd^2 + (MODEL_ERROR_FRACTION * truth)^2
 
     JLD2.save_object(joinpath(data_path, "synthetic_ustar_array.jld2"), ustar)
     return (; ustar, observation, variance)

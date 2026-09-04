@@ -129,7 +129,7 @@ eki = ClimaCalibrate.Calibration.calibrate(
     end
 end
 
-test_sf_calibration_output(eki, prior, observation)
+test_sf_calibration_output(eki, prior, observation, variance)
 
 # Remove previous output - this is not necessary but safe for tests
 rm(output_dir, recursive = true)
@@ -151,7 +151,7 @@ julia_eki = ClimaCalibrate.Calibration.calibrate(
     prior,
     output_dir,
 )
-test_sf_calibration_output(julia_eki, prior, observation)
+test_sf_calibration_output(julia_eki, prior, observation, variance)
 
 compare_g_ensemble(eki, julia_eki)
 

@@ -51,20 +51,26 @@ end
 Test that the surface fluxes perfect model calibration converges.
 
 The spread should narrow, the forward model should reproduce the observation to
-within its error, and the calibrated `a_m` should be closer to the 4.7 the
+within the noise, and the calibrated `a_m` should be closer to the 4.7 the
 observation was generated with than the prior mean is.
 """
-function test_sf_calibration_output(eki, prior, observation)
+function test_sf_calibration_output(eki, prior, observation, variance)
     @testset "SurfaceFluxes calibration reproducibility tests" begin
         params = EKP.get_ϕ(prior, eki)
         spread = map(Statistics.var, params)
         # The stencil narrows with the posterior covariance it is drawn from,
-        # and holds there: an unscented ensemble does not collapse
-        @test last(spread) / first(spread) < 0.5
+        # and holds there: an unscented ensemble does not collapse, and a loss
+        # this rough leaves it with something to hold
+        @test last(spread) / first(spread) < 0.7
 
+        # The model error and the observation error are what separate the two,
+        # and the calibration is given their sum as its noise covariance
         forward_model_output = EKP.get_g_mean_final(eki)
         @show forward_model_output
-        @test all(isapprox.(forward_model_output, observation; rtol = 1e-2))
+        @test all(
+            abs.(forward_model_output .- observation) .<
+            3 * sqrt(only(variance)),
+        )
 
         # The observation is one draw from a distribution whose width is 2% of
         # `ustar`, so `a_m` lands near 4.7 rather than on it
@@ -164,6 +170,110 @@ function convergence_plot(eki, prior, theta_star_vec, param_names, output_dir)
 end
 
 """
+    loss_landscape_plot(observation, variance, output_dir; kwargs...)
+
+Plot the loss the calibration minimizes, as a function of the parameter.
+
+The loss is the covariance-weighted misfit
+`(y - G(a_m))^2 / (sigma_obs^2 + sigma_model^2)`, which is the quantity
+`EKP.get_error` reports. Sweeping `a_m` over the prior range shows what the
+ensemble is descending, and how far the minimum sits from the value the
+observation was generated with.
+
+The plot is saved to `output_dir`.
+"""
+function loss_landscape_plot(
+    observation,
+    variance,
+    output_dir;
+    a_m_values = 2.0:0.01:6.0,
+    theta_star = 4.7,
+    calibrated = nothing,
+    prior_mean = 3.5,
+)
+    FT = Float32
+    x_inputs = load_profiles(
+        joinpath(experiment_dir, "data", "synthetic_profile_data.jld2"),
+    )
+    scratch = mktempdir()
+
+    function forward(a_m; model_error = true)
+        member = mktempdir(scratch)
+        parameters = joinpath(member, "parameters.toml")
+        open(parameters, "w") do io
+            println(io, "[coefficient_a_m_businger]")
+            println(io, "value = ", a_m)
+            println(io, "type = \"float\"")
+        end
+        config = Dict("output_dir" => member, "toml" => [parameters])
+        return nanmean(
+            obtain_ustar(
+                FT,
+                x_inputs,
+                config;
+                return_ustar = true,
+                model_error,
+            ),
+        )
+    end
+
+    y = only(observation)
+    Γ = only(variance)
+    g = [forward(a_m) for a_m in a_m_values]
+    loss = ((y .- g) .^ 2) ./ Γ
+    smooth_loss =
+        [(y - forward(a_m; model_error = false))^2 / Γ for a_m in a_m_values]
+
+    f = CairoMakie.Figure(size = (800, 400))
+    for (col, xlims, title) in (
+        (1, extrema(a_m_values), "Over the prior range"),
+        (2, (theta_star - 0.6, theta_star + 0.6), "Around the minimum"),
+    )
+        ax = CairoMakie.Axis(
+            f[1, col],
+            xlabel = "coefficient_a_m_businger",
+            ylabel = "Covariance-weighted misfit",
+            title = title,
+        )
+        CairoMakie.lines!(
+            ax,
+            a_m_values,
+            smooth_loss,
+            color = (:gray, 0.8),
+            label = "without model error",
+        )
+        CairoMakie.lines!(ax, a_m_values, loss, color = :black, label = "loss")
+        CairoMakie.vlines!(
+            ax,
+            [theta_star],
+            color = :red,
+            linestyle = :dash,
+            label = "generating value",
+        )
+        isnothing(calibrated) || CairoMakie.vlines!(
+            ax,
+            [calibrated],
+            color = :dodgerblue,
+            label = "calibrated",
+        )
+        CairoMakie.xlims!(ax, xlims...)
+        col == 1 && CairoMakie.vlines!(
+            ax,
+            [prior_mean],
+            color = :orange,
+            label = "prior mean",
+        )
+        col == 2 && CairoMakie.ylims!(ax, 0, 12)
+        col == 2 &&
+            CairoMakie.axislegend(ax; position = :lt, framevisible = false)
+    end
+
+    CairoMakie.save(joinpath(output_dir, "loss_landscape.png"), f)
+    @info "Loss landscape plot path: $(joinpath(output_dir, "loss_landscape.png"))"
+    return nothing
+end
+
+"""
     g_vs_iter_plot(eki, output_dir)
 
 Plot ensemble `ustar` values against iteration, with dashed reference lines for
@@ -213,8 +323,13 @@ function g_vs_iter_plot(eki, output_dir)
         linestyle = :dash,
     )
     model_config["toml"] = []
-    ustar_mod_perfect_params =
-        obtain_ustar(FT, x_inputs, model_config, return_ustar = true)
+    ustar_mod_perfect_params = obtain_ustar(
+        FT,
+        x_inputs,
+        model_config,
+        return_ustar = true,
+        model_error = false,
+    )
     CairoMakie.lines!(
         ax,
         [1, n_iterations + 1],

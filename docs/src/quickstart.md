@@ -366,10 +366,12 @@ calibrates one Businger coefficient, `coefficient_a_m_businger`, against the
 profile-averaged friction velocity.
 
 The observation comes from the same model run with its default parameters, which
-is what makes it a perfect-model calibration. It carries a 2% error, and the
-calibration is given that error as its noise covariance. The prior is centered
-at 3.5, while the observation was generated with 4.7, so the ensemble starts
-somewhere it has to travel from.
+is what makes it a perfect-model calibration. It carries a 2% error. The model
+carries another 2%, standing in for the internal variability that makes a
+climate model return a different statistic on every run, and the calibration is
+given the two together as its noise covariance. The prior is centered at 3.5,
+while the observation was generated with 4.7, so the ensemble starts somewhere
+it has to travel from.
 
 One observable constrains one parameter. `coefficient_a_h_businger` moves the
 friction velocity in almost the same direction as `coefficient_a_m_businger`, so
@@ -381,12 +383,14 @@ It calibrates with
 [unscented Kalman inversion](https://clima.github.io/EnsembleKalmanProcesses.jl/dev/unscented_kalman_inversion/),
 which places its members on a quadrature stencil around the current mean rather
 than drawing them at random. One parameter therefore needs three members, and
-the whole calibration costs 30 forward model runs over its 10 iterations. The
-error falls from 40 to 0.8, and the mean parameter climbs from 3.5 to within 0.2
-of the 4.7 the observation was generated with. An unscented ensemble does not
-collapse: the stencil narrows onto the posterior covariance and holds there,
-still spanning 4.7, which is the statement of how well one noisy observation
-pins the parameter down.
+the whole calibration costs three forward model runs per iteration. The
+error falls from 20 to below 1 and the mean parameter climbs from 3.5 to within
+0.2 of the 4.7 the observation was generated with, which is as close as the
+noise allows. The scheduler stops the run once the misfit reaches the size of
+the noise, usually a few iterations short of the ten requested. An unscented
+ensemble does not collapse: the stencil narrows onto the posterior covariance
+and holds there, still spanning 4.7, which is the statement of how well one
+noisy observation pins the parameter down.
 
 This example runs on the most common backend, the [`JuliaBackend`](@ref), with
 the following script:
@@ -424,6 +428,13 @@ convergence_plot(
 )
 
 g_vs_iter_plot(eki, output_dir)
+
+loss_landscape_plot(
+    observation,
+    variance,
+    output_dir;
+    calibrated = only(EKP.get_ϕ_mean_final(prior, eki)),
+)
 ```
 
 `convergence_plot` shows the error, the spread, and the three members of the
@@ -437,6 +448,25 @@ code on this page does:
 `g_vs_iter_plot` shows what each member's forward model returns. The red line is
 the observation the calibration fits, and the blue line is what the model
 returns at the parameter the observation was generated with. The gap between
-them is the 2% error the observation carries:
+them is the error the observation carries:
 
 ![Forward map evaluations by iteration](assets/sf_scatter_iter.png)
+
+`loss_landscape_plot` sweeps the parameter and plots the loss the calibration is
+descending, the covariance-weighted misfit that `EKP.get_error` reports. The
+grey curve is the loss a model without internal variability would present, and
+the black curve is the one this calibration sees:
+
+![The loss landscape](assets/sf_loss_landscape.png)
+
+The model error turns a smooth bowl into a landscape whose local minima are
+everywhere, and a method that followed the local slope would stop at whichever
+one it started nearest. An ensemble Kalman method does not follow the slope. It
+fits a linear map between the parameters and the model output over the whole
+ensemble, so the model error, which is uncorrelated between members, averages
+out of that fit, and the update follows the shape of the underlying bowl. What
+it recovers is the minimum to within the noise: the ensemble settles about 0.2
+from the generating value, which is the width the noise leaves in the parameter,
+and reports a posterior spread of about that size rather than collapsing onto
+one of the local minima. The error also stops falling monotonically, since each
+iteration lands on a different draw of the model error.

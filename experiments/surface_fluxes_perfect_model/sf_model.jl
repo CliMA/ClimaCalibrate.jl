@@ -4,6 +4,7 @@ import SurfaceFluxes.UniversalFunctions as UF
 import SurfaceFluxes.Parameters as SFPP
 import ClimaParams as CP
 import JLD2
+import Random
 
 """
     generate_G_preliminaries(FT)
@@ -23,16 +24,39 @@ function generate_G_preliminaries(FT)
 end
 
 """
-    obtain_ustar(FT, x_inputs, model_config; return_ustar = false)
+    MODEL_ERROR_FRACTION
+
+The standard deviation of the model error, as a fraction of `ustar`.
+
+A climate model reports a statistic of a chaotic trajectory, so two runs of the
+same configuration return different numbers, and the loss the calibration sees
+is rough rather than smooth. This idealized model is deterministic, so it stands
+in for that with an error drawn per set of parameters. Drawing it from the
+parameters rather than from a fresh seed is what keeps a calibration
+reproducible: two backends running the same member get the same number.
+"""
+const MODEL_ERROR_FRACTION = 0.02
+
+"""
+    obtain_ustar(FT, x_inputs, model_config; return_ustar = false, model_error = true)
 
 Obtain the friction velocity, ustar, of each profile from the surface fluxes
 model, and write it to `model_config["output_dir"]`.
 
 `model_config["toml"]` holds the parameter files that set the Businger
 coefficients, which is how the calibration passes an ensemble member its
-parameters.
+parameters. `model_error` adds [`MODEL_ERROR_FRACTION`](@ref); the observation
+is generated without it, so that the misfit at the true parameters is the
+observation error and the model error together, which is what the calibration
+is given as its noise covariance.
 """
-function obtain_ustar(FT, x_inputs, model_config; return_ustar = false)
+function obtain_ustar(
+    FT,
+    x_inputs,
+    model_config;
+    return_ustar = false,
+    model_error = true,
+)
     toml_dict = CP.create_toml_dict(
         FT;
         override_file = CP.merge_toml_files(model_config["toml"]),
@@ -65,6 +89,13 @@ function obtain_ustar(FT, x_inputs, model_config; return_ustar = false)
             scheme,
         )
         ustar_array[ii] = conditions.ustar
+    end
+
+    # One draw for the whole profile set, since it stands in for the error of a
+    # single model run rather than for scatter between profiles
+    if model_error
+        rng = Random.MersenneTwister(hash(param_set.ufp.a_m))
+        ustar_array .*= 1 + FT(MODEL_ERROR_FRACTION) * randn(rng, FT)
     end
 
     JLD2.save_object(

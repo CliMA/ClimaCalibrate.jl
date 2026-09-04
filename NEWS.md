@@ -231,7 +231,13 @@ main
   generate the two figures on the quickstart page.
 - The experiment runs on SurfaceFluxes v1.2, which replaced the thermodynamic
   state objects its forward model was built on with a call that takes the state
-  variables. The docs environment pins the same version. It also calibrated
+  variables. The docs environment pins the same version.
+- The forward model adds a 2% error of its own, standing in for the internal
+  variability that makes a climate model return a different statistic on every
+  run, and the calibration is given it together with the observation error as
+  its noise covariance. `loss_landscape_plot` sweeps the parameter and plots the
+  loss that produces, which the quickstart page shows alongside what an ensemble
+  Kalman method does with it. It also calibrated
   `coefficient_a_h_businger`, which moves the profile-averaged `ustar` in almost
   the same direction, so one observable left the pair unidentified and the
   ensemble free to slide along a ridge. The observation carried no error at all:
