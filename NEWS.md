@@ -8,6 +8,13 @@ main
   with no dimensions. `SampleBuilder`, `ObservationRecipe`, and
   `EnsembleBuilder` now support `OutputVar`s with no dimensions. This requires
   versions of ClimaAnalysis after v0.5.23.
+- On Derecho, `qstat` is NCAR's caching wrapper (qstat-cache), which answers
+  from a snapshot refreshed every few seconds. Polling a single job's state
+  through it returned "Unknown Job Id" (exit 153) for a job submitted since the
+  last refresh and a stale state for a job that had since finished, so
+  `job_status` fell back to "assume running" or reported a finished job as
+  `PENDING`. The poller now sets `QSCACHE_BYPASS=true` so the scheduler itself
+  answers.
 
 v0.4.0
 -------

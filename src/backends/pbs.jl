@@ -119,6 +119,12 @@ function job_status(::DerechoBackend, job::JobInfo)
         haskey(clean_env, k) && delete!(clean_env, k)
     end
     clean_env["PYTHONNOUSERSITE"] = "1"
+    # Derecho's `qstat` is NCAR's qstat-cache, which answers from a snapshot
+    # refreshed every few seconds. Polling one job for its state is exactly
+    # what a snapshot gets wrong: a job submitted since the last refresh is
+    # "Unknown Job Id" (exit 153), and a job that has since finished is still
+    # reported in whatever state the snapshot caught it in. Ask the scheduler
+    clean_env["QSCACHE_BYPASS"] = "true"
 
     status_str = _qstat_output(id, clean_env)
     if isnothing(status_str)
