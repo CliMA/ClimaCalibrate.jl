@@ -4,6 +4,8 @@ ClimaCalibrate.jl Release Notes
 main
 -------
 
+- Support passing custom diagonal term to `SVDplusDCovariance` observation
+  recipe
 - Fix a bug where `SampleBuilder.build_samples` did not work with `OutputVar`s
   with no dimensions. `SampleBuilder`, `ObservationRecipe`, and
   `EnsembleBuilder` now support `OutputVar`s with no dimensions. This requires

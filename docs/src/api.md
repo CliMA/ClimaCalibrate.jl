@@ -129,6 +129,7 @@ ClimaCalibrate.SampleBuilder.num_samples
 ClimaCalibrate.SampleBuilder.reconstruct_col
 ClimaCalibrate.SampleBuilder.get_samples
 ClimaCalibrate.SampleBuilder.get_metadata
+ClimaCalibrate.SampleBuilder.var_indices
 ```
 
 ## Observation Recipe Interface
@@ -141,6 +142,7 @@ ClimaCalibrate.ObservationRecipe.SeasonalDiagonalCovariance
 ClimaCalibrate.ObservationRecipe.SeasonalDiagonalCovariance()
 ClimaCalibrate.ObservationRecipe.SVDplusDCovariance
 ClimaCalibrate.ObservationRecipe.SVDplusDCovariance()
+ClimaCalibrate.ObservationRecipe.SVDplusDCovariance(::ClimaCalibrate.ObservationRecipe.AbstractDiagonalTerm)
 ClimaCalibrate.ObservationRecipe.QuantileRegularization
 ClimaCalibrate.ObservationRecipe.covariance
 ClimaCalibrate.ObservationRecipe.observation
@@ -151,6 +153,21 @@ ClimaCalibrate.ObservationRecipe.reconstruct_g_mean_final
 ClimaCalibrate.ObservationRecipe.reconstruct_diag_cov
 ClimaCalibrate.ObservationRecipe.reconstruct_vars
 ClimaCalibrate.ObservationRecipe.seasonally_aligned_yearly_sample_date_ranges
+```
+
+### Diagonal Terms
+
+```@docs
+ClimaCalibrate.ObservationRecipe.AbstractDiagonalTerm
+ClimaCalibrate.ObservationRecipe.compute_diagonal
+ClimaCalibrate.ObservationRecipe.ScalarDiagonal
+ClimaCalibrate.ObservationRecipe.ScalarDiagonal(::AbstractFloat)
+ClimaCalibrate.ObservationRecipe.ModelErrorScaleDiagonal
+ClimaCalibrate.ObservationRecipe.ModelErrorScaleDiagonal(::AbstractFloat)
+ClimaCalibrate.ObservationRecipe.VarianceDiagonal
+ClimaCalibrate.ObservationRecipe.QuantileDiagonal
+ClimaCalibrate.ObservationRecipe.QuantileDiagonal(::AbstractFloat, ::ClimaCalibrate.ObservationRecipe.AbstractDiagonalTerm)
+ClimaCalibrate.ObservationRecipe.SumDiagonal
 ```
 
 ## SVD Residual Analysis

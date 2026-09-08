@@ -5,7 +5,8 @@ export build_samples,
     num_samples,
     reconstruct_col,
     get_samples,
-    get_metadata
+    get_metadata,
+    var_indices
 
 function build_samples end
 
@@ -18,5 +19,7 @@ function reconstruct_col end
 function get_samples end
 
 function get_metadata end
+
+function var_indices end
 
 end

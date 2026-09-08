@@ -447,6 +447,12 @@ end
     @test SampleBuilder.get_samples(sample_collection)[:, 2] ==
           Float32[flat_pr2.data; flat_rsut2.data]
 
+    # Get the indices of the rows of the matrix of samples for each variable
+    n_pr = length(flat_pr2.data)
+    n_rsut = length(flat_rsut2.data)
+    @test SampleBuilder.var_indices(sample_collection) ==
+          [1:n_pr, (n_pr + 1):(n_pr + n_rsut)]
+
     obs_metadata = SampleBuilder.get_metadata(sample_collection)[:, 2]
     @test equal_metadata(obs_metadata[1], flat_pr2.metadata)
     @test equal_metadata(obs_metadata[2], flat_rsut2.metadata)
