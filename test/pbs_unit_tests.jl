@@ -16,7 +16,7 @@ import ClimaCalibrate
     #!/bin/bash
     #PBS -j oe
     #PBS -A UCIT0011
-    #PBS -q preempt
+    #PBS -q develop
     #PBS -l walltime=00:01:00
     #PBS -l select=1:ncpus=1:ngpus=1
 
