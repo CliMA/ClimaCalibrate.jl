@@ -72,7 +72,12 @@ import ClimaCalibrate
         job = ClimaCalibrate.submit_job(backend, job_script)
 
         # Test for job status and completion
-        @test ClimaCalibrate.isrunning(job) || ClimaCalibrate.ispending(job)
+        # Poll once: each predicate on a `JobInfo` queries the scheduler, and on
+        # a fast queue the job can start between two polls, so that the first
+        # sees it pending and the second sees it running
+        status = ClimaCalibrate.job_status(job)
+        @test ClimaCalibrate.isrunning(status) ||
+              ClimaCalibrate.ispending(status)
         wait_for(job, 480)
         @test ClimaCalibrate.job_status(job) == ClimaCalibrate.Backend.COMPLETED
         @test ClimaCalibrate.iscompleted(job)

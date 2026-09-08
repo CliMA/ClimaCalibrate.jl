@@ -20,7 +20,7 @@ import ClimaCalibrate
     #!/bin/bash
     #PBS -j oe
     #PBS -A UCIT0011
-    #PBS -q preempt
+    #PBS -q develop
     #PBS -l walltime=00:01:00
     #PBS -l select=1:ncpus=1:ngpus=1
 
@@ -71,7 +71,12 @@ import ClimaCalibrate
         job = ClimaCalibrate.Backend.submit_job(backend, job_script)
 
         # Test for job status and completion
-        @test ClimaCalibrate.isrunning(job) || ClimaCalibrate.ispending(job)
+        # Poll once: each predicate on a `JobInfo` queries the scheduler, and on
+        # a fast queue the job can start between two polls, so that the first
+        # sees it pending and the second sees it running
+        status = ClimaCalibrate.job_status(job)
+        @test ClimaCalibrate.isrunning(status) ||
+              ClimaCalibrate.ispending(status)
         wait_for(job, 240)
         @test ClimaCalibrate.job_status(job) == ClimaCalibrate.Backend.COMPLETED
         @test ClimaCalibrate.iscompleted(job)
