@@ -98,6 +98,9 @@ function submit_job(backend::DerechoBackend, job_script::String)
     end
 end
 
+# The `job_state` codes and the `substate` numbers, including substate 93 for a
+# job that exited with an error, are documented in the PBS Professional
+# Reference Guide, in its tables of job attributes and job substates:
 # https://help.altair.com/2022.1.0/PBS%20Professional/PBSReferenceGuide2022.1.pdf
 const PBS_CODE_TO_JOB_STATUS = Dict(
     "Q" => PENDING,   # queued

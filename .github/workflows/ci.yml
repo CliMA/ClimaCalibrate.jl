@@ -21,7 +21,6 @@ jobs:
     name: ci ${{ matrix.version }} - ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
-    continue-on-error: ${{ matrix.version == 'nightly' }}
     strategy:
       # One failing job should not hide the results of the others
       fail-fast: false
@@ -31,14 +30,9 @@ jobs:
           # bound is tested
           - '1.10'
           - '1'
-          - 'nightly'
         os:
           - ubuntu-latest
           - macOS-latest
-        exclude:
-          # Nightly on one platform is enough to catch upstream breakage
-          - version: 'nightly'
-            os: macOS-latest
     steps:
       - uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v2

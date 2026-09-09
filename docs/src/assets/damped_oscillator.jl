@@ -8,7 +8,7 @@ import JLD2
 import TOML
 
 """
-    DampedOscillator(output_dir, ensemble_size, t)
+    OscillatorInterface(output_dir, ensemble_size, t)
 
 Model interface for a damped harmonic oscillator.
 
@@ -16,7 +16,7 @@ The forward model and the observation map read their configuration from these
 fields, so the same object can be used on a worker or serialized into an HPC job
 script.
 """
-struct DampedOscillator <: ClimaCalibrate.AbstractModelInterface
+struct OscillatorInterface <: ClimaCalibrate.AbstractModelInterface
     """Where the calibration writes its output."""
     output_dir::String
 
@@ -36,7 +36,11 @@ solve_oscillator(damping, frequency, t) =
     @. exp(-damping * t) * cos(frequency * t)
 
 """
-    ClimaCalibrate.forward_model(interface::DampedOscillator, iteration, member)
+    ClimaCalibrate.forward_model(
+        interface::OscillatorInterface,
+        iteration,
+        member,
+    )
 
 Run the oscillator with this member's parameters and save its displacement.
 
@@ -45,7 +49,7 @@ parameters EKP drew for this member from the file ClimaCalibrate wrote, and
 writes its output under the member's own directory.
 """
 function ClimaCalibrate.forward_model(
-    interface::DampedOscillator,
+    interface::OscillatorInterface,
     iteration,
     member,
 )
@@ -64,7 +68,7 @@ function ClimaCalibrate.forward_model(
 end
 
 """
-    ClimaCalibrate.observation_map(interface::DampedOscillator, iteration)
+    ClimaCalibrate.observation_map(interface::OscillatorInterface, iteration)
 
 Collect the members' displacements into the G ensemble matrix.
 
@@ -72,7 +76,10 @@ Column `m` holds member `m`'s output, in the same order as the observation. A
 member whose forward model failed leaves a column of `NaN`s, which is how EKP is
 told to ignore it.
 """
-function ClimaCalibrate.observation_map(interface::DampedOscillator, iteration)
+function ClimaCalibrate.observation_map(
+    interface::OscillatorInterface,
+    iteration,
+)
     (; output_dir, ensemble_size, t) = interface
     G_ensemble = fill(NaN, length(t), ensemble_size)
     for m in 1:ensemble_size

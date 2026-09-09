@@ -2,8 +2,7 @@
 
 ClimaCalibrate runs calibrations on different distributed computing
 environments, called backends. Each suits a different set of computing
-resources. Backends dispatch on their type, so moving a calibration from one to
-another changes the argument passed to `calibrate`.
+resources.
 
 ## Available backends
 
@@ -104,8 +103,7 @@ finished, and are `FAILED` rather than `COMPLETED` when the substate is 93,
 which is how PBS records a job that exited with an error.
 
 If the scheduler cannot be reached, the job is reported as still running and a
-warning is logged. That is right for a transient outage. A permanent one would
-block forever, so a member that has been running for longer than the backend's
+warning is logged. A member that has been running for longer than the backend's
 [`job_timeout`](@ref ClimaCalibrate.Backend.job_timeout) ends the iteration, and
 the remaining jobs are cancelled. The default is 24 hours, and a model that runs
 longer than that needs a larger one:

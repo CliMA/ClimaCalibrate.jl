@@ -129,18 +129,9 @@ forward model runs.
     `d × d`.
 
     For a climate observation `d` is large enough that a dense `d × d` matrix
-    is impractical to store and to factorize, so the covariance is held in a
-    structured form.
-    [`ScalarCovariance`](@ref ClimaCalibrate.ObservationRecipe.ScalarCovariance)
-    and
-    [`SeasonalDiagonalCovariance`](@ref ClimaCalibrate.ObservationRecipe.SeasonalDiagonalCovariance)
-    return a `Diagonal`.
-    [`SVDplusDCovariance`](@ref ClimaCalibrate.ObservationRecipe.SVDplusDCovariance)
-    returns an `EKP.SVDplusD`, which holds a truncated singular value
-    decomposition of the sample covariance plus a `Diagonal`. The sample
-    covariance is centered before it is decomposed, so its rank is at most one
-    less than the number of samples, and `rank` sets where the decomposition is
-    truncated.
+    is impractical to store and to factorize. ClimaCalibrate's
+    `ObservationRecipe` module and EnsembleKalmanProcesses provide structured
+    covariances for that case; see [Observations](@ref) for how to build one.
 
     EnsembleKalmanProcesses keeps one such object per `Observation` and
     assembles a block matrix from them on request:

@@ -30,9 +30,9 @@ print(read(model_file, String)) #hide
 
 # `forward_model` and `observation_map` receive only the iteration and member
 # numbers. They read the output directory, the ensemble size, and the
-# observation times from the fields of `DampedOscillator`. That configuration
-# travels with the interface, so the same code works on a worker or inside a job
-# script, where a global defined in your session will not exist.
+# observation times from the fields of `OscillatorInterface`. That
+# configuration travels with the interface, so the same code works on a worker
+# or inside a job script, where a global defined in your session will not exist.
 #
 # `forward_model` reads its parameters from the file ClimaCalibrate wrote for
 # that member, at [`parameter_path`](@ref).
@@ -73,7 +73,7 @@ ensemble_size = 20
 n_iterations = 8
 output_dir = mktempdir()
 
-interface = DampedOscillator(output_dir, ensemble_size, t)
+interface = OscillatorInterface(output_dir, ensemble_size, t)
 
 ekp = EKP.EnsembleKalmanProcess(
     EKP.construct_initial_ensemble(prior, ensemble_size),
