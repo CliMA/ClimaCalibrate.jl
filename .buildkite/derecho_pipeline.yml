@@ -40,6 +40,11 @@ steps:
   - label: "SurfaceFluxes calibration on the HPCBackend"
     command: julia --project=experiments/surface_fluxes_perfect_model test/hpc_backend.jl
     artifact_paths: "output/surface_fluxes_perfect_model/**/*"
+    # Every ensemble member is its own PBS job, so fifteen iterations outlast
+    # the 1:05:00 an agent job gets by default, and the step ends as "Agent
+    # lost". The develop queue allows up to six hours
+    agents:
+      pbs_l_walltime: "04:00:00"
     retry:
       automatic:
         - exit_status: "*"

@@ -13,7 +13,10 @@ backend = ClimaCalibrate.backend_type()
 @assert backend <: ClimaCalibrate.HPCBackend
 directives = Dict{Symbol, Any}(:time => 5, :ntasks => 1, :cpus_per_task => 1)
 if backend == ClimaCalibrate.DerechoBackend
-    directives[:queue] = "preempt"
+    # `develop` is the queue for short development jobs. `preempt` runs only on
+    # otherwise idle resources, and members waiting there outlived the
+    # Buildkite agent's own job
+    directives[:queue] = "develop"
     directives[:gpus_per_task] = 1
     directives[:cpus_per_task] = 4
 end
