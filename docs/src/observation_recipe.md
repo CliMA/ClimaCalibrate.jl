@@ -2,7 +2,7 @@
 CurrentModule = ClimaCalibrate.ObservationRecipe
 ```
 
-# ObservationRecipe
+# Building observations
 
 !!! warning
     If you are not using ClimaAnalysis, you can skip this page.
@@ -79,7 +79,7 @@ summary statistics, you build the samples with functions provided by the
 `SampleBuilder` module and pass a covariance estimator, the resulting
 `SampleCollection`, and the index of the sample to use as the observation to
 [`ObservationRecipe.observation`](@ref observation), as shown below. See the
-[Sample Builder](sample_builder.md) page for the details of
+[building samples](sample_builder.md) page for the details of
 [`build_samples_by_times`](@ref
 ClimaCalibrate.SampleBuilder.build_samples_by_times).
 
@@ -122,10 +122,6 @@ obs = ObservationRecipe.observation(covar_estimator, sample_collection, 1)
 ```
 
 ## Metadata
-
-!!! note
-    Metadata in `EKP.observation` is only added with versions of
-    EnsembleKalmanProcesses later than v2.4.2.
 
 When creating an observation with [`observation`](@ref), metadata is extracted
 from the `OutputVar`s and attached to the observation. The metadata for each
@@ -217,8 +213,8 @@ or `Inf`.
     First, the values of the time dimension are not the same across the columns.
     Each sample can span a different time range, which is exactly what
     `build_samples_by_times` produces. If your estimator depends on the times or
-    the dates of the samples, read them from every column rather than from one.
-    `SeasonalDiagonalCovariance` does this, for example, to check that every
+    the dates of the samples, read them from all columns rather than from one.
+    `SeasonalDiagonalCovariance` does this, for example, to check that all
     sample covers the same sequence of seasons.
 
     Second, the dimensions passed to the `ignore_dims` of `build_samples` are
@@ -226,7 +222,7 @@ or `Inf`.
     If your estimator reads the values of a dimension from a single column,
     check that dimension across the columns first. The provided estimators do
     this for the latitudes when latitude weighting is enabled, since the weights
-    of the first sample are applied to every sample.
+    of the first sample are applied to all samples.
 
 ### Example: per-variable constant variance
 
@@ -339,11 +335,25 @@ argument can also be a [`QuantileRegularization`](@ref), which sets the
 regularization from a quantile of the model error scale instead of a fixed
 value.
 
+Both are accepted by `SeasonalDiagonalCovariance` and `SVDplusDCovariance`.
+[`ScalarCovariance`](@ref) takes neither: its diagonal is the `scalar` you give
+it, so there is nothing to inflate.
+
+!!! note "SVDplusDCovariance needs one of them"
+    `SVDplusDCovariance` builds a covariance of the form `SVD + D`, where `D` is
+    `(model_error_scale * mean(samples))^2 + regularization`. Both default to
+    zero, which leaves `D` empty. The SVD term alone has rank at most one less
+    than the number of samples, so with fewer samples than observation entries,
+    which is the usual case, the covariance is singular and EKP cannot invert
+    it. Set at least one of them to a positive value.
+
 **Q: How do I apply latitude weighting to the covariance matrix?**
 
 **A:** All three covariance estimators accept a `use_latitude_weights` keyword
-argument. This accounts for the varying area of grid cells with latitude. The
-`min_cosd_lat` keyword argument (default `0.1`) sets the minimum value of
-`cosd(lat)` used in the weight, which prevents very small values along the
-diagonal that can cause issues when inverting the covariance matrix. This
-requires the `OutputVar`s to have a latitude dimension.
+argument. The weight is `1 / max(cosd(lat), min_cosd_lat)`, which inflates the
+variance of the smaller grid cells toward the poles and so gives them less
+weight in the misfit. The `min_cosd_lat` keyword argument (default `0.1`) caps
+that weight at `1 / min_cosd_lat`. Without a cap the weight grows without bound
+toward the poles, where `cosd(lat)` reaches zero, and the diagonal spans so many
+orders of magnitude that the covariance is badly conditioned. This requires the
+`OutputVar`s to have a latitude dimension.

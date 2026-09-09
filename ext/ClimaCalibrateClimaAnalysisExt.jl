@@ -6,7 +6,6 @@ import ClimaAnalysis.Var: Metadata
 
 import EnsembleKalmanProcesses as EKP
 
-import Dates
 import Statistics
 import Statistics: mean
 import NaNStatistics: nanmean, nanvar

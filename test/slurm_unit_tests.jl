@@ -3,9 +3,10 @@ using Test
 import ClimaCalibrate
 
 @testset "Submit slurm job" begin
-    backend_type = ClimaCalibrate.get_backend()
-    if !(backend_type <: ClimaCalibrate.SlurmBackend)
-        @info "Backend identified is $backend_type which is not a SlurmBackend. Skipping submitting a slurm job"
+    cluster_backend = ClimaCalibrate.backend_type()
+    if !(cluster_backend <: ClimaCalibrate.SlurmBackend)
+        @info "Backend identified is $cluster_backend, which is not a \
+               SlurmBackend. Skipping submitting a slurm job"
         return
     end
 
@@ -13,7 +14,7 @@ import ClimaCalibrate
     # Note that the config is used to generate the job script but we will
     # manually make one ourself
     config = ClimaCalibrate.SlurmConfig(; directives = [:time => 60])
-    backend = backend_type(config)
+    backend = cluster_backend(config)
 
     job_script = """
     #!/bin/bash
@@ -37,8 +38,25 @@ import ClimaCalibrate
         # Cancelling is quicker than waiting for a job to complete so we wait
         # for only one minute
         wait_for(job, 60)
-        @test ClimaCalibrate.job_status(job) == ClimaCalibrate.Backend.COMPLETED
+        # A cancelled job is not a successful one. Reporting it as COMPLETED
+        # would make a crashed ensemble member indistinguishable from one that
+        # succeeded
+        @test ClimaCalibrate.job_status(job) == ClimaCalibrate.Backend.FAILED
+        @test ClimaCalibrate.isfailed(job)
         @test ClimaCalibrate.iscompleted(job)
+        @test !ClimaCalibrate.issuccess(job)
+    end
+
+    @testset "A slurm job that fails is reported as failed" begin
+        failing_script = """
+        #!/bin/bash
+        #SBATCH --time=00:01:00
+        exit 1
+        """
+        job = ClimaCalibrate.submit_job(backend, failing_script)
+        wait_for(job, 480)
+        @test ClimaCalibrate.isfailed(job)
+        @test !ClimaCalibrate.issuccess(job)
     end
 
     @testset "Submit multiple slurm jobs and cancel them" begin
@@ -54,7 +72,12 @@ import ClimaCalibrate
         job = ClimaCalibrate.submit_job(backend, job_script)
 
         # Test for job status and completion
-        @test ClimaCalibrate.isrunning(job) || ClimaCalibrate.ispending(job)
+        # Poll once: each predicate on a `JobInfo` queries the scheduler, and on
+        # a fast queue the job can start between two polls, so that the first
+        # sees it pending and the second sees it running
+        status = ClimaCalibrate.job_status(job)
+        @test ClimaCalibrate.isrunning(status) ||
+              ClimaCalibrate.ispending(status)
         wait_for(job, 480)
         @test ClimaCalibrate.job_status(job) == ClimaCalibrate.Backend.COMPLETED
         @test ClimaCalibrate.iscompleted(job)

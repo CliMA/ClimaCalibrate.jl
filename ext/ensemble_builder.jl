@@ -4,17 +4,17 @@ import ClimaCalibrate: g_ens_matrix
 """
     MetadataInfo{METADATA <: Metadata}
 
-An object that stores the metadata of the observation, the index of the
-metadata, and the corresponding range to fill out in the G ensemble matrix.
+One observation's metadata, together with where it belongs in the G ensemble
+matrix.
+
+# Fields
+- `index`: The metadata's position among all the metadata.
+- `range`: The rows of the G ensemble matrix this metadata fills.
+- `metadata`: The metadata itself, for the current minibatch.
 """
 struct MetadataInfo{METADATA <: Metadata}
-    """The index of the metadata of all metadata"""
     index::Int64
-
-    """The indices of column of the current G ensemble matrix to fill out"""
     range::UnitRange{Int64}
-
-    """A single metadata from the metadata for the current minibatch"""
     metadata::METADATA
 end
 
@@ -27,31 +27,19 @@ An object to help build G ensemble matrix by using the metadata stored in the
 `GEnsembleBuilder` takes in preprocessed `OutputVar`s and automatically
 constructs the corresponding G ensemble matrix for the current iteration of the
 calibration.
+
+`FT` is the element type of the G ensemble matrix.
 """
 struct GEnsembleBuilder{
     FT <: AbstractFloat,
     METADATAINFO <: MetadataInfo,
     T <: Tuple{Vararg{AbstractChecker}},
 }
-    """G ensemble matrix that is returned by the observation map"""
     g_ens::Matrix{FT}
-
-    """Observational data for the current iteration"""
     obs_data::Vector{FT}
-
-    """Dictionary which map short name to a vector of metadata associated with
-       the short name"""
     metadata_by_short_name::Dict{String, Vector{METADATAINFO}}
-
-    """A vector of metadata info ordered by how the observations are combined"""
     metadata_vec::Vector{METADATAINFO}
-
-    """A bit matrix which keeps track of which entries are filled out in the
-    G ensemble matrix. The size of this matrix is the number of metadata for the
-    minibatch by the number of ensemble members"""
     completed::BitMatrix
-
-    """A list of checkers used to check the OutputVar to the list of metadata"""
     checkers::T
 end
 
@@ -140,7 +128,7 @@ It is assumed that the times or dates of a single `OutputVar` is a superset of
 the times or dates of one or more metadata in the minibatch.
 
 This function relies on the short names in the metadata. This function will not
-behave correctly if the short names are mislabeled or not present.
+behave as intended if the short names are mislabeled or not present.
 
 Furthermore, this function assumes that all observations are generated using
 `ObservationRecipe.observation` which guarantees that the metadata exists and
@@ -168,7 +156,7 @@ function EnsembleBuilder.fill_g_ens_col!(
         empty(metadata_by_short_name |> first |> last)
     end
 
-    # Try every metadata_info in the vector, because a single var can be
+    # Try each metadata_info in the vector, because a single var can be
     # used for multiple metadata
     use_var = false
     for metadata_info in metadata_info_vec
@@ -456,9 +444,9 @@ function Base.show(io::IO, g_ens_builder::GEnsembleBuilder)
     for row in rows
         for i in eachindex(row)
             if i < length(row)
-                print(rpad(row[i], col_widths[i] + 2))
+                print(io, rpad(row[i], col_widths[i] + 2))
             else
-                print(row[i])
+                print(io, row[i])
             end
         end
         print(io, "\n")

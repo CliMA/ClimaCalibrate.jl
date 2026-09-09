@@ -55,7 +55,6 @@ import ClimaCalibrate
         $mpiexec_string julia --project=$experiment_dir -e 'sleep(30)
         '
 
-        exit 0
         """
 
         @test length(split(sbatch_string, "\n")) ==
@@ -67,6 +66,11 @@ import ClimaCalibrate
             # Test one line at a time to see discrepancies
             @test generated_str == test_str
         end
+
+        # The script must not end with `exit 0`: that would give the batch job a
+        # zero exit status even when the forward model inside it crashed, and
+        # sacct would then report the member as COMPLETED
+        @test !occursin(r"exit\s+0", sbatch_string)
     end
 end
 

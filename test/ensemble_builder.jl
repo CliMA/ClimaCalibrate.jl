@@ -433,6 +433,12 @@ end
     g_ens = EnsembleBuilder.get_g_ensemble(g_ens_builder)
     @test all(g_ens[1, :] .== 300.0)
     @test all(g_ens[2, :] .== 250.0)
+
+    # `show` has to write the table body to `io` and not to stdout, or
+    # `sprint` returns only the header
+    shown = sprint(show, g_ens_builder)
+    @test occursin("ts", shown)
+    @test occursin("ta", shown)
 end
 
 @testset "Use GEnsembleBuilder for a fake calibration" begin
