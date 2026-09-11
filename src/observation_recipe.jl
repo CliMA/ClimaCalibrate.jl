@@ -68,17 +68,17 @@ abstract type AbstractCovarianceEstimator end
 Covariance estimator that returns a multiple of the identity.
 
 `FT1` and `FT2` are the element types of `scalar` and `min_cosd_lat`.
-
-# Fields
-- `scalar`: Scalar to multiply the identity matrix by.
-- `use_latitude_weights`: Whether to apply latitude weighting.
-- `min_cosd_lat`: The smallest `cosd(lat)` used in the latitude weight,
-  which caps the weight at `1 / min_cosd_lat` `[-]`.
 """
 struct ScalarCovariance{FT1 <: AbstractFloat, FT2 <: AbstractFloat} <:
        AbstractCovarianceEstimator
+    """Scalar to multiply the identity matrix by"""
     scalar::FT1
+
+    """Whether to apply latitude weighting"""
     use_latitude_weights::Bool
+
+    """The smallest `cosd(lat)` used in the latitude weight, which caps the
+    weight at `1 / min_cosd_lat`"""
     min_cosd_lat::FT2
 end
 
@@ -134,24 +134,24 @@ samples of a `SampleCollection`.
 
 `FT1`, `FT2`, and `FT3` are the element types of `model_error_scale`,
 `regularization`, and `min_cosd_lat`.
-
-# Fields
-- `model_error_scale`: A model error scale term added to the diagonal of the
-  covariance matrix.
-- `regularization`: A regularization term added to the diagonal of the
-  covariance matrix.
-- `use_latitude_weights`: Whether to apply latitude weighting.
-- `min_cosd_lat`: The smallest `cosd(lat)` used in the latitude weight,
-  which caps the weight at `1 / min_cosd_lat` `[-]`.
 """
 struct SeasonalDiagonalCovariance{
     FT1 <: AbstractFloat,
     FT2 <: AbstractFloat,
     FT3 <: AbstractFloat,
 } <: AbstractCovarianceEstimator
+    """A model error scale term added to the diagonal of the covariance
+    matrix"""
     model_error_scale::FT1
+
+    """A regularization term added to the diagonal of the covariance matrix"""
     regularization::FT2
+
+    """Whether to apply latitude weighting"""
     use_latitude_weights::Bool
+
+    """The smallest `cosd(lat)` used in the latitude weight, which caps the
+    weight at `1 / min_cosd_lat`"""
     min_cosd_lat::FT3
 end
 
@@ -258,18 +258,6 @@ covariance plus a diagonal term.
 
 `FT1`, `FT2`, and `FT3` are the element types of `model_error_scale`,
 `regularization`, and `min_cosd_lat`; `R` is the type of `rank`.
-
-# Fields
-- `model_error_scale`: A model error scale term added to the diagonal of the
-  covariance matrix.
-- `regularization`: A regularization term added to the diagonal of the
-  covariance matrix, either a scalar or a
-  [`QuantileRegularization`](@ref).
-- `use_latitude_weights`: Whether to apply latitude weighting.
-- `min_cosd_lat`: The smallest `cosd(lat)` used in the latitude weight,
-  which caps the weight at `1 / min_cosd_lat` `[-]`.
-- `rank`: Rank of the singular value decomposition, or `nothing` to infer it
-  from the data.
 """
 struct SVDplusDCovariance{
     FT1 <: AbstractFloat,
@@ -277,10 +265,23 @@ struct SVDplusDCovariance{
     FT3 <: AbstractFloat,
     R <: Union{Integer, Nothing},
 } <: AbstractCovarianceEstimator
+    """A model error scale term added to the diagonal of the covariance
+    matrix"""
     model_error_scale::FT1
+
+    """A regularization term added to the diagonal of the covariance matrix,
+    either a scalar or a `QuantileRegularization`"""
     regularization::FT2
+
+    """Whether to apply latitude weighting"""
     use_latitude_weights::Bool
+
+    """The smallest `cosd(lat)` used in the latitude weight, which caps the
+    weight at `1 / min_cosd_lat`"""
     min_cosd_lat::FT3
+
+    """Rank of the singular value decomposition, or `nothing` to infer it from
+    the data"""
     rank::R
 end
 
