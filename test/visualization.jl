@@ -75,7 +75,8 @@ using EnsembleKalmanProcesses.ParameterDistributions
     end
 
     # Create directory to save plots to
-    plot_dir = mktempdir()
+    plot_dir = mktempdir(cleanup = false)
+    @info "Plots" plot_dir
 
     # Test non mutating version
     fig = CairoMakie.Figure(; size = (750, 1000))

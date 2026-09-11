@@ -201,6 +201,7 @@ function _check_metadata_represent_seasons(metadata_mat)
 
         date_vecs = ClimaAnalysis.dates.(metadata_row)
         seasons_found = nothing
+        not_full_year_of_season = false
         for date_vec in date_vecs
             season_and_year_vec =
                 ClimaAnalysis.Utils.find_season_and_year.(date_vec)
@@ -216,13 +217,7 @@ function _check_metadata_represent_seasons(metadata_mat)
             # That is allowed, since calibrating against DJF and JJA alone is a
             # valid choice, but the variance is then estimated for those
             # seasons only
-            length(season_and_year_vec) < 4 && @warn(
-                "Each sample covers $(length(season_and_year_vec)) season(s) \
-                 ($(join(first.(season_and_year_vec), ", "))) rather than a \
-                 full year. The covariance is estimated for those seasons \
-                 only.",
-                maxlog = 1
-            )
+            length(season_and_year_vec) < 4 && (not_full_year_of_season = true)
 
             # The limitation of this is that we specify what constitutes a year
             # worth of seasons
@@ -235,6 +230,13 @@ function _check_metadata_represent_seasons(metadata_mat)
                 "Order of seasons for a variable across different samples are not the same",
             )
         end
+
+        not_full_year_of_season && @warn(
+            "Each sample covers $(length(season_and_year_vec)) season(s) \
+             ($(join(first.(season_and_year_vec), ", "))) rather than a \
+             full year. The covariance is estimated for those seasons \
+             only.",
+        )
 
     end
     return nothing
@@ -335,7 +337,7 @@ function _check_d_term(d_diag, all_metadata, n_samples)
            SVD term is rank deficient, so EKP will not be able to invert the \
            covariance. Set `model_error_scale` or `regularization` to a \
            positive value; `model_error_scale` alone leaves a zero wherever \
-           the sample mean is zero." maxlog = 1
+           the sample mean is zero."
     return nothing
 end
 
@@ -458,10 +460,6 @@ end
 Return an `EKP.Observation` with the `i`th sample of `sample_collection` as the
 observation, a covariance matrix defined by `covar_estimator`, `name`
 determined from the short names of the observation, and metadata.
-
-The metadata is what lets `GEnsembleBuilder` line the model output up with the
-observation, and what `reconstruct_vars` and `reconstruct_g` use to turn the
-flattened vectors back into `OutputVar`s.
 """
 function ObservationRecipe.observation(
     covar_estimator::AbstractCovarianceEstimator,

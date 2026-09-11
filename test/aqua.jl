@@ -2,10 +2,8 @@ using Test
 using ClimaCalibrate
 using Aqua
 
-# Loading the extension trigger packages is what puts ext/ in scope for Aqua's
-# ambiguity, piracy, and unbound-argument checks
+# Load packages needed for to load the extensions, so Aqua can check them too
 import ClimaAnalysis
-import NaNStatistics
 import CairoMakie
 
 @testset "Aqua tests (performance)" begin
