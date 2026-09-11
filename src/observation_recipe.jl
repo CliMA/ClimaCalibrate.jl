@@ -65,7 +65,8 @@ abstract type AbstractCovarianceEstimator end
 """
     ScalarCovariance <: AbstractCovarianceEstimator
 
-Covariance estimator that returns a multiple of the identity.
+Covariance estimator contain the necessary information to construct the scalar
+covariance matrix.
 
 `FT1` and `FT2` are the element types of `scalar` and `min_cosd_lat`.
 """
@@ -129,11 +130,9 @@ end
 """
     SeasonalDiagonalCovariance <: AbstractCovarianceEstimator
 
-Covariance estimator whose diagonal is the per-season variance across the
-samples of a `SampleCollection`.
-
-`FT1`, `FT2`, and `FT3` are the element types of `model_error_scale`,
-`regularization`, and `min_cosd_lat`.
+Covariance estimator that contain the necessary information to construct a
+diagonal matrix whose diagonal is the per-season variance across the samples of
+a `SampleCollection`.
 """
 struct SeasonalDiagonalCovariance{
     FT1 <: AbstractFloat,
@@ -168,12 +167,8 @@ should be formed. When used with `ObservationRecipe.observation` or
 `ObservationRecipe.covariance`, return a `Diagonal` matrix.
 
 The samples used to compute the covariance matrix come from the
-`SampleCollection`, where each sample is one year of seasonal statistics.
-
-`NaN`s are dropped when the samples are built, not here: `SampleBuilder` removes
-them while flattening and requires the same coordinates to be dropped in all
-sample, so a `NaN` whose position varies between samples is an error rather than
-something silently ignored.
+`SampleCollection`, where each sample is one year of seasonal statistics. `NaN`s
+are ignored when computing the seasonal variance.
 
 # Keyword Arguments
 
@@ -255,9 +250,6 @@ end
 
 Covariance estimator that returns an `EKP.SVDplusD`: a low-rank sample
 covariance plus a diagonal term.
-
-`FT1`, `FT2`, and `FT3` are the element types of `model_error_scale`,
-`regularization`, and `min_cosd_lat`; `R` is the type of `rank`.
 """
 struct SVDplusDCovariance{
     FT1 <: AbstractFloat,
