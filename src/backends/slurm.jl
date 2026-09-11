@@ -224,7 +224,7 @@ function job_status(::SlurmBackend, job::JobInfo)
     # or the record may have been purged; the calibration cross-checks the
     # member's checkpoint file, so report completion rather than blocking
     @warn "Neither squeue nor sacct has a record of job $id. Assuming it \
-           finished; check the model log to see whether it succeeded" maxlog = 1
+           finished; check the model log to see whether it succeeded"
     return COMPLETED
 end
 

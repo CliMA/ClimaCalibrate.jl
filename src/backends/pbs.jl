@@ -183,7 +183,7 @@ function job_status(::DerechoBackend, job::JobInfo)
     status = _parse_pbs_state(status_str)
     if isnothing(status)
         @warn "Could not determine the state of job $id from qstat. Assuming \
-               it is still running" maxlog = 5
+               it is still running"
         return RUNNING
     end
     return status

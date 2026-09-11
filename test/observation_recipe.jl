@@ -957,6 +957,21 @@ end
         ObservationRecipe.covariance(covar_estimator, sample_collection32)
     @test eltype(seasonal_covariance) == Float32
 
+    # Warn when the samples cover fewer than four seasons
+    partial_year_date_ranges = [
+        (Dates.DateTime(i, 12, 1), Dates.DateTime(i + 1, 3, 1)) for
+        i in 2007:2008
+    ]
+    partial_year_collection = SampleBuilder.build_samples_by_times(
+        [var],
+        partial_year_date_ranges;
+        FT = Float64,
+    )
+    @test_logs (:warn, r"covers 2 season\(s\) \(DJF, MAM\)") ObservationRecipe.covariance(
+        covar_estimator,
+        partial_year_collection,
+    )
+
     # Error handling
     # Fewer than two samples
     one_sample_collection =

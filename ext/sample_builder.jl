@@ -328,17 +328,21 @@ function SampleBuilder.build_samples_by_times(
         )
     end
 
-    # Overlapping windows share time slices, so the resulting samples are
-    # correlated. That biases the covariance the samples are usually built to
-    # estimate, and a generated list of windows gives no sign of the overlap
-    sorted_ranges = sort(collect(time_ranges); by = first)
-    for (left, right) in zip(sorted_ranges[1:(end - 1)], sorted_ranges[2:end])
-        last(left) < first(right) || @warn(
-            "Time ranges $left and $right overlap, so the samples built from \
-             them share time slices and are not independent.",
-            maxlog = 1
-        )
-    end
+    # Check for overlapping time windows
+    sorted_time_ranges = sort(
+        collect(time_ranges);
+        by = time_range -> (first(time_range), last(time_range)),
+    )
+    i = findfirst(
+        i ->
+            last(sorted_time_ranges[i]) >= first(sorted_time_ranges[i + 1]),
+        1:(length(sorted_time_ranges) - 1),
+    )
+    isnothing(i) || @warn(
+        "Time ranges $(sorted_time_ranges[i]) and $(sorted_time_ranges[i + 1]) \
+         overlap, so the samples built from them share time slices and are not \
+         independent.",
+    )
 
     # Check each var has a time dimension and dates are all unique
     for var in vars
