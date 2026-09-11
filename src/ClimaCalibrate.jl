@@ -11,7 +11,7 @@ decides where the ensemble runs: [`JuliaBackend`](@ref) in the current process,
 [`WorkerBackend`](@ref) across Distributed.jl workers, or an
 [`HPCBackend`](@ref) as one scheduler job per ensemble member.
 
-See the documentation at <https://CliMA.github.io/ClimaCalibrate.jl/dev/>.
+See the documentation at <https://CliMA.github.io/ClimaCalibrate.jl/stable/>.
 """
 module ClimaCalibrate
 import Reexport: @reexport

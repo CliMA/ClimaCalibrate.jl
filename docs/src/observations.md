@@ -26,7 +26,7 @@ parameters can move.
 
 `EnsembleKalmanProcesses.jl` provides the containers: an `EKP.Observation` for a
 single observation and an `EKP.ObservationSeries` for many, documented in the
-[EKP observations guide](https://clima.github.io/EnsembleKalmanProcesses.jl/dev/observations/).
+[EKP observations guide](https://clima.github.io/EnsembleKalmanProcesses.jl/stable/observations/).
 A plain `Vector` also works if you supply the covariance separately.
 
 If your data is already in `ClimaAnalysis.OutputVar`s, ClimaCalibrate can build

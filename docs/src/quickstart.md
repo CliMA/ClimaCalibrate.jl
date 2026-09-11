@@ -7,9 +7,9 @@
 Calibration requires
 
 - observational data, which can be a vector or an
-  [`EnsembleKalmanProcess.Observation`](https://clima.github.io/EnsembleKalmanProcesses.jl/dev/API/Observations/#EnsembleKalmanProcesses.Observation)
+  [`EnsembleKalmanProcess.Observation`](https://clima.github.io/EnsembleKalmanProcesses.jl/stable/API/Observations/#EnsembleKalmanProcesses.Observation)
 - a prior parameter distribution. The easiest way to construct a distribution is
-  with the [`EnsembleKalmanProcess.constrained_gaussian`](https://clima.github.io/EnsembleKalmanProcesses.jl/dev/API/ParameterDistributions/#EnsembleKalmanProcesses.ParameterDistributions.constrained_gaussian)
+  with the [`EnsembleKalmanProcess.constrained_gaussian`](https://clima.github.io/EnsembleKalmanProcesses.jl/stable/API/ParameterDistributions/#EnsembleKalmanProcesses.ParameterDistributions.constrained_gaussian)
   function,
 - a forward model, which uses input parameters to return diagnostic output
 - an observation map, which maps the forward model's diagnostic output to a
@@ -141,8 +141,8 @@ forward model runs.
 
     If you need to stack or sample from observations, use
     EnsembleKalmanProcesses.jl's
-    [Observation](https://clima.github.io/EnsembleKalmanProcesses.jl/dev/API/Observations/#Observation) or
-    [ObservationSeries](https://clima.github.io/EnsembleKalmanProcesses.jl/dev/API/Observations/#ObservationSeries).
+    [Observation](https://clima.github.io/EnsembleKalmanProcesses.jl/stable/API/Observations/#Observation) or
+    [ObservationSeries](https://clima.github.io/EnsembleKalmanProcesses.jl/stable/API/Observations/#ObservationSeries).
 
     For preprocessing observational data, you want to preprocess for `NaN`s
     and regrid and convert units to match the simulation data and vice versa.
@@ -234,21 +234,21 @@ end
 All parameters that are being calibrated require a prior distribution to sample from.
 
 EnsembleKalmanProcesses.jl's
-[constrained_gaussian](https://clima.github.io/EnsembleKalmanProcesses.jl/dev/API/ParameterDistributions/#EnsembleKalmanProcesses.ParameterDistributions.constrained_gaussian)
+[constrained_gaussian](https://clima.github.io/EnsembleKalmanProcesses.jl/stable/API/ParameterDistributions/#EnsembleKalmanProcesses.ParameterDistributions.constrained_gaussian)
 provides a user-friendly way to construct Gaussian distributions.
 
 Multiple distributions can be combined using
 `combine_distributions(vec_of_distributions)`.
 
 For more information, see the EKP documentation for
-[prior distributions](https://clima.github.io/EnsembleKalmanProcesses.jl/dev/parameter_distributions/).
+[prior distributions](https://clima.github.io/EnsembleKalmanProcesses.jl/stable/parameter_distributions/).
 
 ### Experiment Configuration
 
 A calibration consists of `m` ensemble members that run for `n` iterations. The
 recommended ensemble size is a function of the chosen method and
 the number of parameters being calibrated. See the
-[EnsembleKalmanProcesses.jl documentation](https://clima.github.io/EnsembleKalmanProcesses.jl/dev/defaults/#ens-size)
+[EnsembleKalmanProcesses.jl documentation](https://clima.github.io/EnsembleKalmanProcesses.jl/stable/defaults/#ens-size)
 for more information for choosing the appropriate ensemble size.
 
 ### Calibrate
@@ -397,7 +397,7 @@ ensemble free to slide along that ridge. Separating them takes a second
 observable that responds to the heat flux.
 
 It calibrates with
-[unscented Kalman inversion](https://clima.github.io/EnsembleKalmanProcesses.jl/dev/unscented_kalman_inversion/),
+[unscented Kalman inversion](https://clima.github.io/EnsembleKalmanProcesses.jl/stable/unscented_kalman_inversion/),
 which places its members on a quadrature stencil around the current mean rather
 than drawing them at random. One parameter therefore needs three members, and
 the whole calibration costs three forward model runs per iteration. The error
