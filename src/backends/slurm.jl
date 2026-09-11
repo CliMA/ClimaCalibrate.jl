@@ -216,7 +216,7 @@ function job_status(::SlurmBackend, job::JobInfo)
     # `report_status`
     if exit_code != 0 && !occursin("Invalid job id", stderr)
         @warn "squeue failed for job $id with exit code $exit_code \
-               ($(strip(stderr))). Treating the job as still running" maxlog = 1
+               ($(strip(stderr))). Treating the job as still running"
         return RUNNING
     end
 
@@ -224,7 +224,7 @@ function job_status(::SlurmBackend, job::JobInfo)
     # or the record may have been purged; the calibration cross-checks the
     # member's checkpoint file, so report completion rather than blocking
     @warn "Neither squeue nor sacct has a record of job $id. Assuming it \
-           finished; check the model log to see whether it succeeded" maxlog = 1
+           finished; check the model log to see whether it succeeded"
     return COMPLETED
 end
 

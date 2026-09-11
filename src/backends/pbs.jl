@@ -176,14 +176,14 @@ function job_status(::DerechoBackend, job::JobInfo)
         # for a transient qstat outage, but `wait_for_jobs` has to time out
         # eventually, or a permanent outage hangs the run forever
         @warn "qstat failed for job $id; assuming it still runs. \
-               Reason: $qstat_error" maxlog = 5
+               Reason: $qstat_error"
         return RUNNING
     end
 
     status = _parse_pbs_state(status_str)
     if isnothing(status)
         @warn "Could not determine the state of job $id from qstat. Assuming \
-               it is still running" maxlog = 5
+               it is still running"
         return RUNNING
     end
     return status
