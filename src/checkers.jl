@@ -49,7 +49,7 @@ Subtypes:
 !!! note "What is var and metadata?"
 
     For more information about `OutputVar` and `Metadata`, see the ClimaAnalysis
-    [documentation](https://clima.github.io/ClimaAnalysis.jl/dev/).
+    [documentation](https://clima.github.io/ClimaAnalysis.jl/stable/).
 
 """
 abstract type AbstractChecker end
