@@ -30,7 +30,8 @@ export ScalarCovariance,
     reconstruct_g_mean,
     reconstruct_g_mean_final,
     reconstruct_diag_cov,
-    reconstruct_vars
+    reconstruct_vars,
+    reconstruct_residual
 
 """
     AbstractCovarianceEstimator
@@ -491,6 +492,24 @@ so an observation can be plotted or compared against model output.
 Requires ClimaAnalysis and NaNStatistics to be loaded.
 """
 function reconstruct_vars end
+
+"""
+    reconstruct_residual(ekp, it; ignore_nan = true)
+
+Return the normalized residual `(mean(G) - obs) / σ` of the `it`th iteration as
+a vector of `ClimaAnalysis.OutputVar`s, where `σ` is the square root of the
+diagonal of the observation noise covariance.
+
+If `ignore_nan = true`, then the mean of the G ensemble at each index is
+computed over the ensemble members that are not `NaN`.
+
+The units of the reconstructed `OutputVar`s are empty, since the residual is
+normalized by `σ`.
+
+Requires ClimaAnalysis and NaNStatistics to be loaded, and observations built by
+this module.
+"""
+function reconstruct_residual end
 
 function _get_minibatch_indices_for_nth_iteration end
 
