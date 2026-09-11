@@ -10,7 +10,7 @@ then estimates a noise covariance from it and assembles the `EKP.Observation`.
 Each column of the collection is one sample, and each carries the metadata
 needed to reconstruct the `OutputVar`s later.
 
-Requires ClimaAnalysis and NaNStatistics to be loaded.
+Requires ClimaAnalysis to be loaded.
 """
 module SampleBuilder
 

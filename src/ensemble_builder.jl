@@ -10,7 +10,7 @@ against the observation it is filling in, checking short name, units, dimension
 names, dimension units, and dimension values. A mismatch between model output
 and observations raises an error instead of being calibrated against silently.
 
-Requires ClimaAnalysis and NaNStatistics to be loaded.
+Requires ClimaAnalysis to be loaded.
 """
 module EnsembleBuilder
 

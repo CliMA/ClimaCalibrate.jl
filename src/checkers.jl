@@ -10,7 +10,7 @@ their units, their values. `GEnsembleBuilder` runs a default set of them; pass
 others with the `checkers` keyword argument, or define your own by subtyping
 `AbstractChecker` and implementing [`check`](@ref).
 
-Requires ClimaAnalysis and NaNStatistics to be loaded.
+Requires ClimaAnalysis to be loaded.
 """
 module Checker
 

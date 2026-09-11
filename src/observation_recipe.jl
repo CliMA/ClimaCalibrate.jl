@@ -14,7 +14,7 @@ Also reconstructs the flattened vectors back into `OutputVar`s
 ([`reconstruct_vars`](@ref), [`reconstruct_g`](@ref)), so a calibration's
 observations and forward map output can be inspected.
 
-Requires ClimaAnalysis and NaNStatistics to be loaded.
+Requires ClimaAnalysis to be loaded.
 """
 module ObservationRecipe
 
