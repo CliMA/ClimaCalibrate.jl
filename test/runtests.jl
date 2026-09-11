@@ -24,9 +24,6 @@ using SafeTestsets
 @safetestset "Ensemble builder" begin include("ensemble_builder.jl") end
 @safetestset "SVD analysis" begin include("svd_analysis.jl") end
 @safetestset "Visualization" begin include("visualization.jl") end
-# Aqua runs last so that the extensions are loaded by the tests above. With
-# them unloaded, its ambiguity, piracy, and unbound-argument checks skip all of
-# ext/.
 @safetestset "Aqua" begin include("aqua.jl") end
 #! format: on
 
