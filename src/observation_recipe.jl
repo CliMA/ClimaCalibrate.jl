@@ -493,6 +493,22 @@ Requires ClimaAnalysis and NaNStatistics to be loaded.
 """
 function reconstruct_vars end
 
+"""
+    reconstruct_residual(ekp, it; ignore_nan = true)
+
+Return the normalized residual `(mean(G) - obs) / σ` of the `it`th iteration as
+a vector of `ClimaAnalysis.OutputVar`s, where `σ` is the square root of the
+diagonal of the observation noise covariance.
+
+If `ignore_nan = true`, then the mean of the G ensemble at each index is
+computed over the ensemble members that are not `NaN`.
+
+The units of the reconstructed `OutputVar`s are empty, since the residual is
+normalized by `σ`.
+
+Requires ClimaAnalysis and NaNStatistics to be loaded, and observations built by
+this module.
+"""
 function reconstruct_residual end
 
 function _get_minibatch_indices_for_nth_iteration end
