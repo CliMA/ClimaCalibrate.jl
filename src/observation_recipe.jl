@@ -369,127 +369,22 @@ function SVDplusDCovariance(;
     )
 end
 
-"""
-    covariance(covar_estimator, sample_collection)
-
-Estimate the observational noise covariance from `sample_collection`.
-
-The result does not depend on which sample is used as the observation. See
-[`ScalarCovariance`](@ref), [`SeasonalDiagonalCovariance`](@ref), and
-[`SVDplusDCovariance`](@ref).
-
-# Examples
-```julia
-import ClimaAnalysis
-estimator = ClimaCalibrate.ObservationRecipe.SVDplusDCovariance(;
-    regularization = 1e-3,
-)
-covar = ClimaCalibrate.ObservationRecipe.covariance(estimator, samples)
-```
-
-See also [`observation`](@ref).
-"""
 function covariance end
 
-"""
-    observation(covar_estimator, sample_collection, i; name, covariance)
-
-Build an `EKP.Observation` from the `i`th sample of `sample_collection`, with a
-noise covariance estimated by `covar_estimator`.
-
-The observation carries the metadata of its samples, which is what
-[`ClimaCalibrate.EnsembleBuilder`](@ref) uses to line model output up with it,
-and what the `reconstruct_*` functions use to turn the flattened vectors back
-into `OutputVar`s.
-
-# Examples
-```julia
-import ClimaAnalysis
-obs = ClimaCalibrate.ObservationRecipe.observation(estimator, samples, 1)
-```
-
-See also [`covariance`](@ref), [`reconstruct_vars`](@ref).
-"""
 function observation end
 
-"""
-    short_names(obs)
-
-Return the short names of the variables in an `EKP.Observation`, in the order
-they were stacked.
-
-Requires ClimaAnalysis and NaNStatistics to be loaded.
-"""
 function short_names end
 
-"""
-    seasonally_aligned_yearly_sample_date_ranges(var)
-
-Return the `(start, stop)` date ranges that split `var` into one sample per
-seasonal year, starting at December.
-
-Pass the result to `SampleBuilder.build_samples_by_times` to build the samples
-that [`SeasonalDiagonalCovariance`](@ref) expects.
-
-Requires ClimaAnalysis and NaNStatistics to be loaded.
-"""
 function seasonally_aligned_yearly_sample_date_ranges end
 
-"""
-    reconstruct_g(ekp, iter)
-
-Return the G ensemble matrix of iteration `iter` as a matrix of
-`ClimaAnalysis.OutputVar`s, one row per variable and one column per ensemble
-member.
-
-Requires ClimaAnalysis and NaNStatistics to be loaded, and observations built by
-this module.
-"""
 function reconstruct_g end
 
-"""
-    reconstruct_g_mean(ekp, iter)
-
-Return the mean forward map evaluation of iteration `iter` as a vector of
-`ClimaAnalysis.OutputVar`s.
-
-Requires ClimaAnalysis and NaNStatistics to be loaded, and observations built by
-this module.
-"""
 function reconstruct_g_mean end
 
-"""
-    reconstruct_g_mean_final(ekp)
-
-Return the mean forward map evaluation of the last completed iteration as a
-vector of `ClimaAnalysis.OutputVar`s.
-
-Requires ClimaAnalysis and NaNStatistics to be loaded, and observations built by
-this module.
-"""
 function reconstruct_g_mean_final end
 
-"""
-    reconstruct_diag_cov(obs)
-
-Return the diagonal of an observation's noise covariance as a vector of
-`ClimaAnalysis.OutputVar`s, so the noise can be plotted alongside the data.
-
-Only meaningful for a diagonal covariance. Requires ClimaAnalysis and
-NaNStatistics to be loaded.
-"""
 function reconstruct_diag_cov end
 
-"""
-    reconstruct_vars(obs)
-
-Return the observation itself as a vector of `ClimaAnalysis.OutputVar`s.
-
-This undoes the flattening that [`ClimaCalibrate.SampleBuilder`](@ref) applied,
-so an observation can be plotted or compared against model output.
-
-Requires ClimaAnalysis and NaNStatistics to be loaded.
-"""
 function reconstruct_vars end
 
 function _get_minibatch_indices_for_nth_iteration end
