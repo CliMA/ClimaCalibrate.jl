@@ -31,15 +31,16 @@ it is guaranteed that
 6. the dimension units are the same,
 7. the dimension values are the same,
 8. the coordinates where the NaNs are dropped are the same.
-
-`FT` is the element type of the samples. Access the samples and metadata with
-`get_samples` and `get_metadata`.
 """
 struct SampleCollection{
     FT <: AbstractFloat,
     METADATA <: ClimaAnalysis.Var.Metadata,
 }
+    """A matrix of FT values where each column represents a single sample. A
+    single sample may represent multiple variables."""
     samples::Matrix{FT}
+
+    """A matrix of ClimaAnalysis.Metadata."""
     metadata::Matrix{METADATA}
 end
 
