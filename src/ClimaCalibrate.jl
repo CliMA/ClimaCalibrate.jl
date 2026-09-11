@@ -67,6 +67,7 @@ const _CLIMAANALYSIS_STUBS = (
     ObservationRecipe.reconstruct_g_mean_final,
     ObservationRecipe.reconstruct_diag_cov,
     ObservationRecipe.reconstruct_vars,
+    ObservationRecipe.reconstruct_residual,
     EnsembleBuilder.GEnsembleBuilder,
     EnsembleBuilder.fill_g_ens_col!,
     EnsembleBuilder.is_complete,
