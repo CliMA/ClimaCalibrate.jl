@@ -597,6 +597,12 @@ end
         [pr_var_rel],
         [(1.0, 2.0), (3.0, 5.0)],
     )
+
+    # Samples have overlapping time ranges
+    @test_logs (:warn, r"overlap") SampleBuilder.build_samples_by_times(
+        pr_var_rel,
+        [(0.0, 3.0), (2.0, 5.0)],
+    )
 end
 
 @testset "Reconstruct" begin
