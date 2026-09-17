@@ -1,5 +1,6 @@
-using Test
-using SafeTestsets
+using ClimaCalibrate
+using ParallelTestRunner
+
 
 # Buildkite runs the scheduler-dependent files, which need a real cluster:
 #   hpc_backend.jl, worker_backend.jl        - all three pipelines
@@ -9,22 +10,29 @@ using SafeTestsets
 #       - derecho_pipeline.yml
 # The tests that run without a scheduler are below.
 
+# Simplify adding tests to the test suite
+macro include(x)
+    return Expr(:quote, Expr(:call, :include, x))
+end
+
 #! format: off
-@safetestset "EKP utils" begin include("ekp_utils.jl") end
-@safetestset "EKP interface" begin include("ekp_interface.jl") end
-@safetestset "Model interface" begin include("model_interface.jl") end
-@safetestset "Julia backend" begin include("julia_backend.jl") end
-@safetestset "Job status" begin include("job_status.jl") end
-@safetestset "HPC config" begin include("backend_config.jl") end
-@safetestset "HPC job scripts" begin include("hpc_job_scripts.jl") end
-@safetestset "Workers per node" begin include("workers_per_node.jl") end
-@safetestset "Worker pool" begin include("worker_pool.jl") end
-@safetestset "Sampler" begin include("sample_builder.jl") end
-@safetestset "Observation recipe" begin include("observation_recipe.jl") end
-@safetestset "Ensemble builder" begin include("ensemble_builder.jl") end
-@safetestset "SVD analysis" begin include("svd_analysis.jl") end
-@safetestset "Visualization" begin include("visualization.jl") end
-@safetestset "Aqua" begin include("aqua.jl") end
+testsuite = Dict(
+    "EKP utils" => @include("ekp_utils.jl"),
+    "EKP interface" => @include("ekp_interface.jl"),
+    "Model interface" => @include("model_interface.jl"),
+    "Julia backend" => @include("julia_backend.jl"),
+    "Job status" => @include("job_status.jl"),
+    "HPC config" => @include("backend_config.jl"),
+    "HPC job scripts" => @include("hpc_job_scripts.jl"),
+    "Workers per node" => @include("workers_per_node.jl"),
+    "Worker pool" => @include("worker_pool.jl"),
+    "Sampler" => @include("sample_builder.jl"),
+    "Observation recipe" => @include("observation_recipe.jl"),
+    "Ensemble builder" => @include("ensemble_builder.jl"),
+    "SVD analysis" => @include("svd_analysis.jl"),
+    "Visualization" => @include("visualization.jl"),
+    "Aqua" => @include("aqua.jl"),
+)
 #! format: on
 
-nothing
+runtests(ClimaCalibrate, ARGS; testsuite)
