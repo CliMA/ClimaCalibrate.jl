@@ -131,7 +131,7 @@ the metadata for each iteration can be accessed with
 ClimaCalibrate.EKPUtils.get_metadata_for_nth_iteration). The metadata can be
 used with `ClimaAnalysis.unflatten` to reconstruct the original `OutputVar`
 before flattening. See the ClimaAnalysis
-[documentation](https://clima.github.io/ClimaAnalysis.jl/dev/api/#FlatVar) about
+[documentation](https://clima.github.io/ClimaAnalysis.jl/stable/api/#FlatVar) about
 `ClimaAnalysis.FlatVar` for more information.
 
 ## Debugging observational and simulation data
@@ -305,7 +305,7 @@ EKP.get_covs(obs)
 
 **A:** When forming the sample, the data in a `OutputVar` is flattened using
 `ClimaAnalysis.flatten`. See
-[`ClimaAnalysis.flatten`](https://clima.github.io/ClimaAnalysis.jl/dev/flat/#Flatten)
+[`ClimaAnalysis.flatten`](https://clima.github.io/ClimaAnalysis.jl/stable/flat/#Flatten)
 in the ClimaAnalysis documentation for more information. The order of the
 variables in the observation is the same as the order of the `OutputVar`s when
 creating the `EKP.Observation` using `ObservationRecipe.observation`. If you are

@@ -25,7 +25,6 @@ EnsembleKalmanProcesses = "2.5"
 JLD2 = "0.4, 0.5, 0.6"
 Literate = "2"
 Makie = "0.24"
-NaNStatistics = "0.6"
 Statistics = "1"
 # Matches the experiment the figures come from
 SurfaceFluxes = "1.2"

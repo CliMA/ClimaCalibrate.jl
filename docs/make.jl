@@ -1,11 +1,6 @@
 using Documenter
 using ClimaCalibrate
-# The ClimaAnalysis extension is triggered by both of these. ClimaAnalysis
-# happens to depend on NaNStatistics, so importing it alone loads the extension
-# too, but relying on that means `get_extension` below returns `nothing` the day
-# that dependency changes, and the build fails without saying why.
 import ClimaAnalysis
-import NaNStatistics
 import CairoMakie # needed to load the Makie extension
 import Makie
 import Literate

@@ -10,7 +10,7 @@ their units, their values. `GEnsembleBuilder` runs a default set of them; pass
 others with the `checkers` keyword argument, or define your own by subtyping
 `AbstractChecker` and implementing [`check`](@ref).
 
-Requires ClimaAnalysis and NaNStatistics to be loaded.
+Requires ClimaAnalysis to be loaded.
 """
 module Checker
 
@@ -49,7 +49,7 @@ Subtypes:
 !!! note "What is var and metadata?"
 
     For more information about `OutputVar` and `Metadata`, see the ClimaAnalysis
-    [documentation](https://clima.github.io/ClimaAnalysis.jl/dev/).
+    [documentation](https://clima.github.io/ClimaAnalysis.jl/stable/).
 
 """
 abstract type AbstractChecker end

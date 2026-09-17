@@ -11,7 +11,7 @@
 
 !!! note "Other documentation"
     It may be helpful to review the documentation for
-    [`FlatVar`](https://clima.github.io/ClimaAnalysis.jl/dev/flat/) in
+    [`FlatVar`](https://clima.github.io/ClimaAnalysis.jl/stable/flat/) in
     ClimaAnalysis and [`ObservationRecipe`](@ref) in ClimaCalibrate.
 
 Calibration involves implementing an [`observation_map`](@ref) by hand which
@@ -65,7 +65,7 @@ that they match the `OutputVar`s that are used to create the observations.
 In particular, the `OutputVar`s from the simulation data should match the
 `OutputVar`s from the observations from
 - the short name (see
-  [`ClimaAnalysis.short_name`](https://clima.github.io/ClimaAnalysis.jl/dev/api/#ClimaAnalysis.Var.short_name)),
+  [`ClimaAnalysis.short_name`](https://clima.github.io/ClimaAnalysis.jl/stable/api/#ClimaAnalysis.Var.short_name)),
 - the non-temporal dimensions,
 - the dates of the simulation data includes all the dates of one or more
   metadata in the observations,
@@ -285,4 +285,4 @@ The `Checker.check` function should
 - and optionally log informative messages when `verbose = true`.
 
 For more information about `OutputVar` and `Metadata`, see the
-[ClimaAnalysis documentation](https://clima.github.io/ClimaAnalysis.jl/dev/).
+[ClimaAnalysis documentation](https://clima.github.io/ClimaAnalysis.jl/stable/).

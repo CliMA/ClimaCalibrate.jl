@@ -260,11 +260,8 @@ end
     )
 
 Return `true` if the proportion of positive values in `var`, flattened with
-`metadata` the way the observation was, is within the threshold defined in
-`SignChecker` of the proportion of positive values in `data`, `false` otherwise.
-
-This check assumes `var` can be flattened with `metadata`, which the default
-checkers establish before it runs.
+observation `metadata`, is within the threshold defined in `SignChecker` of the
+proportion of positive values in `data`, `false` otherwise.
 """
 function Checker.check(
     checker::SignChecker,
@@ -278,16 +275,11 @@ function Checker.check(
         keyword argument to `Checker.check`",
     )
 
-    # Flatten `var` the way the observation was, so that both proportions are
-    # taken over the same coordinates: the values flattening drops (the
-    # observation's NaNs, and times outside the metadata's) count in neither
+    # Get the times in common if the observations vary in time
     if ClimaAnalysis.has_time(var) && ClimaAnalysis.has_time(metadata)
         var = _match_dates(var, metadata)
     end
     sim_data = ClimaAnalysis.flatten(var, metadata).data
-    # Flattening has already dropped the observation's NaNs from both, so only
-    # the simulation can still hold NaNs. Leave those coordinates out of both
-    # proportions, so that they are taken over the same entries
     valid = @. !isnan(sim_data)
     iszero(count(valid)) && error(
         "SignChecker cannot compare a variable that is entirely NaN (short \

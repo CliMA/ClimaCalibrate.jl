@@ -230,12 +230,6 @@ script it runs.
 
 Returned by [`submit_job`](@ref), and the argument to [`job_status`](@ref),
 [`cancel_job`](@ref), and [`requeue_job`](@ref).
-
-# Fields
-- `backend`: The backend the job was submitted with.
-- `id`: The scheduler's job ID, an `Int64` for Slurm and a `String` for PBS.
-- `job_script`: The script that was submitted. [`write_job_script`](@ref)
-  writes it to a file, which shows what the scheduler was asked to run.
 """
 struct JobInfo
     backend::HPCBackend
@@ -268,15 +262,6 @@ end
 Submit one scheduler job per ensemble member to Caltech's [high-performance computing cluster](https://www.hpc.caltech.edu/).
 
 The second form builds the `SlurmConfig` from its keyword arguments.
-
-# Fields
-- `hpc_config`: Scheduler directives, modules, and environment variables for
-  each ensemble member's job. See [`SlurmConfig`](@ref).
-- `job_records`: The jobs submitted with this backend, in submission order.
-- `failure_rate`: The fraction of an iteration's ensemble members that may fail
-  before the calibration is halted `[-]`.
-- `job_timeout`: How long (in seconds) an iteration waits for a running job
-  before giving up `[s]`. The default is `$JOB_TIMEOUT` (24 hours).
 
 # Examples
 ```julia
@@ -321,15 +306,6 @@ Submit one scheduler job per ensemble member to CliMA's private GPU server.
 
 The second form builds the `SlurmConfig` from its keyword arguments.
 
-# Fields
-- `hpc_config`: Scheduler directives, modules, and environment variables for
-  each ensemble member's job. See [`SlurmConfig`](@ref).
-- `job_records`: The jobs submitted with this backend, in submission order.
-- `failure_rate`: The fraction of an iteration's ensemble members that may fail
-  before the calibration is halted `[-]`.
-- `job_timeout`: How long (in seconds) an iteration waits for a running job
-  before giving up `[s]`. The default is `$JOB_TIMEOUT` (24 hours).
-
 # Examples
 ```julia
 backend = ClimaCalibrate.ClimaGPUBackend(;
@@ -373,15 +349,6 @@ Submit one scheduler job per ensemble member to CliMA's private GCP server.
 
 The second form builds the `SlurmConfig` from its keyword arguments.
 
-# Fields
-- `hpc_config`: Scheduler directives, modules, and environment variables for
-  each ensemble member's job. See [`SlurmConfig`](@ref).
-- `job_records`: The jobs submitted with this backend, in submission order.
-- `failure_rate`: The fraction of an iteration's ensemble members that may fail
-  before the calibration is halted `[-]`.
-- `job_timeout`: How long (in seconds) an iteration waits for a running job
-  before giving up `[s]`. The default is `$JOB_TIMEOUT` (24 hours).
-
 # Examples
 ```julia
 backend = ClimaCalibrate.GCPBackend(;
@@ -424,15 +391,6 @@ GCPBackend(;
 Submit one scheduler job per ensemble member to NSF NCAR's [Derecho supercomputing system](https://ncar-hpc-docs.readthedocs.io/en/latest/compute-systems/derecho/).
 
 The second form builds the `PBSConfig` from its keyword arguments.
-
-# Fields
-- `hpc_config`: Scheduler directives, modules, and environment variables for
-  each ensemble member's job. See [`PBSConfig`](@ref).
-- `job_records`: The jobs submitted with this backend, in submission order.
-- `failure_rate`: The fraction of an iteration's ensemble members that may fail
-  before the calibration is halted `[-]`.
-- `job_timeout`: How long (in seconds) an iteration waits for a running job
-  before giving up `[s]`. The default is `$JOB_TIMEOUT` (24 hours).
 
 # Examples
 ```julia
