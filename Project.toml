@@ -26,7 +26,7 @@ ClimaCalibrateClimaAnalysisExt = ["ClimaAnalysis", "NaNStatistics"]
 ClimaCalibrateMakieExt = ["Makie"]
 
 [compat]
-Aqua = "0.8"
+Aqua = "0.8.0 - 0.8.16, 0.8.18"
 ArnoldiMethod = "0.4.0"
 CairoMakie = "0.15"
 ClimaAnalysis = "0.5.23"
