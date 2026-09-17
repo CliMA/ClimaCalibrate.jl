@@ -41,9 +41,9 @@ Logging = "1.10, 1.11"
 Makie = "0.24"
 NaNStatistics = "0.6.8 - 0.6.50, 0.6.53"
 OrderedCollections = "1.3"
+ParallelTestRunner = "2.8"
 Random = "1"
 Reexport = "1"
-SafeTestsets = "0.1"
 Statistics = "1"
 TOML = "1"
 Test = "1"
@@ -57,9 +57,9 @@ ClimaParams = "5c42b081-d73a-476f-9059-fd94b934656c"
 Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 NaNStatistics = "b946abbf-3ea7-4610-9019-9858bfdeaf2d"
+ParallelTestRunner = "d3525ed8-44d0-4b2c-a655-542cee43accc"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
-SafeTestsets = "1bc83da4-3b8d-516f-aca4-4fe02f6d838f"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
-test = ["Aqua", "CairoMakie", "ClimaAnalysis", "ClimaParams", "Dates", "LinearAlgebra", "NaNStatistics", "Random", "SafeTestsets", "Test"]
+test = ["Aqua", "CairoMakie", "ClimaAnalysis", "ClimaParams", "Dates", "LinearAlgebra", "NaNStatistics", "ParallelTestRunner", "Random", "Test"]
