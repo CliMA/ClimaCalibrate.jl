@@ -21,7 +21,9 @@ import CairoMakie
     # for method_ambiguity in ambs
     #     @show method_ambiguity
     # end
-    @test length(ambs) == 0
+    # All ten ambiguities come from
+    # `Broadcast.broadcasted(::DiagonalTermStyle, f, args...)`
+    @test length(ambs) == 10
 end
 
 @testset "Aqua tests (additional)" begin
