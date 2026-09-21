@@ -174,7 +174,7 @@ result.structured_energy_by_variable   # how that splits between variables
 result.residual_norm_by_variable       # which variable dominates the residual
 ```
 
-It projects `obs - mean(G)` onto the leading eigenvectors of the noise
+It projects `mean(G) - obs` onto the leading eigenvectors of the noise
 covariance, normalized by the corresponding eigenvalues, so the projections are
 z-scores: a value much larger than one means the residual has structure the
 noise model does not account for. A high structured energy in one variable
@@ -203,8 +203,7 @@ standard deviation, so it can be read like a z-score.
 
 - **Sign:** A positive value means the mean forward map evaluation over-predicts
   the observation at that index (positive bias), and a negative value means it
-  under-predicts (negative bias). Note that this is the opposite sign convention
-  from [`analyze_residual`](@ref), which uses `obs - mean(G)`.
+  under-predicts (negative bias).
 - **Magnitude:** Values much larger than ``\pm 2`` in magnitude indicate a
   mismatch that the noise model cannot explain.
 - **RMS as a summary:** The root mean square (RMS) of the residual is a useful

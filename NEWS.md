@@ -15,10 +15,6 @@ main
   the diagonal term is computed from the latitude-weighted or unweighted
   samples when `use_latitude_weights` is `true`
   [#362](https://github.com/CliMA/ClimaCalibrate.jl/pull/362).
-
-v0.5.0
--------
-
 - Add tools for the normalized residual `(mean(G) - obs) / σ`, where `σ` is the
   square root of the diagonal of the observation noise covariance
   [#351](https://github.com/CliMA/ClimaCalibrate.jl/pull/351)
@@ -31,6 +27,8 @@ v0.5.0
   - The `OutputVar`s returned by `ObservationRecipe.reconstruct_diag_cov` now
     have squared units, since the diagonal of the covariance matrix contains
     variances.
+  - Reverse sign convention for `analyze_residual` to match `compute_residual`
+    [#377](https://github.com/CliMA/ClimaCalibrate.jl/pull/377).
 
 v0.5.0
 -------

@@ -166,7 +166,7 @@ end
 """
     analyze_residual(ekp, iter; n_eigenvectors = 3)
 
-Analyze the model-data residual `y - G(u)` at iteration `iter` using the leading
+Analyze the model-data residual `G(u) - y` at iteration `iter` using the leading
 eigenvectors of the observational noise covariance.
 
 Projecting the residual onto those eigenvectors and normalizing by the
@@ -212,10 +212,6 @@ result.structured_energy
     Requires ClimaAnalysis to be loaded, and observations built by
     [`ClimaCalibrate.ObservationRecipe`](@ref), whose metadata is used to
     attribute the residual to individual variables.
-
-!!! note "Sign convention"
-    The sign of the residual is flipped compared to
-    [`EKPUtils.residual`](@ref), which uses `mean(G) - obs`.
 """
 function analyze_residual(ekp, iter; n_eigenvectors = 3)
     obs_series = EKP.get_observation_series(ekp)
@@ -233,7 +229,7 @@ function analyze_residual(ekp, iter; n_eigenvectors = 3)
     g = EKP.get_g(ekp, iter)
     succ_ens, _ = EKP.split_indices_by_success(g)
     mean_g = dropdims(mean(g[:, succ_ens], dims = 2), dims = 2)
-    diff = EKP.get_obs(ekp, iter) - mean_g
+    diff = mean_g - EKP.get_obs(ekp, iter)
 
     metadata = EKPUtils.get_metadata_for_nth_iteration(obs_series, iter)
     ranges = ObservationRecipe._get_minibatch_indices_for_nth_iteration(
