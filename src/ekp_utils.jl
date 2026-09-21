@@ -197,10 +197,6 @@ covariance.
 If `ignore_nan = true`, then the mean of the G ensemble at each index is
 computed over the ensemble members that are not `NaN`.
 
-!!! note "Sign convention"
-    The sign of the residual is flipped compared to
-    [`ClimaCalibrate.analyze_residual`](@ref), which uses `obs - mean(G)`.
-
 See the [Visualization](@ref) documentation for how to interpret the residual.
 """
 function residual(
