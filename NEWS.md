@@ -3,6 +3,9 @@ ClimaCalibrate.jl Release Notes
 
 main
 -------
+
+v0.6.0
+-------
 - Slurm workers are submitted with `sbatch` instead of `srun`, so each is an
   independent batch job with its own id rather than a step of the driver's
   allocation. The job id is kept in `WorkerConfig.userdata`. While workers
