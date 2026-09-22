@@ -147,6 +147,21 @@ function _parse_pbs_state(status_str)
     return status
 end
 
+# Environment for `qstat`: user Python removed so it cannot interfere with the
+# PBS wrappers, and NCAR's qstat-cache bypassed. The cache answers from a
+# snapshot refreshed every few seconds, which reports a job submitted since the
+# last refresh as "Unknown Job Id" (exit 153) and a finished job in whatever
+# state the snapshot caught it in.
+function _qstat_env()
+    clean_env = Dict{String, String}(ENV)
+    for k in ("PYTHONHOME", "PYTHONPATH", "PYTHONUSERBASE")
+        haskey(clean_env, k) && delete!(clean_env, k)
+    end
+    clean_env["PYTHONNOUSERSITE"] = "1"
+    clean_env["QSCACHE_BYPASS"] = "true"
+    return clean_env
+end
+
 """
     job_status(::DerechoBackend, job::JobInfo)
 
@@ -156,21 +171,7 @@ See [`JobStatus`](@ref).
 """
 function job_status(::DerechoBackend, job::JobInfo)
     (; id) = job
-    # Call qstat with a sanitized environment to avoid user Python interfering
-    # with PBS wrappers
-    clean_env = Dict{String, String}(ENV)
-    for k in ("PYTHONHOME", "PYTHONPATH", "PYTHONUSERBASE")
-        haskey(clean_env, k) && delete!(clean_env, k)
-    end
-    clean_env["PYTHONNOUSERSITE"] = "1"
-    # Derecho's `qstat` is NCAR's qstat-cache, which answers from a snapshot
-    # refreshed every few seconds. Polling one job for its state is exactly
-    # what a snapshot gets wrong: a job submitted since the last refresh is
-    # "Unknown Job Id" (exit 153), and a job that has since finished is still
-    # reported in whatever state the snapshot caught it in. Ask the scheduler
-    clean_env["QSCACHE_BYPASS"] = "true"
-
-    status_str, qstat_error = _qstat_output(id, clean_env)
+    status_str, qstat_error = _qstat_output(id, _qstat_env())
     if isnothing(status_str)
         # Reporting RUNNING here keeps the calibration polling. That is right
         # for a transient qstat outage, but `wait_for_jobs` has to time out

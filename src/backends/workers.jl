@@ -287,6 +287,84 @@ const ATEXIT_HOOK_REGISTERED = Ref(false)
 # no effect on forward-model logs, which workers write via `set_worker_logger`.
 _run_quiet(cmd) = run(pipeline(cmd; stdout = devnull, stderr = devnull))
 
+"Seconds between scheduler queries while waiting for workers to start."
+const SCHEDULER_POLL_INTERVAL = 30.0
+
+"Seconds after submission during which a job missing from the scheduler is not treated as finished."
+const UNKNOWN_JOB_GRACE = 60.0
+
+"""
+    query_scheduler_states(cluster, job_ids)
+
+States of `job_ids` on `cluster` (`:slurm` or `:pbs`) as
+`Dict(id => JobStatus | nothing)`, or `nothing` when the scheduler could not be
+queried. Jobs the scheduler no longer lists are absent from the result.
+
+One query covers every job, so the cost does not grow with the number of
+workers.
+"""
+function query_scheduler_states(cluster, job_ids)
+    cluster == :slurm && return _squeue_states()
+    cluster == :pbs && return _qstat_states(job_ids)
+    return nothing
+end
+
+# One `squeue` call for every job of this session, matched by the shared job
+# name. `squeue -j` aborts when any listed id has already left the controller.
+function _squeue_states()
+    cmd = `squeue --name $(worker_jobname()) -h -o "%i %T"`
+    out, err, code = try
+        _run_capturing_output(cmd)
+    catch e
+        @warn "squeue could not be run" exception = e maxlog = 5
+        return nothing
+    end
+    if !iszero(code)
+        @warn "squeue failed with exit code $code: $err" maxlog = 5
+        return nothing
+    end
+    return _parse_squeue_output(out)
+end
+
+# Parse `squeue -h -o "%i %T"` output, one `<id> <STATE>` per line.
+function _parse_squeue_output(out)
+    states = Dict{String, Union{JobStatus, Nothing}}()
+    for line in eachline(IOBuffer(out))
+        tokens = split(line)
+        length(tokens) >= 2 || continue
+        states[String(first(tokens))] = _parse_slurm_state(tokens[2])
+    end
+    return states
+end
+
+# One `qstat` call for `job_ids`. `-x` includes finished jobs. `qstat` exits
+# nonzero when any id is unknown but still reports the others.
+function _qstat_states(job_ids)
+    cmd = setenv(`qstat -x -f -F dsv $job_ids`, _qstat_env())
+    out, err, code = try
+        _run_capturing_output(cmd)
+    catch e
+        @warn "qstat could not be run" exception = e maxlog = 5
+        return nothing
+    end
+    if isempty(out) && !iszero(code)
+        @warn "qstat failed with exit code $code: $err" maxlog = 5
+        return nothing
+    end
+    return _parse_qstat_output(out)
+end
+
+# Parse `qstat -f -F dsv` output, one `Job Id: <id>|key = value|...` per line.
+function _parse_qstat_output(out)
+    states = Dict{String, Union{JobStatus, Nothing}}()
+    for line in eachline(IOBuffer(out))
+        m = match(r"^Job Id:\s*([^|\s]+)", line)
+        isnothing(m) && continue
+        states[String(m[1])] = _parse_pbs_state(line)
+    end
+    return states
+end
+
 # Ids of this session's PBS jobs, matched by the shared job name via `qselect`.
 _pbs_worker_job_ids(jobname) = filter(
     !isempty,
@@ -401,12 +479,13 @@ Shared by the Slurm and PBS `launch` methods.
 Workers are grouped into allocations of `workers_per_node` (one per allocation
 by default). Each allocation gets a script under `output_base` that runs its
 workers (see `single_worker_script` and `multi_worker_script`) and is submitted
-with `submit_cmd(output_file, script_file)` under `env`. The submission command
-prints the job id and then blocks until the job ends.
+with `submit_cmd(output_file, script_file)` under `env`. `parse_job_id` turns
+the submission command's output into a job id, or `nothing`.
 """
 function submit_workers!(
     instances_arr,
     launch_condition;
+    cluster,
     ntasks,
     workers_per_node,
     output_base,
@@ -416,7 +495,6 @@ function submit_workers!(
     submit_cmd,
     parse_job_id,
 )
-    pids = Base.Process[]
     job_ids = Union{String, Nothing}[]
     output_files = String[]
     counts = workers_per_allocation(ntasks, workers_per_node)
@@ -435,19 +513,18 @@ function submit_workers!(
         end
         chmod(script_path, 0o700)
         @info "Submitting worker job [$j/$njobs] with $nworkers worker(s): $cmd"
-        pid = open(setenv(cmd, env))
-        job_id = parse_job_id(readline(pid))
+        out, err, code = _run_capturing_output(setenv(cmd, env))
+        job_id = iszero(code) ? parse_job_id(out) : nothing
         if isnothing(job_id)
-            @warn "Worker job [$j/$njobs] was not submitted. Check the job scheduler output."
+            @warn "Worker job [$j/$njobs] was not submitted. Submission exited with $code: $(isempty(err) ? out : err)"
         else
             @info "Worker job [$j/$njobs] submitted as job $job_id"
         end
-        append!(pids, fill(pid, nworkers))
         append!(job_ids, fill(job_id, nworkers))
         append!(output_files, outputs)
     end
     return poll_files_for_worker_startup(
-        pids,
+        cluster,
         job_ids,
         output_files,
         instances_arr,
@@ -482,10 +559,11 @@ function Distributed.launch(
     jobname = worker_jobname()
     output_base = default_worker_output_base(params, exehome, jobname)
 
-    base = `sbatch --parsable --wait -J $jobname -n 1 -D $exehome $worker_args`
+    base = `sbatch --parsable -J $jobname -n 1 -D $exehome $worker_args`
     return submit_workers!(
         instances_arr,
         launch_condition;
+        cluster = :slurm,
         ntasks = sm.ntasks,
         workers_per_node = get(params, :workers_per_node, 1),
         output_base,
@@ -546,43 +624,58 @@ function propagate_env_vars!(env)
 end
 
 # Poll one output file per worker, pushing each worker's `WorkerConfig` as it
-# appears. `pids[i]` is the submission process that stands in for the job
-# owning `output_files[i]` and `job_ids[i]` is that job's id, or `nothing` if
-# the submission failed. Tolerant of partial success: a worker whose job ends
-# before it connects, or that never starts within the polling window, is logged
-# and skipped so that workers which did start remain usable. Throws only if no
-# workers start at all.
+# appears. `job_ids[i]` is the scheduler job that owns `output_files[i]`, or
+# `nothing` if the submission failed. Tolerant of partial success: a worker
+# whose job ends before it connects, or that never starts within the polling
+# window, is logged and skipped so that workers which did start remain usable.
+# Throws only if no workers start at all.
 function poll_files_for_worker_startup(
-    pids,
+    cluster,
     job_ids,
     output_files,
     instances_arr,
     launch_condition,
 )
-    @assert length(output_files) == length(pids) == length(job_ids)
+    @assert length(output_files) == length(job_ids)
     ntasks = length(output_files)
     t_start = time()
     # This regex will match the worker's socket, ex: julia_worker:9015#169.254.3.1
     julia_worker_regex = r"([\w]+):([\d]+)#(\d{1,3}.\d{1,3}.\d{1,3}.\d{1,3})"
     retry_delays = ExponentialBackOff(720, 1.0, 30.0, 1.5, 0.1)
     t_waited = 0
+    t_last_query = -Inf
     registered = Set{Int}()   # indices of workers that have registered
     failed = Set{Int}()       # indices of workers whose job ended first
+    for i in 1:ntasks
+        isnothing(job_ids[i]) && push!(failed, i)
+    end
 
     for retry_delay in [0.0, retry_delays...]
         t_waited = round(Int, time() - t_start)
+        # A worker registers by printing its host and port to its output file.
+        # If its job has ended without doing so it will never connect. One
+        # scheduler query covers all jobs, at most every SCHEDULER_POLL_INTERVAL
+        # seconds and not within UNKNOWN_JOB_GRACE seconds of submission, when
+        # a job can be missing from the listing because it has not appeared yet
+        if t_waited > UNKNOWN_JOB_GRACE &&
+           time() - t_last_query >= SCHEDULER_POLL_INTERVAL
+            t_last_query = time()
+            waiting = setdiff(1:ntasks, registered, failed)
+            states = query_scheduler_states(
+                cluster,
+                unique(job_ids[i] for i in waiting),
+            )
+            if !isnothing(states)
+                for i in waiting
+                    status = get(states, job_ids[i], COMPLETED)
+                    (status == COMPLETED || status == FAILED) || continue
+                    @warn "Job $(job_ids[i]) for worker $i/$ntasks ended before connecting; skipping. Check $(output_files[i])."
+                    push!(failed, i)
+                end
+            end
+        end
         for i in 1:ntasks
             (i in registered || i in failed) && continue
-            # A worker registers by printing its host and port to its output
-            # file. If its job has ended without doing so it will never connect
-            if isnothing(job_ids[i])
-                push!(failed, i)
-                continue
-            elseif process_exited(pids[i])
-                @warn "Job $(job_ids[i]) for worker $i/$ntasks ended with code $(pids[i].exitcode) before connecting; skipping. Check $(output_files[i])."
-                push!(failed, i)
-                continue
-            end
             job_output_file = output_files[i]
             (isfile(job_output_file) && filesize(job_output_file) > 0) ||
                 continue
@@ -686,12 +779,12 @@ function Distributed.launch(
     # working filesystem under `exehome` (which it is).
     output_base = default_worker_output_base(params, exehome, jobname)
 
-    # qsub: -V inherit env, -N job name, -j oe merge stdout/stderr, -o output,
-    # -W block=true keep qsub running until the job ends
-    base = `qsub -V -N $jobname -j oe -W block=true $worker_args`
+    # qsub: -V inherit env, -N job name, -j oe merge stdout/stderr, -o output.
+    base = `qsub -V -N $jobname -j oe $worker_args`
     return submit_workers!(
         instances_arr,
         launch_condition;
+        cluster = :pbs,
         ntasks = pm.ntasks,
         workers_per_node = get(params, :workers_per_node, 1),
         output_base,

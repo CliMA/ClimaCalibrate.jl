@@ -3,12 +3,13 @@ ClimaCalibrate.jl Release Notes
 
 main
 -------
-- Slurm workers are submitted with `sbatch --wait` instead of `srun`, so each
-  is an independent batch job with its own id rather than a step of the
-  driver's allocation. PBS workers are submitted with `qsub -W block=true`. The
-  job id is kept in `WorkerConfig.userdata`. The driver's own allocation no
-  longer needs a task per worker, and `SlurmManager()` defaults to one worker
-  instead of `SLURM_NTASKS`
+- Slurm workers are submitted with `sbatch` instead of `srun`, so each is an
+  independent batch job with its own id rather than a step of the driver's
+  allocation. The job id is kept in `WorkerConfig.userdata`. While workers
+  start, one `squeue` or `qstat` call every 30 s covers all of them, and a job
+  that ends before its worker connects is skipped. The driver's own allocation
+  no longer needs a task per worker, and `SlurmManager()` defaults to one
+  worker instead of `SLURM_NTASKS`
   [#360](https://github.com/CliMA/ClimaCalibrate.jl/issues/360).
 - `AbstractDiagonalTerm`s are added to simplify the `covariance` methods for
   `ObservationRecipe`s
