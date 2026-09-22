@@ -460,7 +460,9 @@ function Distributed.manage(
     return nothing
 end
 
-# Where a worker's startup output goes, default to a temp dir
+# Where a worker's startup output goes, default to a temp dir under `exehome`.
+# The job writes this file on the node it runs on, so a caller passing `o` or
+# `output` must give a path on the shared filesystem, not `/tmp`.
 function default_worker_output_base(params, exehome, jobname)
     haskey(params, :o) && return params[:o]
     haskey(params, :output) && return params[:output]
@@ -775,8 +777,6 @@ function Distributed.launch(
 
     worker_args = parse_pbs_worker_params(params)
     jobname = worker_jobname()
-    # PBS rejects `/tmp` for `-o`, so the temp-dir default must be on the shared
-    # working filesystem under `exehome` (which it is).
     output_base = default_worker_output_base(params, exehome, jobname)
 
     # qsub: -V inherit env, -N job name, -j oe merge stdout/stderr, -o output.
@@ -816,8 +816,10 @@ _worker_command_string(exename, exeflags) = join(
 Bash script that runs one Julia worker in the foreground, so the job lives as
 long as the worker.
 """
-single_worker_script(exename, exeflags) =
-    "#!/bin/bash\nexec $(_worker_command_string(exename, exeflags))\n"
+single_worker_script(
+    exename,
+    exeflags,
+) = "#!/bin/bash\nexec $(_worker_command_string(exename, exeflags))\n"
 
 """
     multi_worker_script(exename, exeflags, worker_outputs)
@@ -1081,6 +1083,9 @@ that workers joining later get the same setup.
 - `time::Int = DEFAULT_WALLTIME`: Walltime in minutes, will be formatted
   appropriately for the cluster system
 - `workers_per_node::Int = 1`: Number of workers to run per node.
+- `o`: Base path for the workers' output files, which the job writes on the
+  node it runs on, so it must be on the shared filesystem. Defaults to a
+  `.julia_worker_*` directory in the working directory.
 - `kwargs`: Other kwargs can be passed directly through to `addprocs`.
 
 # Returns

@@ -15,7 +15,9 @@ end
 
 @testset "SlurmManager Unit Tests" begin
     @test ClimaCalibrate.get_manager() == ClimaCalibrate.SlurmManager(1)
-    out_file = tempname()
+    # The worker job writes its output on the node it runs on, so the path
+    # must be on the shared filesystem rather than in /tmp
+    out_file = tempname(pwd())
     p = add_workers_and_wait(1; device = :cpu, o = out_file, time = 5)
     @test nprocs() == 2
     @test workers() == p
@@ -30,6 +32,7 @@ end
     @test workers() == [1]
     # Each worker is submitted individually and writes to `<o>-<i>.out`
     @test isfile("$out_file-1.out")
+    rm("$out_file-1.out")
 
     # Test incorrect generic arguments
     @test_throws TaskFailedException p =
@@ -39,7 +42,7 @@ end
 @testset "SlurmManager - two workers per node" begin
     # Two workers in one allocation must land on the same node and join the
     # pool like individually-submitted workers
-    out_file = tempname()
+    out_file = tempname(pwd())
     kwargs = (; device = :cpu, o = out_file, time = 5, workers_per_node = 2)
     p = add_workers_and_wait(2; kwargs...)
     @test workers() == p
