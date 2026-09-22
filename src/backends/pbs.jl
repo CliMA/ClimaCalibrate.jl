@@ -66,7 +66,7 @@ function submit_job(backend::DerechoBackend, job_script::String)
         write(io, job_script)
         close(io)
 
-        clean_env = deepcopy(ENV)
+        clean_env = Dict{String, String}(ENV)
         # List of PBS environment variables to unset
         # Clean env to avoid user overrides breaking system PBS utilities (e.g., python wrappers)
         unset_env_vars = (
@@ -158,7 +158,7 @@ function job_status(::DerechoBackend, job::JobInfo)
     (; id) = job
     # Call qstat with a sanitized environment to avoid user Python interfering
     # with PBS wrappers
-    clean_env = deepcopy(ENV)
+    clean_env = Dict{String, String}(ENV)
     for k in ("PYTHONHOME", "PYTHONPATH", "PYTHONUSERBASE")
         haskey(clean_env, k) && delete!(clean_env, k)
     end

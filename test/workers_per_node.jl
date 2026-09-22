@@ -3,6 +3,9 @@ import Distributed
 import ClimaCalibrate
 import ClimaCalibrate.Backend:
     multi_worker_script,
+    single_worker_script,
+    _parse_sbatch_output,
+    _parse_qsub_output,
     shell_quote,
     workers_per_allocation,
     allocation_resource_kwargs,
@@ -34,6 +37,23 @@ import ClimaCalibrate.Backend:
         @test occursin("'--project=@temp proj'", line)
         @test occursin("'--threads=2'", line)
     end
+end
+
+@testset "single_worker_script" begin
+    script = single_worker_script("julia", Cmd(["--project=@temp proj", "-t2"]))
+    lines = split(script, '\n'; keepempty = false)
+    @test lines[1] == "#!/bin/bash"
+    @test startswith(lines[2], "exec 'julia' '--project=@temp proj' '-t2' ")
+    @test occursin("--worker=$(worker_cookie())", lines[2])
+end
+
+@testset "job id parsing" begin
+    @test _parse_sbatch_output("12345") == "12345"
+    @test _parse_sbatch_output("12345;cluster") == "12345"
+    @test isnothing(_parse_sbatch_output(""))
+    @test isnothing(_parse_sbatch_output("sbatch: error"))
+    @test _parse_qsub_output("987.desched1") == "987.desched1"
+    @test isnothing(_parse_qsub_output(""))
 end
 
 @testset "shell_quote" begin

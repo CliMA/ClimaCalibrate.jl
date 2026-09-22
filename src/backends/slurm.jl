@@ -38,6 +38,28 @@ function make_job_script(
     return slurm_script
 end
 
+# Slurm variables of an enclosing allocation that `sbatch` would otherwise
+# inherit into the new job.
+const SLURM_INHERITED_VARS = (
+    "SLURM_MEM_PER_CPU",
+    "SLURM_MEM_PER_GPU",
+    "SLURM_MEM_PER_NODE",
+    "SLURM_CPUS_PER_TASK",
+    "SLURM_NTASKS",
+    "SLURM_JOB_NAME",
+    "SLURM_SUBMIT_DIR",
+    "SLURM_JOB_ID",
+)
+
+"Copy of `ENV` without the variables in `SLURM_INHERITED_VARS`."
+function _sbatch_env()
+    clean_env = Dict{String, String}(ENV)
+    for var in SLURM_INHERITED_VARS
+        delete!(clean_env, var)
+    end
+    return clean_env
+end
+
 """
     submit_job(backend::SlurmBackend, job_script::String)
 
@@ -51,24 +73,7 @@ function submit_job(backend::SlurmBackend, job_script::String)
         write(io, job_script)
         close(io)
 
-        clean_env = deepcopy(ENV)
-        # List of SLURM environment variables to unset
-        unset_env_vars = [
-            "SLURM_MEM_PER_CPU",
-            "SLURM_MEM_PER_GPU",
-            "SLURM_MEM_PER_NODE",
-            "SLURM_CPUS_PER_TASK",
-            "SLURM_NTASKS",
-            "SLURM_JOB_NAME",
-            "SLURM_SUBMIT_DIR",
-            "SLURM_JOB_ID",
-        ]
-        # Create a new environment without the SLURM variables
-        for var in unset_env_vars
-            delete!(clean_env, var)
-        end
-
-        cmd = setenv(`sbatch --parsable $sbatch_filepath`, clean_env)
+        cmd = setenv(`sbatch --parsable $sbatch_filepath`, _sbatch_env())
         output, stderr_text, exit_code = _run_capturing_output(cmd)
         job_id = match(r"^\d+", output)
         if !iszero(exit_code) || isnothing(job_id)

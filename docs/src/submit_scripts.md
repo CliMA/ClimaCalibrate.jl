@@ -20,19 +20,18 @@ information, see the [Backends](@ref Backends) page.
 
 ## WorkerBackend on a Slurm cluster
 
-When using [`WorkerBackend`](@ref) on a Slurm cluster, allocate resources at the
-top level since Slurm allows nested resource allocations. Each worker will
-inherit one task from the Slurm allocation.
+When using [`WorkerBackend`](@ref) on a Slurm cluster, request minimal
+resources for the top-level script. Each worker is submitted as its own batch
+job by the [`SlurmManager`](@ref), with the resources given to
+[`add_workers`](@ref).
 
 ```bash
 #!/bin/bash
 #SBATCH --job-name=slurm_calibration
 #SBATCH --output=calibration_%j.out
 #SBATCH --time=12:00:00
-#SBATCH --ntasks=5
-#SBATCH --cpus-per-task=4
-#SBATCH --gpus-per-task=1
-#SBATCH --mem=8G
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=1
 
 # Set environment variables for CliMA
 export CLIMACOMMS_DEVICE="CUDA"
@@ -47,18 +46,16 @@ julia --project=calibration calibration_script.jl
 ```
 
 **Key points:**
-- `--ntasks=5`: Requests 5 tasks, each worker gets one task.
-- `--cpus-per-task=4`: Each worker gets 4 CPU cores
-- `--gpus-per-task=1`: Each worker gets 1 GPU
+- Requests only 1 CPU core for the main script
+- Workers are launched as separate Slurm jobs. Their walltime, CPUs, and GPUs
+  come from `add_workers`, e.g. `add_workers(5; time = 120, device = :gpu)`
 - Uses `%j` in output/error file names to interpolate the job ID
-- It is recommended to use the same number of tasks as ensemble members to
-  parallelize the work across all ensemble members.
+- Run as many workers as ensemble members to parallelize across all members
 
 ## WorkerBackend on a PBS cluster
 
-Since PBS does not support nested resource allocations, request minimal
-resources for the top-level script. Each worker will acquire its own resource
-allocation through the [`PBSManager`](@ref).
+As on Slurm, request minimal resources for the top-level script. Each worker
+acquires its own resource allocation through the [`PBSManager`](@ref).
 
 ```bash
 #!/bin/bash
@@ -94,7 +91,6 @@ The [`HPCBackend`](@ref)s directly submit individual forward model runs as
 separate jobs to the scheduler. This approach is ideal when:
 - Your forward model requires multiple CPU cores or GPUs
 - You need fine-grained control over resource allocation per model run
-- Your cluster doesn't support nested allocations
 
 Since each model run consists of an independent resource allocation, minimal
 resources are needed to run the top-level calibration script. For a Slurm
@@ -115,8 +111,8 @@ module load climacommon
 julia --project=calibration -e 'using Pkg; Pkg.instantiate(;verbose=true)'
 julia --project=calibration calibration_script.jl
 ```
-For a PBS cluster, the script in the [`WorkerBackend`](@ref) section can be
-reused since it already specifies a minimal resource allocation.
+The [`WorkerBackend`](@ref) scripts above request the same minimal allocation
+and can be reused for either scheduler.
 
 ## Resource Configuration
 
