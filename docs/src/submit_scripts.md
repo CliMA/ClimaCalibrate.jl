@@ -20,10 +20,11 @@ information, see the [Backends](@ref Backends) page.
 
 ## WorkerBackend on a Slurm cluster
 
-When using [`WorkerBackend`](@ref) on a Slurm cluster, request minimal
-resources for the top-level script. Each worker is submitted as its own batch
-job by the [`SlurmManager`](@ref), with the resources given to
-[`add_workers`](@ref).
+When using [`WorkerBackend`](@ref) on a Slurm cluster, the driver only submits
+jobs and waits for results, so it can run directly on a login node. For a
+calibration that outlives a login session, submit it with a script requesting
+minimal resources. Each worker is submitted as its own batch job by the
+[`SlurmManager`](@ref), with the resources given to [`add_workers`](@ref).
 
 ```bash
 #!/bin/bash
@@ -50,7 +51,8 @@ julia --project=calibration calibration_script.jl
 - Workers are launched as separate Slurm jobs. Their walltime, CPUs, and GPUs
   come from `add_workers`, e.g. `add_workers(5; time = 120, device = :gpu)`
 - Uses `%j` in output/error file names to interpolate the job ID
-- Run as many workers as ensemble members to parallelize across all members
+- Workers are long lived: each loads the model code once and runs members in
+  every iteration. Run as many as ensemble members so all members run at once
 
 ## WorkerBackend on a PBS cluster
 

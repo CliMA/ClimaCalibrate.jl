@@ -66,27 +66,9 @@ function submit_job(backend::DerechoBackend, job_script::String)
         write(io, job_script)
         close(io)
 
-        clean_env = Dict{String, String}(ENV)
-        # List of PBS environment variables to unset
-        # Clean env to avoid user overrides breaking system PBS utilities (e.g., python wrappers)
-        unset_env_vars = (
-            "PBS_MEM_PER_CPU",
-            "PBS_MEM_PER_GPU",
-            "PBS_MEM_PER_NODE",
-            "PYTHONHOME",
-            "PYTHONPATH",
-            "PYTHONUSERBASE",
-        )
-        for k in unset_env_vars
-            haskey(clean_env, k) && delete!(clean_env, k)
-        end
-        # Disable user-site packages directory to prevent issues with Derecho's
-        # `qstat` python backend https://github.com/NCAR/qstat-cache
-        clean_env["PYTHONNOUSERSITE"] = "1"
-
         # Pass all environment variables from the submitting process to the
         # job using -V
-        cmd = setenv(`qsub -V $pbs_filepath`, clean_env)
+        cmd = setenv(`qsub -V $pbs_filepath`, scheduler_env(backend))
         job_id, stderr_text, exit_code = _run_capturing_output(cmd)
         if !iszero(exit_code) || isempty(job_id)
             error("qsub exited with $exit_code and returned no job id: \
@@ -147,20 +129,33 @@ function _parse_pbs_state(status_str)
     return status
 end
 
-# Environment for `qstat`: user Python removed so it cannot interfere with the
-# PBS wrappers, and NCAR's qstat-cache bypassed. The cache answers from a
+# PBS variables of an enclosing job that `qsub` would inherit, and user Python
+# settings that break the PBS command wrappers (Derecho's `qstat` is a Python
+# program, https://github.com/NCAR/qstat-cache).
+const PBS_INHERITED_VARS = (
+    "PBS_MEM_PER_CPU",
+    "PBS_MEM_PER_GPU",
+    "PBS_MEM_PER_NODE",
+    "PYTHONHOME",
+    "PYTHONPATH",
+    "PYTHONUSERBASE",
+)
+
+# Copy of `ENV` without `PBS_INHERITED_VARS`, with the user site-packages
+# directory disabled and NCAR's qstat-cache bypassed. The cache answers from a
 # snapshot refreshed every few seconds, which reports a job submitted since the
 # last refresh as "Unknown Job Id" (exit 153) and a finished job in whatever
 # state the snapshot caught it in.
-function _qstat_env()
+function pbs_env()
     clean_env = Dict{String, String}(ENV)
-    for k in ("PYTHONHOME", "PYTHONPATH", "PYTHONUSERBASE")
-        haskey(clean_env, k) && delete!(clean_env, k)
+    for k in PBS_INHERITED_VARS
+        delete!(clean_env, k)
     end
     clean_env["PYTHONNOUSERSITE"] = "1"
     clean_env["QSCACHE_BYPASS"] = "true"
     return clean_env
 end
+scheduler_env(::DerechoBackend) = pbs_env()
 
 """
     job_status(::DerechoBackend, job::JobInfo)
@@ -169,9 +164,9 @@ Return the status of `job`.
 
 See [`JobStatus`](@ref).
 """
-function job_status(::DerechoBackend, job::JobInfo)
+function job_status(backend::DerechoBackend, job::JobInfo)
     (; id) = job
-    status_str, qstat_error = _qstat_output(id, _qstat_env())
+    status_str, qstat_error = _qstat_output(id, scheduler_env(backend))
     if isnothing(status_str)
         # Reporting RUNNING here keeps the calibration polling. That is right
         # for a transient qstat outage, but `wait_for_jobs` has to time out

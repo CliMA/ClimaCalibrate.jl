@@ -51,14 +51,25 @@ const SLURM_INHERITED_VARS = (
     "SLURM_JOB_ID",
 )
 
-"Copy of `ENV` without the variables in `SLURM_INHERITED_VARS`."
-function _sbatch_env()
+"""
+    scheduler_env(backend)
+
+Environment for the scheduler's own commands (`sbatch`, `squeue`, `qsub`,
+`qstat`): a copy of `ENV` with the variables removed that would otherwise leak
+into or break them. Methods exist for the HPC backends and the cluster
+managers.
+"""
+function scheduler_env end
+
+# Copy of `ENV` without the variables in `SLURM_INHERITED_VARS`.
+function slurm_env()
     clean_env = Dict{String, String}(ENV)
     for var in SLURM_INHERITED_VARS
         delete!(clean_env, var)
     end
     return clean_env
 end
+scheduler_env(::SlurmBackend) = slurm_env()
 
 """
     submit_job(backend::SlurmBackend, job_script::String)
@@ -73,7 +84,8 @@ function submit_job(backend::SlurmBackend, job_script::String)
         write(io, job_script)
         close(io)
 
-        cmd = setenv(`sbatch --parsable $sbatch_filepath`, _sbatch_env())
+        cmd =
+            setenv(`sbatch --parsable $sbatch_filepath`, scheduler_env(backend))
         output, stderr_text, exit_code = _run_capturing_output(cmd)
         job_id = match(r"^\d+", output)
         if !iszero(exit_code) || isnothing(job_id)

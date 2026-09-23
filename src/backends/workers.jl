@@ -287,27 +287,28 @@ const ATEXIT_HOOK_REGISTERED = Ref(false)
 # no effect on forward-model logs, which workers write via `set_worker_logger`.
 _run_quiet(cmd) = run(pipeline(cmd; stdout = devnull, stderr = devnull))
 
-"Seconds between scheduler queries while waiting for workers to start."
+# Seconds between scheduler queries while waiting for workers to start.
 const SCHEDULER_POLL_INTERVAL = 30.0
 
-"Seconds after submission during which a job missing from the scheduler is not treated as finished."
+# Seconds after submission during which a job missing from the scheduler's
+# listing is not treated as finished. A job can take a while to show up: on
+# Derecho `qstat` answers from NCAR's cache, which lags the server by several
+# seconds even with the bypass, and a busy Slurm controller can return a
+# truncated `squeue` listing. Without the grace a worker could be marked failed
+# right after `qsub`, then start anyway and never be connected.
 const UNKNOWN_JOB_GRACE = 60.0
 
 """
-    query_scheduler_states(cluster, job_ids)
+    query_scheduler_states(manager, job_ids)
 
-States of `job_ids` on `cluster` (`:slurm` or `:pbs`) as
+States of `job_ids` submitted through `manager` as
 `Dict(id => JobStatus | nothing)`, or `nothing` when the scheduler could not be
 queried. Jobs the scheduler no longer lists are absent from the result.
 
 One query covers every job, so the cost does not grow with the number of
 workers.
 """
-function query_scheduler_states(cluster, job_ids)
-    cluster == :slurm && return _squeue_states()
-    cluster == :pbs && return _qstat_states(job_ids)
-    return nothing
-end
+function query_scheduler_states end
 
 # One `squeue` call for every job of this session, matched by the shared job
 # name. `squeue -j` aborts when any listed id has already left the controller.
@@ -340,7 +341,7 @@ end
 # One `qstat` call for `job_ids`. `-x` includes finished jobs. `qstat` exits
 # nonzero when any id is unknown but still reports the others.
 function _qstat_states(job_ids)
-    cmd = setenv(`qstat -x -f -F dsv $job_ids`, _qstat_env())
+    cmd = setenv(`qstat -x -f -F dsv $job_ids`, pbs_env())
     out, err, code = try
         _run_capturing_output(cmd)
     catch e
@@ -487,7 +488,7 @@ the submission command's output into a job id, or `nothing`.
 function submit_workers!(
     instances_arr,
     launch_condition;
-    cluster,
+    manager,
     ntasks,
     workers_per_node,
     output_base,
@@ -526,7 +527,7 @@ function submit_workers!(
         append!(output_files, outputs)
     end
     return poll_files_for_worker_startup(
-        cluster,
+        manager,
         job_ids,
         output_files,
         instances_arr,
@@ -565,17 +566,20 @@ function Distributed.launch(
     return submit_workers!(
         instances_arr,
         launch_condition;
-        cluster = :slurm,
+        manager = sm,
         ntasks = sm.ntasks,
         workers_per_node = get(params, :workers_per_node, 1),
         output_base,
         exename,
         exeflags,
-        env = merge(_sbatch_env(), env),
+        env = merge(scheduler_env(sm), env),
         submit_cmd = (output, script) -> `$base -o $output $script`,
         parse_job_id = _parse_sbatch_output,
     )
 end
+
+scheduler_env(::SlurmManager) = slurm_env()
+query_scheduler_states(::SlurmManager, job_ids) = _squeue_states()
 
 workers_per_allocation(ntasks, max_per_node) =
     [min(max_per_node, ntasks - i) for i in 0:max_per_node:(ntasks - 1)]
@@ -632,7 +636,7 @@ end
 # window, is logged and skipped so that workers which did start remain usable.
 # Throws only if no workers start at all.
 function poll_files_for_worker_startup(
-    cluster,
+    manager,
     job_ids,
     output_files,
     instances_arr,
@@ -664,7 +668,7 @@ function poll_files_for_worker_startup(
             t_last_query = time()
             waiting = setdiff(1:ntasks, registered, failed)
             states = query_scheduler_states(
-                cluster,
+                manager,
                 unique(job_ids[i] for i in waiting),
             )
             if !isnothing(states)
@@ -784,17 +788,20 @@ function Distributed.launch(
     return submit_workers!(
         instances_arr,
         launch_condition;
-        cluster = :pbs,
+        manager = pm,
         ntasks = pm.ntasks,
         workers_per_node = get(params, :workers_per_node, 1),
         output_base,
         exename,
         exeflags,
-        env = merge(Dict{String, String}(ENV), env),
+        env = merge(scheduler_env(pm), env),
         submit_cmd = (output, script) -> `$base -o $output $script`,
         parse_job_id = _parse_qsub_output,
     )
 end
+
+scheduler_env(::PBSManager) = pbs_env()
+query_scheduler_states(::PBSManager, job_ids) = _qstat_states(job_ids)
 
 # Quote `s` for bash. Wrap the string in single quotes and replace each
 # existing single quote ' with its escaped version '\''
@@ -816,10 +823,10 @@ _worker_command_string(exename, exeflags) = join(
 Bash script that runs one Julia worker in the foreground, so the job lives as
 long as the worker.
 """
-single_worker_script(
-    exename,
-    exeflags,
-) = "#!/bin/bash\nexec $(_worker_command_string(exename, exeflags))\n"
+single_worker_script(exename, exeflags) = """
+#!/bin/bash
+exec $(_worker_command_string(exename, exeflags))
+"""
 
 """
     multi_worker_script(exename, exeflags, worker_outputs)
