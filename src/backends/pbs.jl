@@ -141,22 +141,6 @@ const PBS_INHERITED_VARS = (
     "PYTHONUSERBASE",
 )
 
-# Copy of `ENV` without `PBS_INHERITED_VARS`, with the user site-packages
-# directory disabled and NCAR's qstat-cache bypassed. The cache answers from a
-# snapshot refreshed every few seconds, which reports a job submitted since the
-# last refresh as "Unknown Job Id" (exit 153) and a finished job in whatever
-# state the snapshot caught it in.
-function pbs_env()
-    clean_env = Dict{String, String}(ENV)
-    for k in PBS_INHERITED_VARS
-        delete!(clean_env, k)
-    end
-    clean_env["PYTHONNOUSERSITE"] = "1"
-    clean_env["QSCACHE_BYPASS"] = "true"
-    return clean_env
-end
-scheduler_env(::DerechoBackend) = pbs_env()
-
 """
     job_status(::DerechoBackend, job::JobInfo)
 

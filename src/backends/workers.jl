@@ -270,6 +270,59 @@ function remove_worker_from_pool(id)
 end
 
 # ----------------------------------------------------------------------------
+# Cluster managers
+#
+# One `ClusterManager` per scheduler. Their `launch` and `manage` methods are
+# further down, next to the submission code they share.
+# ----------------------------------------------------------------------------
+
+"""
+    SlurmManager(ntasks = 1)
+
+The ClusterManager for Slurm clusters, taking in the number of workers to
+request. Each worker is submitted as its own batch job with `sbatch`.
+
+To submit the jobs, run `addprocs(SlurmManager(ntasks))`.
+
+Keyword arguments can be passed to `sbatch`: `addprocs(SlurmManager(ntasks),
+gpus_per_task=1)`.
+
+By default the workers will inherit the running Julia environment.
+
+To run a calibration, call `calibrate(WorkerBackend(), ...)`.
+
+To run functions on a worker, call `remotecall(func, worker_id, args...)`.
+"""
+struct SlurmManager <: ClusterManager
+    ntasks::Integer
+
+    SlurmManager(ntasks = 1) = new(ntasks)
+end
+
+# TODO: Add examples of usage for SlurmManager and PBSManager in the docstrings
+# Things like `addprocs(SlurmManager(2), t = "00:10:00",ngpus=4)`, then `remotecall` or `calibrate`
+"""
+    PBSManager(ntasks)
+
+The ClusterManager for PBS Pro clusters, taking in the number of workers to
+request. Each allocation is submitted as its own job with `qsub`.
+
+To submit the jobs, run `addprocs(PBSManager(ntasks))`.
+
+Keyword arguments can be passed to `qsub`: `addprocs(PBSManager(ntasks),
+nodes=2)`
+
+By default, the workers will inherit the running Julia environment.
+
+To run a calibration, call `calibrate(WorkerBackend(), ...)`
+
+To run functions on a worker, call `remotecall(func, worker_id, args...)`
+"""
+struct PBSManager <: ClusterManager
+    ntasks::Integer
+end
+
+# ----------------------------------------------------------------------------
 # Job teardown
 #
 # Workers are submitted as individual scheduler allocations (see `launch`). If
@@ -299,6 +352,35 @@ const SCHEDULER_POLL_INTERVAL = 30.0
 const UNKNOWN_JOB_GRACE = 60.0
 
 """
+    scheduler_env(x)
+
+Environment for the scheduler's own commands (`sbatch`, `squeue`, `qsub`,
+`qstat`): a copy of `ENV` with the variables removed that would otherwise leak
+into or break them. `x` is an HPC backend or a cluster manager.
+"""
+function scheduler_env(::Union{SlurmBackend, SlurmManager})
+    clean_env = Dict{String, String}(ENV)
+    for var in SLURM_INHERITED_VARS
+        delete!(clean_env, var)
+    end
+    return clean_env
+end
+
+# The user site-packages directory is disabled and NCAR's qstat-cache bypassed.
+# The cache answers from a snapshot refreshed every few seconds, which reports
+# a job submitted since the last refresh as "Unknown Job Id" (exit 153) and a
+# finished job in whatever state the snapshot caught it in.
+function scheduler_env(::Union{DerechoBackend, PBSManager})
+    clean_env = Dict{String, String}(ENV)
+    for k in PBS_INHERITED_VARS
+        delete!(clean_env, k)
+    end
+    clean_env["PYTHONNOUSERSITE"] = "1"
+    clean_env["QSCACHE_BYPASS"] = "true"
+    return clean_env
+end
+
+"""
     query_scheduler_states(manager, job_ids)
 
 States of `job_ids` submitted through `manager` as
@@ -312,7 +394,7 @@ function query_scheduler_states end
 
 # One `squeue` call for every job of this session, matched by the shared job
 # name. `squeue -j` aborts when any listed id has already left the controller.
-function _squeue_states()
+function query_scheduler_states(::SlurmManager, job_ids)
     cmd = `squeue --name $(worker_jobname()) -h -o "%i %T"`
     out, err, code = try
         _run_capturing_output(cmd)
@@ -340,8 +422,8 @@ end
 
 # One `qstat` call for `job_ids`. `-x` includes finished jobs. `qstat` exits
 # nonzero when any id is unknown but still reports the others.
-function _qstat_states(job_ids)
-    cmd = setenv(`qstat -x -f -F dsv $job_ids`, pbs_env())
+function query_scheduler_states(pm::PBSManager, job_ids)
+    cmd = setenv(`qstat -x -f -F dsv $job_ids`, scheduler_env(pm))
     out, err, code = try
         _run_capturing_output(cmd)
     catch e
@@ -424,29 +506,6 @@ end
 worker_cookie() = begin
     Distributed.init_multi()
     cluster_cookie()
-end
-
-"""
-    SlurmManager(ntasks = 1)
-
-The ClusterManager for Slurm clusters, taking in the number of workers to
-request. Each worker is submitted as its own batch job with `sbatch`.
-
-To submit the jobs, run `addprocs(SlurmManager(ntasks))`.
-
-Keyword arguments can be passed to `sbatch`: `addprocs(SlurmManager(ntasks),
-gpus_per_task=1)`.
-
-By default the workers will inherit the running Julia environment.
-
-To run a calibration, call `calibrate(WorkerBackend(), ...)`.
-
-To run functions on a worker, call `remotecall(func, worker_id, args...)`.
-"""
-struct SlurmManager <: ClusterManager
-    ntasks::Integer
-
-    SlurmManager(ntasks = 1) = new(ntasks)
 end
 
 # This function needs to exist
@@ -577,9 +636,6 @@ function Distributed.launch(
         parse_job_id = _parse_sbatch_output,
     )
 end
-
-scheduler_env(::SlurmManager) = slurm_env()
-query_scheduler_states(::SlurmManager, job_ids) = _squeue_states()
 
 workers_per_allocation(ntasks, max_per_node) =
     [min(max_per_node, ntasks - i) for i in 0:max_per_node:(ntasks - 1)]
@@ -729,29 +785,6 @@ function worker_config(worker_launch_details, job_id)
     return config
 end
 
-# TODO: Add examples of usage for SlurmManager and PBSManager in the docstrings
-# Things like `addprocs(SlurmManager(2), t = "00:10:00",ngpus=4)`, then `remotecall` or `calibrate`
-"""
-    PBSManager(ntasks)
-
-The ClusterManager for PBS Pro clusters, taking in the number of workers to
-request. Each allocation is submitted as its own job with `qsub`.
-
-To submit the jobs, run `addprocs(PBSManager(ntasks))`.
-
-Keyword arguments can be passed to `qsub`: `addprocs(PBSManager(ntasks),
-nodes=2)`
-
-By default, the workers will inherit the running Julia environment.
-
-To run a calibration, call `calibrate(WorkerBackend(), ...)`
-
-To run functions on a worker, call `remotecall(func, worker_id, args...)`
-"""
-struct PBSManager <: ClusterManager
-    ntasks::Integer
-end
-
 function Distributed.manage(
     manager::PBSManager,
     id::Integer,
@@ -799,9 +832,6 @@ function Distributed.launch(
         parse_job_id = _parse_qsub_output,
     )
 end
-
-scheduler_env(::PBSManager) = pbs_env()
-query_scheduler_states(::PBSManager, job_ids) = _qstat_states(job_ids)
 
 # Quote `s` for bash. Wrap the string in single quotes and replace each
 # existing single quote ' with its escaped version '\''

@@ -52,26 +52,6 @@ const SLURM_INHERITED_VARS = (
 )
 
 """
-    scheduler_env(backend)
-
-Environment for the scheduler's own commands (`sbatch`, `squeue`, `qsub`,
-`qstat`): a copy of `ENV` with the variables removed that would otherwise leak
-into or break them. Methods exist for the HPC backends and the cluster
-managers.
-"""
-function scheduler_env end
-
-# Copy of `ENV` without the variables in `SLURM_INHERITED_VARS`.
-function slurm_env()
-    clean_env = Dict{String, String}(ENV)
-    for var in SLURM_INHERITED_VARS
-        delete!(clean_env, var)
-    end
-    return clean_env
-end
-scheduler_env(::SlurmBackend) = slurm_env()
-
-"""
     submit_job(backend::SlurmBackend, job_script::String)
 
 Submit a `job` that runs `job_script` with `backend`.
