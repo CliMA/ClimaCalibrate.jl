@@ -1,17 +1,14 @@
 using Test
 import Distributed
 import ClimaCalibrate
-import ClimaCalibrate.Backend:
+import ClimaCalibrate.Backend: PENDING, RUNNING, COMPLETED, FAILED
+import ClimaCalibrate.Backend.Workers:
     multi_worker_script,
     single_worker_script,
     _parse_sbatch_output,
     _parse_qsub_output,
     _parse_squeue_output,
     _parse_qstat_output,
-    PENDING,
-    RUNNING,
-    COMPLETED,
-    FAILED,
     shell_quote,
     workers_per_allocation,
     allocation_resource_kwargs,

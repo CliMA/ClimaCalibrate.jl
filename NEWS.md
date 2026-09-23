@@ -3,6 +3,19 @@ ClimaCalibrate.jl Release Notes
 
 main
 -------
+- `WorkerBackend` workers are tracked in a worker registry, one record per
+  worker with its scheduler job id, Distributed id, and state, written to a
+  TOML file. `add_workers`
+  records a launch group with a desired count, and the dispatch loop relaunches
+  workers that exit, fail, or do not start within `startup_timeout`, up to
+  `max_relaunches` per group. The file is `.climacalibrate/workers-<pid>.toml`
+  in the working directory.
+  Breaking: `cancel_worker_jobs` cancels by job id and no longer takes a job
+  name [#360](https://github.com/CliMA/ClimaCalibrate.jl/issues/360).
+- Worker code moves into the `ClimaCalibrate.Backend.Workers` module. The
+  exported names (`add_workers`, `SlurmManager`, `@worker_setup`, ...) are
+  unchanged; unexported helpers such as `GLOBAL_WORKER_POOL` are now under
+  `Backend.Workers`.
 
 v0.6.0
 -------

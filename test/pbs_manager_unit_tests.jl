@@ -4,7 +4,7 @@ import ClimaCalibrate
 # Blocking version of add_workers for test
 function add_workers_and_wait(n; timeout = 1200, kwargs...)
     ids = fetch(ClimaCalibrate.add_workers(n; kwargs...))
-    pool = ClimaCalibrate.Backend.GLOBAL_WORKER_POOL
+    pool = ClimaCalibrate.Backend.Workers.GLOBAL_WORKER_POOL
     tstart = time()
     while !all(id -> id in pool.workers, ids)
         (time() - tstart) > timeout &&
@@ -19,6 +19,18 @@ end
     p = add_workers_and_wait(1; time = 5, device = :gpu)
     @test nprocs() == length(p) + 1
     @test workers() == p
+    # The worker is registered with its batch job
+    rows = ClimaCalibrate.Backend.Workers.worker_rows(;
+        states = (ClimaCalibrate.Backend.Workers.READY,),
+    )
+    @test length(rows) == 1
+    @test only(rows).pid == only(p)
+    @test !isnothing(only(rows).job_id)
+    group = ClimaCalibrate.Backend.Workers.group_row(
+        ClimaCalibrate.Backend.Workers.worker_registry(),
+        only(rows).group_id,
+    )
+    @test group.cluster == :pbs
     @test remotecall_fetch(myid, 2) == 2
     @test remotecall_fetch(+, p[1], 1, 1) == 2
     # Test that the worker is configured correctly

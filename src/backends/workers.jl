@@ -1,7 +1,44 @@
+"""
+    ClimaCalibrate.Backend.Workers
+
+Distributed.jl workers for the
+[`WorkerBackend`](@ref ClimaCalibrate.Backend.WorkerBackend): launching them
+on a scheduler or locally ([`add_workers`](@ref), [`SlurmManager`](@ref),
+[`PBSManager`](@ref)), loading code on them ([`@worker_setup`](@ref)), the pool
+they join ([`calibration_worker_pool`](@ref)), and the worker registry that
+tracks and relaunches them ([`worker_registry`](@ref)).
+"""
+module Workers
+
 using Distributed
 using Logging
 
-import ..ClimaCalibrate: project_dir
+import ...ClimaCalibrate: project_dir
+import ..Backend
+import ..Backend:
+    AbstractBackend,
+    DerechoBackend,
+    GCPBackend,
+    SlurmBackend,
+    backend_type,
+    format_slurm_time,
+    format_pbs_time,
+    slurm_flag_args,
+    _parse_slurm_state,
+    _parse_pbs_state,
+    _run_capturing_output,
+    scheduler_env,
+    SLURM_INHERITED_VARS,
+    PBS_INHERITED_VARS
+
+include("worker_registry.jl")
+include("worker_reconcile.jl")
+
+function __init__()
+    WORKER_REGISTRY.path = default_registry_path()
+    get!(ENV, "JULIA_WORKER_TIMEOUT", worker_timeout())
+    return nothing
+end
 
 export add_workers,
     calibration_worker_pool,
@@ -18,7 +55,6 @@ export add_workers,
 # Set the time limit for the Julia worker to be contacted by the main process, default = "60.0s"
 # https://docs.julialang.org/en/v1/manual/environment-variables/#JULIA_WORKER_TIMEOUT
 worker_timeout() = "300.0"
-ENV["JULIA_WORKER_TIMEOUT"] = worker_timeout()
 
 # ----------------------------------------------------------------------------
 # Global worker pool for asynchronous calibration
@@ -33,7 +69,8 @@ ENV["JULIA_WORKER_TIMEOUT"] = worker_timeout()
     GLOBAL_WORKER_POOL
 
 The process-wide [`Distributed.WorkerPool`](@ref) that workers add themselves to
-when they start. Used as the default pool for [`WorkerBackend`](@ref).
+when they start. Used as the default pool for
+[`WorkerBackend`](@ref ClimaCalibrate.Backend.WorkerBackend).
 """
 const GLOBAL_WORKER_POOL = WorkerPool()
 
@@ -60,7 +97,8 @@ end
     calibration_worker_pool()
 
 Return the process-wide `GLOBAL_WORKER_POOL`, which is what a
-[`WorkerBackend`](@ref) draws ensemble members from.
+[`WorkerBackend`](@ref ClimaCalibrate.Backend.WorkerBackend) draws ensemble
+members from.
 
 Cluster workers add themselves via the `:register` hook. Workers added by other
 means (e.g. plain `addprocs`/`LocalManager` or pre-existing workers) are picked
@@ -232,19 +270,79 @@ function _initialize_claimed_worker(id)
         for wrapped in setup
             Distributed.remotecall_wait(Core.eval, id, Main, wrapped)
         end
-        # Only now is the worker schedulable. The membership check keeps a
-        # worker that reconnects under the same id out of the pool's channel
-        # twice
+        # Only now is the worker schedulable. Its row is `READY` before it is
+        # pooled, so it cannot overwrite the `BUSY` of a member already
+        # running on it. A row ended while the worker loaded code (startup
+        # timeout) already has a replacement on the way, so the worker is
+        # stopped instead. The membership check keeps a worker that
+        # reconnects under the same id out of the pool's channel twice
+        row = worker_row_by_pid(WORKER_REGISTRY, id)
+        if !isnothing(row) && !set_state!(WORKER_REGISTRY, row.id, READY)
+            @warn "Worker $id was ended while loading its code ($(row.exit_reason)), stopping it"
+            stop_process(id)
+            return nothing
+        end
         lock(POOL_LOCK) do
             id in GLOBAL_WORKER_POOL.workers || push!(GLOBAL_WORKER_POOL, id)
         end
         @info "Worker $id initialized and added to pool"
     catch e
         @warn "Worker $id failed to initialize; not added to pool" exception = e
+        stop_worker_after_setup_failure!(id, e)
     finally
         lock(POOL_LOCK) do
             delete!(INITIALIZING_WORKERS, id)
         end
+    end
+    return nothing
+end
+
+# First line of the error's message, unwrapped from a `RemoteException`.
+function error_summary(e)
+    e isa RemoteException && (e = e.captured.ex)
+    msg = first(split(sprint(showerror, e), '\n'))
+    return length(msg) > 200 ? first(msg, 200) * "..." : msg
+end
+
+# End the row of worker `id`, which failed to load its code, and stop it. A
+# worker without a row (from the caller's own `addprocs`) is only left out of
+# the pool. A worker that disconnected during setup is not counted against its
+# group. Once a group has two setup failures and no worker that ever loaded
+# its code, the setup code is assumed broken and the group launches no more
+# workers.
+function stop_worker_after_setup_failure!(id, e)
+    reg = WORKER_REGISTRY
+    row = worker_row_by_pid(reg, id)
+    isnothing(row) && return nothing
+    if !(id in Distributed.procs())
+        mark_worker_exited!(id; reason = "disconnected during setup")
+        return nothing
+    end
+    mark_worker_exited!(id; reason = "setup failed: $(error_summary(e))")
+    stop_process(id)
+    rows = worker_rows(reg; group_id = row.group_id)
+    any(r -> !isnothing(r.ready_at), rows) && return nothing
+    failures = count(
+        r -> startswith(something(r.exit_reason, ""), "setup failed"),
+        rows,
+    )
+    failures >= 2 || return nothing
+    lock(reg.lock) do
+        g = group_row(reg, row.group_id)
+        if g.relaunches_used < g.max_relaunches
+            @warn "Launch group $(g.id) will not relaunch workers, since $failures workers failed to load their code and none succeeded"
+            g.relaunches_used = g.max_relaunches
+        end
+    end
+    return nothing
+end
+
+# Ask worker `id` to exit. Errors are ignored, since the worker may already be
+# gone.
+function stop_process(id)
+    try
+        Distributed.remote_do(exit, id)
+    catch
     end
     return nothing
 end
@@ -299,8 +397,6 @@ struct SlurmManager <: ClusterManager
     SlurmManager(ntasks = 1) = new(ntasks)
 end
 
-# TODO: Add examples of usage for SlurmManager and PBSManager in the docstrings
-# Things like `addprocs(SlurmManager(2), t = "00:10:00",ngpus=4)`, then `remotecall` or `calibrate`
 """
     PBSManager(ntasks)
 
@@ -322,14 +418,26 @@ struct PBSManager <: ClusterManager
     ntasks::Integer
 end
 
+# Managers that submit workers as scheduler jobs. Their workers carry their
+# registry row id in `config.userdata`.
+const SchedulerManager = Union{SlurmManager, PBSManager}
+
+# Name of the scheduler a manager submits to, as stored in the worker registry.
+cluster_name(::SlurmManager) = :slurm
+cluster_name(::PBSManager) = :pbs
+
 # ----------------------------------------------------------------------------
-# Job teardown
+# Scheduler queries and job teardown
 #
-# Workers are submitted as individual scheduler allocations (see `launch`). If
-# the main process exits while some are still pending or running, those
-# allocations would be orphaned. Every scheduler `launch` registers an `atexit`
-# hook (`cancel_worker_jobs`) that cancels all of this session's jobs by their
-# shared job name.
+# Workers are submitted as individual batch jobs (see `launch`) and recorded in
+# the worker registry with their job ids. `reconcile_workers!` asks the
+# scheduler about live jobs through `query_scheduler_states`. If the main
+# process exits while jobs are pending or running, the `atexit` hook cancels
+# them by id through `cancel_worker_jobs`.
+#
+# Locking rule: nothing here runs a scheduler command or `addprocs`/`rmprocs`
+# while holding the registry lock. `Distributed` calls the `:deregister` hook
+# from its message task, and that hook writes to the registry.
 # ----------------------------------------------------------------------------
 
 # Ensures the teardown `atexit` hook is registered at most once per session.
@@ -340,24 +448,7 @@ const ATEXIT_HOOK_REGISTERED = Ref(false)
 # no effect on forward-model logs, which workers write via `set_worker_logger`.
 _run_quiet(cmd) = run(pipeline(cmd; stdout = devnull, stderr = devnull))
 
-# Seconds between scheduler queries while waiting for workers to start.
-const SCHEDULER_POLL_INTERVAL = 30.0
-
-# Seconds after submission during which a job missing from the scheduler's
-# listing is not treated as finished. A job can take a while to show up: on
-# Derecho `qstat` answers from NCAR's cache, which lags the server by several
-# seconds even with the bypass, and a busy Slurm controller can return a
-# truncated `squeue` listing. Without the grace a worker could be marked failed
-# right after `qsub`, then start anyway and never be connected.
-const UNKNOWN_JOB_GRACE = 60.0
-
-"""
-    scheduler_env(x)
-
-Environment for the scheduler's own commands (`sbatch`, `squeue`, `qsub`,
-`qstat`): a copy of `ENV` with the variables removed that would otherwise leak
-into or break them. `x` is an HPC backend or a cluster manager.
-"""
+# Copy of `ENV` without the variables in `SLURM_INHERITED_VARS`.
 function scheduler_env(::Union{SlurmBackend, SlurmManager})
     clean_env = Dict{String, String}(ENV)
     for var in SLURM_INHERITED_VARS
@@ -411,7 +502,7 @@ end
 
 # Parse `squeue -h -o "%i %T"` output, one `<id> <STATE>` per line.
 function _parse_squeue_output(out)
-    states = Dict{String, Union{JobStatus, Nothing}}()
+    states = Dict{String, Union{Backend.JobStatus, Nothing}}()
     for line in eachline(IOBuffer(out))
         tokens = split(line)
         length(tokens) >= 2 || continue
@@ -439,7 +530,7 @@ end
 
 # Parse `qstat -f -F dsv` output, one `Job Id: <id>|key = value|...` per line.
 function _parse_qstat_output(out)
-    states = Dict{String, Union{JobStatus, Nothing}}()
+    states = Dict{String, Union{Backend.JobStatus, Nothing}}()
     for line in eachline(IOBuffer(out))
         m = match(r"^Job Id:\s*([^|\s]+)", line)
         isnothing(m) && continue
@@ -448,54 +539,79 @@ function _parse_qstat_output(out)
     return states
 end
 
-# Ids of this session's PBS jobs, matched by the shared job name via `qselect`.
-_pbs_worker_job_ids(jobname) = filter(
-    !isempty,
-    readlines(pipeline(`qselect -N $jobname`; stderr = devnull)),
-)
-
 """
-    cancel_worker_jobs(jobname = worker_jobname())
+    cancel_scheduler_jobs(manager, job_ids)
 
-Cancel all scheduler jobs submitted for workers in this session with `scancel`
-(Slurm) or `qdel` (PBS). This tears down both connected workers (by cancelling
-their allocation) and any still-pending jobs.
-
-Jobs submitted by [`add_workers`](@ref) share the job name
-`worker_jobname`, so they are cancelled together. Safe to call when no
-matching jobs exist.
-
-Registered as an `atexit` hook whenever workers are launched onto a scheduler, so
-that jobs are not orphaned when the main process exits. It may also be called
-directly to tear down workers early.
-
-!!! note
-    This intentionally does *not* call `rmprocs`. `add_workers` runs `addprocs`
-    on a background task that holds Distributed's global worker lock until all
-    submitted job has connected (or been cancelled); `rmprocs` needs that same
-    lock, so calling it here would deadlock whenever a job is still pending.
-    Cancelling the scheduler jobs releases those workers directly.
+Cancel `job_ids` submitted through `manager` with `scancel` or `qdel`.
+Failures are logged.
 """
-function cancel_worker_jobs(jobname = worker_jobname())
+function cancel_scheduler_jobs end
+
+cancel_scheduler_jobs(::SlurmManager, job_ids) =
+    cancel_quietly(`scancel $job_ids`, job_ids)
+cancel_scheduler_jobs(::PBSManager, job_ids) =
+    cancel_quietly(`qdel $job_ids`, job_ids)
+
+function cancel_quietly(cmd, job_ids)
+    isempty(job_ids) && return nothing
     try
-        if is_slurm_available()
-            _run_quiet(`scancel --name $jobname`)
-        elseif is_pbs_available()
-            ids = _pbs_worker_job_ids(jobname)
-            isempty(ids) || _run_quiet(`qdel $ids`)
-        end
+        _run_quiet(cmd)
     catch e
-        @warn "Failed to cancel worker jobs named $jobname" exception = e
+        @warn "Failed to cancel jobs $job_ids" exception = e
     end
     return nothing
 end
 
-# Register `cancel_worker_jobs` as an `atexit` hook exactly once, so jobs
-# submitted in this session are cleaned up if the main process exits before the
-# caller tears them down. Guarded by `POOL_LOCK` against a double registration.
+"""
+    cancel_worker_jobs()
+
+Cancel every scheduler job this session submitted for the worker registry and
+end the live workers with `exit_reason = "cancel_worker_jobs"`. This tears
+down connected workers (by cancelling their job), jobs still in the queue, and
+jobs of workers already ended, and forgets how to launch more so nothing is
+relaunched. Local workers are
+ended in the registry but their processes are left to `rmprocs`, so they stay
+in the pool. Safe to call with no live jobs or no registry.
+
+Registered as an `atexit` hook whenever workers are launched, so that jobs are
+not orphaned when the main process exits. It may also be called directly to
+tear down workers early.
+
+This does not call `rmprocs`, which waits on Distributed's global worker lock.
+A direct `addprocs(SlurmManager(n))` or `addprocs(PBSManager(n))` holds that
+lock until each of its jobs has connected or ended. Cancelling the jobs
+releases the workers directly.
+"""
+function cancel_worker_jobs(; reg::WorkerRegistry = WORKER_REGISTRY)
+    for g in group_rows(reg)
+        # Not this session's group, so not its jobs to cancel
+        owned(g) || continue
+        rows = worker_rows(reg; group_id = g.id)
+        manager = scheduler_manager(g)
+        if !isnothing(manager)
+            ids = unique(r.job_id for r in rows if !isnothing(r.job_id))
+            cancel_scheduler_jobs(manager, ids)
+        end
+        for r in rows
+            set_state!(reg, r.id, ENDED; reason = "cancel_worker_jobs")
+        end
+        # Without a launcher nothing is relaunched on the next reconcile pass
+        g.launcher = nothing
+    end
+    write_registry_file(reg)
+    return nothing
+end
+
+# Register `cancel_worker_jobs` as an `atexit` hook exactly once, so jobs submitted
+# in this session are cleaned up if the main process exits before the caller
+# tears them down. Guarded by `POOL_LOCK` against a double registration.
+# `init_multi` registers Distributed's own hook first. Hooks run last in, first
+# out, so jobs are cancelled before Distributed's `rmprocs`, which can block on
+# its worker lock.
 function ensure_worker_atexit_hook!()
     lock(POOL_LOCK) do
         if !ATEXIT_HOOK_REGISTERED[]
+            Distributed.init_multi()
             atexit(cancel_worker_jobs)
             ATEXIT_HOOK_REGISTERED[] = true
         end
@@ -508,17 +624,57 @@ worker_cookie() = begin
     cluster_cookie()
 end
 
-# This function needs to exist
+# Attach the Distributed id to the worker's registry row (stored in
+# `config.userdata` by `worker_config`) and load its code on a task of its own,
+# so `addprocs` returns, and releases Distributed's worker lock, once the
+# worker has connected. On deregistration, drop it from the pool and record
+# the exit.
 function Distributed.manage(
-    manager::SlurmManager,
+    ::SchedulerManager,
     id::Integer,
     config::WorkerConfig,
     op::Symbol,
 )
-    op == :register && initialize_worker(id)
-    op == :deregister && remove_worker_from_pool(id)
+    if op == :register
+        set_pid!(WORKER_REGISTRY, config.userdata, id)
+        _claim_worker(id) && errormonitor(@async _initialize_claimed_worker(id))
+    elseif op == :deregister
+        remove_worker_from_pool(id)
+        mark_worker_exited!(id)
+    end
     return nothing
 end
+
+# Local workers go through `LocalManager`, whose `manage` is Distributed's own,
+# so their exits are noticed by `reconcile_workers!` instead, and `rmprocs` on
+# one is relaunched like any other exit.
+
+# `rmprocs` of a scheduler worker: end its row and lower its group's desired
+# count so it is not relaunched, then stop it as Distributed would. Distributed
+# also calls this when a connection fails, before the `:register` hook sets the
+# row's pid. That row is left to `connect_worker`, so it is relaunched.
+function Distributed.kill(
+    manager::SchedulerManager,
+    id::Int,
+    config::WorkerConfig,
+)
+    reg = WORKER_REGISTRY
+    row = config.userdata isa Int ? worker_row(reg, config.userdata) : nothing
+    if !isnothing(row) &&
+       row.pid == id &&
+       set_state!(reg, row.id, ENDED; reason = "removed with rmprocs")
+        g = group_row(reg, row.group_id)
+        g.desired = max(g.desired - 1, 0)
+    end
+    return invoke(
+        Distributed.kill,
+        Tuple{ClusterManager, Int, WorkerConfig},
+        manager,
+        id,
+        config,
+    )
+end
+
 
 # Where a worker's startup output goes, default to a temp dir under `exehome`.
 # The job writes this file on the node it runs on, so a caller passing `o` or
@@ -533,65 +689,89 @@ function default_worker_output_base(params, exehome, jobname)
 end
 
 """
-    submit_workers!(instances_arr, launch_condition; kwargs...)
+    submit_jobs!(manager, params, row_ids)
 
-Submit `ntasks` workers as batch jobs and fill `instances_arr` as they connect.
-Shared by the Slurm and PBS `launch` methods.
+Submit one batch job per allocation for the registry rows `row_ids` and return
+each row's output file, where its worker prints its address. `params` are
+`addprocs`-style keywords: scheduler flags plus Distributed's own.
 
 Workers are grouped into allocations of `workers_per_node` (one per allocation
-by default). Each allocation gets a script under `output_base` that runs its
-workers (see `single_worker_script` and `multi_worker_script`) and is submitted
-with `submit_cmd(output_file, script_file)` under `env`. `parse_job_id` turns
-the submission command's output into a job id, or `nothing`.
+by default). Each allocation gets a script under the output base that runs its
+workers (see `single_worker_script` and `multi_worker_script`). An allocation
+whose rows have all ended is not submitted, and one whose rows end while it is
+submitted is cancelled.
 """
-function submit_workers!(
-    instances_arr,
-    launch_condition;
-    manager,
-    ntasks,
-    workers_per_node,
-    output_base,
-    exename,
-    exeflags,
-    env,
-    submit_cmd,
-    parse_job_id,
-)
-    job_ids = Union{String, Nothing}[]
+function submit_jobs!(manager, params, row_ids)
+    reg = WORKER_REGISTRY
+    params = add_default_worker_params(params)
+    exehome = params[:dir]
+    exename = params[:exename]
+    exeflags = worker_exeflags(manager, params[:exeflags])
+    env = Dict{String, String}(params[:env])
+    propagate_env_vars!(env)
+    env = merge(scheduler_env(manager), env)
+    jobname = worker_jobname()
+    output_base = default_worker_output_base(params, exehome, jobname)
+    base = submit_command(manager, params, jobname)
+    workers_per_node = get(params, :workers_per_node, 1)
+    all_ended(ids) = all(id -> worker_row(reg, id).state == ENDED, ids)
+    ntasks = length(row_ids)
     output_files = String[]
     counts = workers_per_allocation(ntasks, workers_per_node)
     njobs = length(counts)
+    next = 1
     for (j, nworkers) in enumerate(counts)
+        ids = row_ids[next:(next + nworkers - 1)]
+        next += nworkers
         if workers_per_node == 1
             outputs = ["$output_base-$j.out"]
-            script_path = "$output_base-$j.sh"
-            write(script_path, single_worker_script(exename, exeflags))
-            cmd = submit_cmd(only(outputs), script_path)
         else
             outputs = [abspath("$output_base-$j-$g.out") for g in 1:nworkers]
+        end
+        append!(output_files, outputs)
+        all_ended(ids) && continue
+        if workers_per_node == 1
+            script_path = "$output_base-$j.sh"
+            write(script_path, single_worker_script(exename, exeflags))
+            cmd = `$base -o $(only(outputs)) $script_path`
+        else
             script_path = "$output_base-multiworker-$j.sh"
             write(script_path, multi_worker_script(exename, exeflags, outputs))
-            cmd = submit_cmd("$output_base-job$j.log", script_path)
+            cmd = `$base -o $output_base-job$j.log $script_path`
         end
         chmod(script_path, 0o700)
+        foreach(
+            ((id, output_file),) -> set_output_file!(reg, id, output_file),
+            zip(ids, outputs),
+        )
         @info "Submitting worker job [$j/$njobs] with $nworkers worker(s): $cmd"
         out, err, code = _run_capturing_output(setenv(cmd, env))
-        job_id = iszero(code) ? parse_job_id(out) : nothing
+        job_id = iszero(code) ? parse_job_id(manager, out) : nothing
         if isnothing(job_id)
-            @warn "Worker job [$j/$njobs] was not submitted. Submission exited with $code: $(isempty(err) ? out : err)"
+            reason = "submission exited with $code: $(isempty(err) ? out : err)"
+            @warn "Worker job [$j/$njobs] was not submitted. $reason"
+            foreach(id -> set_state!(reg, id, ENDED; reason), ids)
         else
-            @info "Worker job [$j/$njobs] submitted as job $job_id"
+            foreach(id -> set_job_id!(reg, id, job_id), ids)
+            all_ended(ids) && cancel_scheduler_jobs(manager, [job_id])
         end
-        append!(job_ids, fill(job_id, nworkers))
-        append!(output_files, outputs)
     end
-    return poll_files_for_worker_startup(
-        manager,
-        job_ids,
-        output_files,
-        instances_arr,
-        launch_condition,
+    return output_files
+end
+
+# Rows for a direct `addprocs(manager)`, in a group of its own. That group
+# carries a launcher so the session owns it and cancels its jobs at exit, but
+# `desired = 0` means nothing is ever relaunched for it.
+function rows_for_launch!(manager)
+    group_id = insert_group!(
+        WORKER_REGISTRY;
+        cluster = cluster_name(manager),
+        desired = 0,
+        max_relaunches = 0,
+        startup_timeout = DEFAULT_STARTUP_TIMEOUT,
+        launcher = (; manager, kwargs = (;)),
     )
+    return [insert_worker!(WORKER_REGISTRY; group_id) for _ in 1:manager.ntasks]
 end
 
 # Job id from `sbatch --parsable` output, which is `<id>` or `<id>;<cluster>`.
@@ -603,39 +783,57 @@ end
 # Job id from `qsub` output, which is the id alone.
 _parse_qsub_output(out) = isempty(out) ? nothing : String(out)
 
+parse_job_id(::SlurmManager, out) = _parse_sbatch_output(out)
+parse_job_id(::PBSManager, out) = _parse_qsub_output(out)
+
+# Submission command for one allocation, without its output file and script.
+function submit_command(::SlurmManager, params, jobname)
+    worker_args = parse_slurm_worker_params(params)
+    return `sbatch --parsable -J $jobname -n 1 -D $(params[:dir]) $worker_args`
+end
+# -V inherit env, -N job name, -j oe merge stdout/stderr
+submit_command(
+    ::PBSManager,
+    params,
+    jobname,
+) = `qsub -V -N $jobname -j oe $(parse_pbs_worker_params(params))`
+
+# PBS workers default to the driver's project.
+worker_exeflags(::SlurmManager, exeflags) = exeflags
+worker_exeflags(::PBSManager, exeflags) =
+    exeflags == `` ? `--project=$(project_dir())` : exeflags
+
+# With the `connect` keyword, hand Distributed the `WorkerConfig` of a worker
+# that has already started, so `addprocs` holds Distributed's worker lock only
+# while it connects. `add_workers` submits its jobs and waits for them to start
+# outside `addprocs`, then connects each worker this way (see `launch_rows!`).
+# Otherwise this is a direct `addprocs(manager)`: submit the jobs and wait for
+# every worker inside `launch`, holding the lock throughout.
 function Distributed.launch(
-    sm::SlurmManager,
+    manager::SchedulerManager,
     params::Dict,
     instances_arr::Array,
     launch_condition::Condition,
 )
+    if haskey(params, :connect)
+        push!(instances_arr, params[:connect])
+        notify(launch_condition)
+        return nothing
+    end
     # Ensure submitted jobs are cancelled if the main process exits.
     ensure_worker_atexit_hook!()
-    params = add_default_worker_params(params)
-    exehome = params[:dir]
-    exename = params[:exename]
-    exeflags = params[:exeflags]
-    env = Dict{String, String}(params[:env])
-    propagate_env_vars!(env)
-    worker_args = parse_slurm_worker_params(params)
-    jobname = worker_jobname()
-    output_base = default_worker_output_base(params, exehome, jobname)
-
-    base = `sbatch --parsable -J $jobname -n 1 -D $exehome $worker_args`
-    return submit_workers!(
-        instances_arr,
-        launch_condition;
-        manager = sm,
-        ntasks = sm.ntasks,
-        workers_per_node = get(params, :workers_per_node, 1),
-        output_base,
-        exename,
-        exeflags,
-        env = merge(scheduler_env(sm), env),
-        submit_cmd = (output, script) -> `$base -o $output $script`,
-        parse_job_id = _parse_sbatch_output,
-    )
+    row_ids = rows_for_launch!(manager)
+    output_files = submit_jobs!(manager, params, row_ids)
+    nstarted = 0
+    t_waited = await_worker_addresses(row_ids, output_files) do _, config
+        nstarted += 1
+        push!(instances_arr, config)
+        notify(launch_condition)
+    end
+    report_startup(nstarted, length(row_ids), t_waited)
+    return nothing
 end
+
 
 workers_per_allocation(ntasks, max_per_node) =
     [min(max_per_node, ntasks - i) for i in 0:max_per_node:(ntasks - 1)]
@@ -649,7 +847,7 @@ Uses all keys that are not in `Distributed.default_addprocs_params()`.
 """
 function parse_slurm_worker_params(params::Dict)
     stdkeys = keys(Distributed.default_addprocs_params())
-    excepted_keys = (:job_file_loc, :workers_per_node)
+    excepted_keys = ADDPROCS_PASSTHROUGH_KEYS
     worker_params =
         filter(x -> !(x[1] in stdkeys || x[1] in excepted_keys), params)
     worker_args = []
@@ -664,6 +862,9 @@ function parse_slurm_worker_params(params::Dict)
 end
 
 worker_jobname() = "julia-$(getpid())"
+
+# `addprocs` keywords that are not scheduler flags
+const ADDPROCS_PASSTHROUGH_KEYS = (:job_file_loc, :workers_per_node, :connect)
 
 function add_default_worker_params(params)
     default_params = Distributed.default_addprocs_params()
@@ -685,153 +886,107 @@ function propagate_env_vars!(env)
     end
 end
 
-# Poll one output file per worker, pushing each worker's `WorkerConfig` as it
-# appears. `job_ids[i]` is the scheduler job that owns `output_files[i]`, or
-# `nothing` if the submission failed. Tolerant of partial success: a worker
-# whose job ends before it connects, or that never starts within the polling
-# window, is logged and skipped so that workers which did start remain usable.
-# Throws only if no workers start at all.
-function poll_files_for_worker_startup(
-    manager,
-    job_ids,
-    output_files,
-    instances_arr,
-    launch_condition,
-)
-    @assert length(output_files) == length(job_ids)
-    ntasks = length(output_files)
-    t_start = time()
-    # This regex will match the worker's socket, ex: julia_worker:9015#169.254.3.1
-    julia_worker_regex = r"([\w]+):([\d]+)#(\d{1,3}.\d{1,3}.\d{1,3}.\d{1,3})"
-    retry_delays = ExponentialBackOff(720, 1.0, 30.0, 1.5, 0.1)
-    t_waited = 0
-    t_last_query = -Inf
-    registered = Set{Int}()   # indices of workers that have registered
-    failed = Set{Int}()       # indices of workers whose job ended first
-    for i in 1:ntasks
-        isnothing(job_ids[i]) && push!(failed, i)
-    end
+# This regex will match the worker's socket, ex: julia_worker:9015#169.254.3.1
+const JULIA_WORKER_REGEX = r"([\w]+):([\d]+)#(\d{1,3}.\d{1,3}.\d{1,3}.\d{1,3})"
 
-    for retry_delay in [0.0, retry_delays...]
-        t_waited = round(Int, time() - t_start)
-        # A worker registers by printing its host and port to its output file.
-        # If its job has ended without doing so it will never connect. One
-        # scheduler query covers all jobs, at most every SCHEDULER_POLL_INTERVAL
-        # seconds and not within UNKNOWN_JOB_GRACE seconds of submission, when
-        # a job can be missing from the listing because it has not appeared yet
-        if t_waited > UNKNOWN_JOB_GRACE &&
-           time() - t_last_query >= SCHEDULER_POLL_INTERVAL
-            t_last_query = time()
-            waiting = setdiff(1:ntasks, registered, failed)
-            states = query_scheduler_states(
-                manager,
-                unique(job_ids[i] for i in waiting),
-            )
-            if !isnothing(states)
-                for i in waiting
-                    status = get(states, job_ids[i], COMPLETED)
-                    (status == COMPLETED || status == FAILED) || continue
-                    @warn "Job $(job_ids[i]) for worker $i/$ntasks ended before connecting; skipping. Check $(output_files[i])."
-                    push!(failed, i)
-                end
-            end
-        end
-        for i in 1:ntasks
-            (i in registered || i in failed) && continue
-            job_output_file = output_files[i]
-            (isfile(job_output_file) && filesize(job_output_file) > 0) ||
-                continue
-            open(job_output_file) do f
-                for line in eachline(f)
-                    re_match = match(julia_worker_regex, line)
-                    if !isnothing(re_match)
-                        config = worker_config(re_match, job_ids[i])
-                        push!(registered, i)
-                        push!(instances_arr, config)
-                        @info "Worker ready after $(t_waited)s on host $(config.host), port $(config.port) (worker $i/$ntasks)"
-                        notify(launch_condition)
-                        break
-                    end
-                end
-            end
-        end
-        # Stop once all jobs are accounted for (started or failed)
-        (length(registered) + length(failed) == ntasks) && break
-        # Sleep to limit resource usage while waiting for jobs to start
-        sleep(retry_delay)
-    end
-
-    nregistered = length(registered)
-    if nregistered < ntasks
-        not_ready = sort(collect(setdiff(Set(1:ntasks), registered)))
-        @warn "After $t_waited s, $nregistered/$ntasks workers started. Workers not ready: $not_ready. Continuing with available workers."
-    end
-    if nregistered == 0
-        throw(
-            ErrorException(
-                "No workers started after $t_waited s. Check the job scheduler output.",
-            ),
-        )
+# The address line a worker printed to `file`, or `nothing`
+function read_worker_address(file)
+    (isfile(file) && filesize(file) > 0) || return nothing
+    for line in eachline(file)
+        m = match(JULIA_WORKER_REGEX, line)
+        isnothing(m) || return m
     end
     return nothing
 end
 
-# `userdata` carries the worker's scheduler job id.
-function worker_config(worker_launch_details, job_id)
+# Poll one output file per worker and call `found(i, config)` with the
+# `WorkerConfig` of each worker that prints its address. `row_ids[i]` is the
+# registry row that owns `output_files[i]`. A worker whose row has ended (job
+# failed, timed out, cancelled) is logged and skipped. The loop ends when every
+# row has printed its address or ended; `reconcile_workers!` is what ends rows
+# that never start, through the scheduler query and the group's startup
+# timeout. Returns the seconds waited.
+function await_worker_addresses(found, row_ids, output_files)
+    reg = WORKER_REGISTRY
+    @assert length(output_files) == length(row_ids)
+    ntasks = length(output_files)
+    t_start = time()
+    delay = 0.0
+    pending = collect(1:ntasks)
+    while true
+        t_waited = round(Int, time() - t_start)
+        reconcile_workers!(reg)
+        filter!(pending) do i
+            row = worker_row(reg, row_ids[i])
+            if row.state == ENDED
+                @warn "Worker $i/$ntasks ended before connecting ($(row.exit_reason)); skipping. Check $(output_files[i])."
+                return false
+            end
+            address = read_worker_address(output_files[i])
+            isnothing(address) && return true
+            config = worker_config(address, row_ids[i])
+            @info "Worker ready after $(t_waited)s on host $(config.host), port $(config.port) (worker $i/$ntasks)"
+            found(i, config)
+            return false
+        end
+        isempty(pending) && return t_waited
+        # Back off to limit resource usage while waiting for jobs to start
+        sleep(delay)
+        delay = min(max(1.0, 1.5 * delay), 30.0)
+    end
+end
+
+# Warn when only some of `ntasks` workers started, and throw when none did.
+function report_startup(nstarted, ntasks, t_waited)
+    if 0 < nstarted < ntasks
+        @warn "After $t_waited s, $nstarted/$ntasks workers started. Continuing with available workers."
+    end
+    nstarted == 0 && error(
+        "No workers started after $t_waited s. Check the job scheduler output.",
+    )
+    return nothing
+end
+
+
+# `userdata` carries the registry row id to the `:register` hook.
+function worker_config(worker_launch_details, row_id)
     config = WorkerConfig()
     config.port = parse(Int, worker_launch_details[2])
     config.host = strip(worker_launch_details[3])
-    config.userdata = job_id
+    config.userdata = row_id
     return config
 end
 
-function Distributed.manage(
-    manager::PBSManager,
-    id::Integer,
-    config::WorkerConfig,
-    op::Symbol,
-)
-    op == :register && initialize_worker(id)
-    op == :deregister && remove_worker_from_pool(id)
-    return nothing
+
+# Connect the worker described by `config` through `launch`'s `connect`
+# keyword. Returns its Distributed id, or
+# `nothing` after ending its row when it cannot be reached.
+function connect_worker(manager, config)
+    try
+        return only(addprocs(manager; connect = config))
+    catch e
+        @warn "Could not connect to the worker at $(config.host):$(config.port)" exception =
+            e
+        reason = "connection failed: $(nameof(typeof(e)))"
+        set_state!(WORKER_REGISTRY, config.userdata, ENDED; reason)
+        return nothing
+    end
 end
 
-function Distributed.launch(
-    pm::PBSManager,
-    params::Dict,
-    instances_arr::Array,
-    launch_condition::Condition,
-)
-    # Ensure submitted jobs are cancelled if the main process exits.
-    ensure_worker_atexit_hook!()
-    params = add_default_worker_params(params)
-    exehome = params[:dir]
-    exename = params[:exename]
-    exeflags = params[:exeflags]
-    exeflags = exeflags == `` ? `--project=$(project_dir())` : exeflags
-    env = Dict{String, String}(params[:env])
-    propagate_env_vars!(env)
-
-    worker_args = parse_pbs_worker_params(params)
-    jobname = worker_jobname()
-    output_base = default_worker_output_base(params, exehome, jobname)
-
-    # qsub: -V inherit env, -N job name, -j oe merge stdout/stderr, -o output.
-    base = `qsub -V -N $jobname -j oe $worker_args`
-    return submit_workers!(
-        instances_arr,
-        launch_condition;
-        manager = pm,
-        ntasks = pm.ntasks,
-        workers_per_node = get(params, :workers_per_node, 1),
-        output_base,
-        exename,
-        exeflags,
-        env = merge(scheduler_env(pm), env),
-        submit_cmd = (output, script) -> `$base -o $output $script`,
-        parse_job_id = _parse_qsub_output,
-    )
+# Wait for the workers of `row_ids`, whose jobs are already submitted, to print
+# their addresses, connecting each as it does. Returns the Distributed ids of
+# the workers that connected; throws if none did.
+function connect_workers!(manager, row_ids, output_files)
+    tasks = Task[]
+    t_waited = await_worker_addresses(row_ids, output_files) do _, config
+        push!(tasks, @async connect_worker(manager, config))
+    end
+    ids = filter(!isnothing, fetch.(tasks))
+    report_startup(length(ids), length(row_ids), t_waited)
+    return ids
 end
+
+
 
 # Quote `s` for bash. Wrap the string in single quotes and replace each
 # existing single quote ' with its escaped version '\''
@@ -892,7 +1047,7 @@ l_walltime = "00:10:00" is transformed into `-l walltime=00:10:00`.
 """
 function parse_pbs_worker_params(params::Dict)
     stdkeys = keys(Distributed.default_addprocs_params())
-    excepted_keys = (:job_file_loc, :workers_per_node)
+    excepted_keys = ADDPROCS_PASSTHROUGH_KEYS
     worker_params =
         filter(x -> !(x[1] in stdkeys || x[1] in excepted_keys), params)
     worker_args = []
@@ -1089,6 +1244,8 @@ end
         device = :gpu,
         cluster = :auto,
         time = DEFAULT_WALLTIME,
+        max_relaunches = 2 * nworkers,
+        startup_timeout = DEFAULT_STARTUP_TIMEOUT,
         kwargs...
     )
 
@@ -1099,6 +1256,13 @@ This does not wait for the workers to connect. Each worker is submitted as an
 individual allocation and adds itself to `GLOBAL_WORKER_POOL` once it
 has started and loaded its code, so a calibration can begin with an empty pool
 and pick up workers as they join.
+
+The call is recorded as a launch group in the worker registry (see
+[`worker_registry`](@ref), written to a TOML file under `.climacalibrate/`
+in the working directory) with `nworkers` as its desired count. While a
+calibration runs, a worker that exits, fails, or is not ready within
+`startup_timeout` seconds is replaced, up to `max_relaunches` replacements for
+the group. To add workers later, call `add_workers` again.
 
 The returned `Task` runs the (blocking) submission; `wait` on it to block until
 all submissions have been processed. Submitted jobs are cancelled automatically
@@ -1120,6 +1284,12 @@ that workers joining later get the same setup.
 - `time::Int = DEFAULT_WALLTIME`: Walltime in minutes, will be formatted
   appropriately for the cluster system
 - `workers_per_node::Int = 1`: Number of workers to run per node.
+- `max_relaunches::Int = 2 * nworkers`: Replacement workers this call may launch
+  in total.
+- `startup_timeout::Real = DEFAULT_STARTUP_TIMEOUT`: Seconds from submission
+  until a worker that has not joined the pool is ended and replaced. Queue
+  time counts, so the default is 12 hours; lower it on a cluster with short
+  queues to replace a stuck worker sooner.
 - `o`: Base path for the workers' output files, which the job writes on the
   node it runs on, so it must be on the shared filesystem. Defaults to a
   `.julia_worker_*` directory in the working directory.
@@ -1149,17 +1319,36 @@ function add_workers(
     device = :gpu,
     cluster = :auto,
     time = DEFAULT_WALLTIME,
+    max_relaunches = 2 * nworkers,
+    startup_timeout = DEFAULT_STARTUP_TIMEOUT,
     kwargs...,
 )
     return errormonitor(
-        Threads.@spawn _add_workers(nworkers; device, cluster, time, kwargs...)
+        Threads.@spawn _add_workers(
+            nworkers;
+            device,
+            cluster,
+            time,
+            max_relaunches,
+            startup_timeout,
+            kwargs...,
+        )
     )
 end
 
-function _add_workers(nworkers; device, cluster, time, kwargs...)
+function _add_workers(
+    nworkers;
+    device,
+    cluster,
+    time,
+    max_relaunches,
+    startup_timeout,
+    kwargs...,
+)
+    reg = WORKER_REGISTRY
+    workers_per_node = get(kwargs, :workers_per_node, 1)
     if cluster == :local || (cluster == :auto && !is_cluster_environment())
         @info "Using local processing mode, adding $nworkers worker$(nworkers == 1 ? "" : "s")"
-        workers_per_node = get(kwargs, :workers_per_node, 1)
         workers_per_node > 1 && throw(
             ArgumentError(
                 "workers_per_node = $workers_per_node groups several workers " *
@@ -1169,38 +1358,122 @@ function _add_workers(nworkers; device, cluster, time, kwargs...)
                 "workers_per_node.",
             ),
         )
+        manager = nothing
+        cluster = :local
+        merged_kwargs = (; kwargs...)
+        resources_for = nothing
+    else
+        manager = get_manager(cluster, nworkers)
+        cluster = cluster_name(manager)
+        @info "Using $(nameof(typeof(manager))) to add $nworkers workers"
 
-        ids = addprocs(nworkers; kwargs...)
+        default_kwargs =
+            device == :gpu ? default_gpu_kwargs(manager) :
+            device == :cpu ? default_cpu_kwargs(manager) :
+            throw(
+                ArgumentError(
+                    "device must be :gpu or :cpu, got $(repr(device))",
+                ),
+            )
 
-        @sync for id in ids
-            @async initialize_worker(id)
+        normalized_kwargs = process_time_parameter(manager, time, kwargs)
+        merged_kwargs = merge(default_kwargs, normalized_kwargs)
+
+        # Resources for an allocation of `n` workers. Explicit resource
+        # requests from the caller win.
+        resources_for =
+            n -> filter(
+                p -> !haskey(kwargs, first(p)),
+                allocation_resource_kwargs(manager, device, n),
+            )
+        if workers_per_node > 1
+            merged_kwargs =
+                merge(merged_kwargs, resources_for(workers_per_node))
+        else
+            resources_for = nothing
         end
-
-        return ids
     end
 
-    manager = get_manager(cluster, nworkers)
-    @info "Using $(nameof(typeof(manager))) to add $nworkers workers"
-
-    default_kwargs =
-        device == :gpu ? default_gpu_kwargs(manager) :
-        device == :cpu ? default_cpu_kwargs(manager) :
-        throw(ArgumentError("device must be :gpu or :cpu, got $(repr(device))"))
-
-    normalized_kwargs = process_time_parameter(manager, time, kwargs)
-    merged_kwargs = merge(default_kwargs, normalized_kwargs)
-
-    workers_per_node = get(kwargs, :workers_per_node, 1)
-    if workers_per_node > 1
-        # Explicit resource requests from the caller win.
-        resources = filter(
-            p -> !haskey(kwargs, first(p)),
-            allocation_resource_kwargs(manager, device, workers_per_node),
+    ensure_worker_atexit_hook!()
+    # The group and its rows appear together, so a concurrent
+    # `reconcile_workers!` never sees the group short of workers
+    group_id, row_ids = lock(reg.lock) do
+        gid = insert_group!(
+            reg;
+            cluster,
+            desired = nworkers,
+            max_relaunches,
+            startup_timeout,
+            launcher = (; manager, kwargs = merged_kwargs, resources_for),
         )
-        merged_kwargs = merge(merged_kwargs, resources)
+        gid, [insert_worker!(reg; group_id = gid) for _ in 1:nworkers]
     end
+    return launch_rows!(group_id, row_ids)
+end
 
-    return addprocs(manager; merged_kwargs...)
+# Insert `n` rows for launch group `group_id` and launch replacement workers for
+# them on a background task. The rows exist before this returns, so the next
+# `reconcile_workers!` sees the group as full.
+function launch_group!(group_id, n)
+    reg = WORKER_REGISTRY
+    row_ids = [insert_worker!(reg; group_id) for _ in 1:n]
+    errormonitor(
+        Threads.@spawn launch_rows!(group_id, row_ids; relaunch = true)
+    )
+    return nothing
+end
+
+# Launch workers for the rows `row_ids` of launch group `group_id` with the
+# group's recorded manager and keywords, and return their Distributed ids once
+# every row has connected or ended. Scheduler jobs are submitted and awaited
+# outside `addprocs` (see `connect_worker`). A relaunch writes its output
+# files under a base of its own, so it never reads an earlier worker's file.
+# Fewer workers than `workers_per_node` get an allocation sized for that many.
+function launch_rows!(group_id, row_ids; relaunch = false)
+    reg = WORKER_REGISTRY
+    launcher = group_row(reg, group_id).launcher
+    # `cancel_worker_jobs` has ended the rows
+    isnothing(launcher) && return nothing
+    (; manager, kwargs) = launcher
+    n = length(row_ids)
+    resources_for = get(launcher, :resources_for, nothing)
+    if !isnothing(resources_for) && n < get(kwargs, :workers_per_node, 1)
+        kwargs = merge(kwargs, resources_for(n))
+    end
+    if relaunch
+        for key in (:o, :output)
+            haskey(kwargs, key) || continue
+            kwargs = merge(
+                kwargs,
+                Dict(key => "$(kwargs[key])-relaunch$(first(row_ids))"),
+            )
+        end
+    end
+    ids = try
+        if isnothing(manager)
+            addprocs(n; kwargs...)
+        else
+            params = Dict{Symbol, Any}(pairs(kwargs))
+            output_files = submit_jobs!(manager, params, row_ids)
+            connect_workers!(manager, row_ids, output_files)
+        end
+    catch e
+        reason = "launch failed: $(nameof(typeof(e)))"
+        for id in row_ids
+            isnothing(worker_row(reg, id).pid) &&
+                set_state!(reg, id, ENDED; reason)
+        end
+        rethrow()
+    end
+    # Scheduler workers get their pid and load their code through `manage`
+    isnothing(manager) || return ids
+    for (row, id) in zip(row_ids, ids)
+        set_pid!(reg, row, id)
+    end
+    @sync for id in ids
+        @async initialize_worker(id)
+    end
+    return ids
 end
 
 """
@@ -1241,3 +1514,5 @@ function process_time_parameter(_, time::Int, kwargs)
     # For other manager types, pass through the kwargs unchanged
     return kwargs
 end
+
+end # module Workers
