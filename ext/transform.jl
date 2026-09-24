@@ -1,0 +1,374 @@
+import ClimaCalibrate.SampleBuilder:
+    AbstractSampleCollection,
+    AbstractTransform,
+    LatitudeWeighting,
+    PerCollectionWeighting,
+    PerVariableWeighting,
+    TransformedSampleCollection,
+    apply_transform,
+    apply_transform!,
+    base,
+    transform_sequence,
+    var_indices
+
+"""
+    (transform::AbstractTransform)(sample_collection::AbstractSampleCollection)
+
+Lazily apply `transform` to `sample_collection`, returning a
+`TransformedSampleCollection` that is evaluated with `apply_transform`.
+"""
+function (transform::AbstractTransform)(
+    sample_collection::AbstractSampleCollection,
+)
+    return TransformedSampleCollection(sample_collection, transform)
+end
+
+"""
+    base(sample_collection::SampleCollection)
+
+Return `sample_collection`.
+"""
+function SampleBuilder.base(sample_collection::SampleCollection)
+    return sample_collection
+end
+
+"""
+    base(sample_collection::TransformedSampleCollection)
+
+Return the `SampleCollection` underlying `sample_collection` with no
+transformations applied to it.
+"""
+function SampleBuilder.base(sample_collection::TransformedSampleCollection)
+    return base(sample_collection.parent)
+end
+
+"""
+    apply_transform(sample_collection::SampleCollection)
+
+Return `sample_collection` as no transforms are applied.
+
+The returned `sample_collection` is not a copy of the input.
+
+This method exists so that `apply_transform` on an `AbstractSampleCollection`
+always returns a `SampleCollection`.
+
+See also [`SampleBuilder.apply_transform(::TransformedSampleCollection)`](@ref).
+"""
+function SampleBuilder.apply_transform(sample_collection::SampleCollection)
+    return sample_collection
+end
+
+"""
+    apply_transform(sample_collection::TransformedSampleCollection)
+
+Return a `SampleCollection` with every recorded transform applied to it.
+"""
+function SampleBuilder.apply_transform(
+    sample_collection::TransformedSampleCollection,
+)
+    return _apply_transform(sample_collection)
+end
+
+"""
+    _apply_transform(
+        sample_collection::Union{SampleCollection, TransformedSampleCollection}
+    )
+
+Recursively apply the transforms recorded by `TransformedSampleCollection` to a
+`SampleCollection`.
+
+The base case is `_apply_transform(::SampleCollection)` which makes a copy, so
+`_apply_transform(::TransformedSampleCollection)` can apply the transform
+in-place.
+"""
+_apply_transform(sample_collection::SampleCollection) = SampleCollection(
+    copy(get_samples(sample_collection)),
+    get_metadata(sample_collection),
+)
+_apply_transform(sample_collection::TransformedSampleCollection) =
+    apply_transform!(
+        _apply_transform(sample_collection.parent),
+        sample_collection.transform,
+    )
+
+"""
+    apply_transform(
+        sample_collection::AbstractSampleCollection,
+        transform::AbstractTransform,
+    )
+
+Eagerly apply a transform to `sample_collection`.
+
+This is implemented in terms of `apply_transform!`.
+"""
+function SampleBuilder.apply_transform(
+    sample_collection::AbstractSampleCollection,
+    transform::AbstractTransform,
+)
+    return apply_transform(transform(sample_collection))
+end
+
+"""
+    num_samples(sample_collection::TransformedSampleCollection)
+
+Return the number of samples in `sample_collection`.
+"""
+function SampleBuilder.num_samples(
+    sample_collection::TransformedSampleCollection,
+)
+    num_samples(base(sample_collection))
+end
+
+"""
+    transform_sequence(
+        sample_collection::Union{SampleCollection, TransformedSampleCollection}
+    )
+
+Return the sequence of transformations applied to `sample_collection` as a
+tuple.
+"""
+function SampleBuilder.transform_sequence(::SampleCollection)
+    return ()
+end
+
+function SampleBuilder.transform_sequence(
+    sample_collection::TransformedSampleCollection,
+)
+    return (
+        transform_sequence(sample_collection.parent)...,
+        sample_collection.transform,
+    )
+end
+
+"""
+    LatitudeWeighting(
+        selected::Union{AbstractVector, AbstractSet, Tuple};
+        by = ClimaAnalysis.short_name,
+        min_cosd_lat::AbstractFloat = 0.1,
+    )
+
+Return a latitude weighting transform that only weights the variables whose key
+is in `selected`.
+
+The key of a variable is `by(metadata)`, where `metadata` is the
+`ClimaAnalysis.Var.Metadata` of that variable. When the transform is applied,
+an error is thrown if a selected variable does not have a latitude dimension, if
+no variable is selected, or if a key in `selected` does not match any variable.
+
+# Example
+
+Weight only the variables with the short names `pr` and `tas`, leaving the
+other variables in the sample collection unweighted:
+
+```julia
+transform = LatitudeWeighting(["pr", "tas"])
+weighted = sample_collection |> transform
+```
+"""
+function LatitudeWeighting(
+    selected::Union{AbstractVector, AbstractSet, Tuple};
+    by = ClimaAnalysis.short_name,
+    min_cosd_lat::AbstractFloat = 0.1,
+)
+    return LatitudeWeighting(min_cosd_lat, by, Set(selected))
+end
+
+"""
+    apply_transform!(
+        sample_collection::SampleCollection,
+        transform::LatitudeWeighting,
+    )
+
+Apply latitude weighting to `sample_collection` in place according to
+`transform` and return `sample_collection`.
+
+An error is thrown if
+- no variable is weighted, either because none of the variables have a latitude
+  dimension or because none of the variables are selected,
+- a key in `selected` does not match any variable,
+- a selected variable does not have a latitude dimension,
+- the latitudes of a weighted variable are not the same across samples, or
+- the latitude dimension of a weighted variable is not in degrees.
+"""
+function SampleBuilder.apply_transform!(
+    sample_collection::SampleCollection,
+    transform::LatitudeWeighting,
+)
+    metadata = get_metadata(sample_collection)
+    metadata_col = _metadata_of_first_sample(sample_collection)
+    mask = _lat_weighting_mask(transform, metadata_col)
+    _check_lats_across_samples(metadata[mask, :])
+    (; min_cosd_lat) = transform
+    # Compute every weight first, so an error leaves the samples unchanged
+    lat_weights = [
+        sqrt.(_flat_lat_weights(md; min_cosd_lat)) for md in metadata_col[mask]
+    ]
+    samples = get_samples(sample_collection)
+    for (weights, rows) in
+        zip(lat_weights, var_indices(sample_collection)[mask])
+        samples[rows, :] .*= weights
+    end
+    return sample_collection
+end
+
+"""
+    _lat_weighting_mask(
+        ::Union{LatitudeWeighting{Nothing}, LatitudeWeighting{<:AbstractSet}},
+        metadata_col
+    )
+
+Return a vector of `Bool`s with one entry per metadata in `metadata_col`. The
+`i`th entry is `true` if latitude weighting should be applied to the samples of
+the variable described by `metadata_col[i]`.
+"""
+function _lat_weighting_mask(::LatitudeWeighting{Nothing}, metadata_col)
+    mask = [ClimaAnalysis.has_latitude(md) for md in metadata_col]
+    any(mask) || error(
+        "None of the variables have a latitude dimension, so latitude weighting cannot be applied",
+    )
+    return mask
+end
+
+function _lat_weighting_mask(
+    transform::LatitudeWeighting{<:AbstractSet},
+    metadata_col,
+)
+    (; by, selected) = transform
+    var_keys = [by(md) for md in metadata_col]
+    mask = [key in selected for key in var_keys]
+    any(mask) || error(
+        "None of the variables are selected for latitude weighting. The selected keys are $(collect(selected))",
+    )
+    unused_keys = setdiff(selected, var_keys)
+    isempty(unused_keys) || error(
+        "The selected keys $(collect(unused_keys)) do not match any variable",
+    )
+    for md in metadata_col[mask]
+        ClimaAnalysis.has_latitude(md) || error(
+            "The variable with the short name $(ClimaAnalysis.short_name(md)) is selected for latitude weighting, but it does not have a latitude dimension",
+        )
+    end
+    return mask
+end
+
+"""
+    PerVariableWeighting(
+        weights::AbstractDict{<:Any, <:Real};
+        by = ClimaAnalysis.short_name,
+    )
+
+Return a per-variable weighting transform that weights each variable by
+`weights[key]`.
+
+The key of a variable is `by(metadata)`, where `metadata` is the
+`ClimaAnalysis.Var.Metadata` of that variable. When the transform is applied,
+an error is thrown if a variable does not have a weight.
+
+# Example
+
+We want to weight the variables with the short names `pr` and `tas`.
+
+```julia
+transform = PerVariableWeighting(Dict("pr" => 2.0, "tas" => 3.0))
+weighted = sample_collection |> transform
+```
+"""
+function PerVariableWeighting(
+    weights::AbstractDict{<:Any, <:Real};
+    by = ClimaAnalysis.short_name,
+)
+    return PerVariableWeighting(weights, by)
+end
+
+"""
+    apply_transform!(
+        sample_collection::SampleCollection,
+        transform::PerVariableWeighting{V},
+    ) where {V <: AbstractVector}
+
+Apply per-variable weighting to `sample_collection` in place according to
+`transform` and return `sample_collection`.
+
+An error is thrown if the number of weights is not equal to the number of
+variables.
+"""
+function SampleBuilder.apply_transform!(
+    sample_collection::SampleCollection,
+    transform::PerVariableWeighting{V},
+) where {V <: AbstractVector}
+    metadata = get_metadata(sample_collection)
+    (; weights) = transform
+    n_weights, n_vars = length(weights), size(metadata, 1)
+    n_weights == n_vars || error(
+        "The number of weights ($n_weights) is not the same as the number of variables ($n_vars)",
+    )
+    samples = get_samples(sample_collection)
+    for (weight, range) in zip(weights, var_indices(sample_collection))
+        samples[range, :] .*= weight
+    end
+    return sample_collection
+end
+
+"""
+    apply_transform!(
+        sample_collection::SampleCollection,
+        transform::PerVariableWeighting{D},
+    ) where {D <: AbstractDict}
+
+Apply per-variable weighting to `sample_collection` in place according to
+`transform` and return `sample_collection`.
+
+An error is thrown if a variable in `sample_collection` does not have a weight,
+that is, if `by(metadata)` is not a key of `weights`.
+"""
+function SampleBuilder.apply_transform!(
+    sample_collection::SampleCollection,
+    transform::PerVariableWeighting{D},
+) where {D <: AbstractDict}
+    (; weights, by) = transform
+    var_keys = [by(md) for md in _metadata_of_first_sample(sample_collection)]
+    missing_keys = filter(key -> !haskey(weights, key), var_keys)
+    isempty(missing_keys) || error(
+        "No weights are given for the variables with the keys $missing_keys",
+    )
+    samples = get_samples(sample_collection)
+    for (key, range) in zip(var_keys, var_indices(sample_collection))
+        samples[range, :] .*= weights[key]
+    end
+    return sample_collection
+end
+
+"""
+    apply_transform!(
+        sample_collection::SampleCollection,
+        transform::PerCollectionWeighting,
+    )
+
+Apply per-collection weighting by the scalar in `transform` to
+`sample_collection` in place and return `sample_collection`.
+"""
+function SampleBuilder.apply_transform!(
+    sample_collection::SampleCollection,
+    transform::PerCollectionWeighting,
+)
+    get_samples(sample_collection) .*= transform.weight
+    return sample_collection
+end
+
+"""
+    Base.show(io::IO, sample_collection::TransformedSampleCollection)
+
+Show method for `TransformedSampleCollection`. It prints the information about
+the number of transforms, the size of the matrix of samples, the number of
+samples, values, and variables, and calls the show method of each transform.
+"""
+function Base.show(io::IO, sample_collection::TransformedSampleCollection)
+    chain = transform_sequence(sample_collection)
+    printstyled(io, "TransformedSampleCollection", bold = true)
+    print(io, " ($(length(chain)) transform(s) not yet applied)\n")
+    _show_summary(io, base(sample_collection))
+    for transform in chain
+        print(io, "\n  ↳ ", transform)
+    end
+    return nothing
+end
