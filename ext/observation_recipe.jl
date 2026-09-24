@@ -10,17 +10,21 @@ include("diagonal_term.jl")
 """
     covariance(
         covar_estimator::ScalarCovariance,
-        sample_collection::SampleCollection,
+        sample_collection::AbstractSampleCollection,
     )
 
 Compute the scalar covariance matrix.
 
-The data in the matrix of samples in `sample_collection` is ignored.
+The data in the matrix of samples in `sample_collection` is ignored. If
+`sample_collection` is a `TransformedSampleCollection`, an error is thrown.
 """
 function ObservationRecipe.covariance(
     covar_estimator::ScalarCovariance,
-    sample_collection::SampleCollection,
+    sample_collection::AbstractSampleCollection,
 )
+    sample_collection isa TransformedSampleCollection && error(
+        "ScalarCovariance does not support transforms since the values of the samples are not used",
+    )
     diag_cov = compute_diagonal(
         ScalarDiagonal(covar_estimator.scalar),
         sample_collection,
@@ -38,7 +42,7 @@ end
 """
     covariance(
         covar_estimator::SeasonalDiagonalCovariance,
-        sample_collection::SampleCollection,
+        sample_collection::AbstractSampleCollection,
     )
 
 Compute the diagonal covariance matrix of seasonal quantities from the samples
@@ -49,11 +53,20 @@ The diagonal entries are the per-entry variance across the samples of
 `NaN`s ignored. Each sample must represent the same sequence of seasons with one
 time slice per season. At least two samples (years) are required to estimate a
 variance.
+
+If `sample_collection` is a `TransformedSampleCollection`, the transforms are
+applied before the variances are computed. A `LatitudeWeighting` transform is
+not supported; use `use_latitude_weights` instead.
 """
 function ObservationRecipe.covariance(
     covar_estimator::SeasonalDiagonalCovariance,
-    sample_collection::SampleCollection,
+    sample_collection::AbstractSampleCollection,
 )
+    any(t -> t isa LatitudeWeighting, transform_sequence(sample_collection)) &&
+        error(
+            "Using the LatitudeWeighting transform is not supported by SeasonalDiagonalCovariance. Use the keyword argument `use_latitude_weights` instead",
+        )
+    sample_collection = apply_transform(sample_collection)
     samples = get_samples(sample_collection)
     n_samples = size(samples, 2)
     n_samples >= 2 || error(
@@ -238,43 +251,29 @@ end
 """
     covariance(
         covar_estimator::SVDplusDCovariance,
-        sample_collection::SampleCollection,
+        sample_collection::AbstractSampleCollection,
     )
 
 Compute the `EKP.SVDplusD` covariance matrix from the samples in
 `sample_collection`.
+
+If `sample_collection` is a `TransformedSampleCollection`, the transforms are
+applied before the SVD and the diagonal term are computed.
 """
 function ObservationRecipe.covariance(
     covar_estimator::SVDplusDCovariance,
-    sample_collection::SampleCollection,
+    sample_collection::AbstractSampleCollection,
 )
-    stacked_sample_matrix = copy(get_samples(sample_collection))
-    metadata = _metadata_of_first_sample(sample_collection)
-
-    n_samples = size(stacked_sample_matrix, 2)
+    n_samples = num_samples(sample_collection)
     n_samples >= 2 || error(
         "SVDplusDCovariance needs at least 2 samples to estimate a covariance; \
         got $n_samples. Window the time series into more samples with \
         `SampleBuilder.build_samples_by_times`.",
     )
 
-    # Apply latitude weights first so that both the SVD and the model error
-    # scale (the mean) are computed from the weighted matrix.
-    if covar_estimator.use_latitude_weights
-        _check_lats_across_samples(get_metadata(sample_collection))
-        _apply_lat_weights_to_samples!(
-            stacked_sample_matrix,
-            metadata,
-            min_cosd_lat = covar_estimator.min_cosd_lat,
-        )
-        # Remake the sample collection with the latitude weighted sample matrix
-        if covar_estimator.use_weighted_samples_for_diagonal
-            sample_collection = SampleCollection(
-                stacked_sample_matrix,
-                get_metadata(sample_collection),
-            )
-        end
-    end
+    weighted = apply_transform(sample_collection)
+    metadata = _metadata_of_first_sample(weighted)
+    stacked_sample_matrix = get_samples(weighted)
 
     # Compute SVD of covariance matrix
     (; rank) = covar_estimator
@@ -295,7 +294,7 @@ function ObservationRecipe.covariance(
     # is the mean of seasonal averages spanned over two years, where the first
     # DJF is the mean of every other DJF and the second DJF is the mean of every
     # other DJF.
-    diag_cov = compute_diagonal(covar_estimator.diagonal, sample_collection)
+    diag_cov = compute_diagonal(covar_estimator.diagonal, weighted)
     _check_d_term(diag_cov.diag, metadata, n_samples)
     return EKP.SVDplusD(gamma_low_rank, diag_cov)
 end
@@ -328,37 +327,9 @@ function _check_d_term(d_diag, all_metadata, n_samples)
 end
 
 """
-    _apply_lat_weights_to_samples!(
-        stacked_sample_matrix,
-        all_metadata;
-        min_cosd_lat = 0.1,
-    )
-
-Apply latitude weights to all columns of `stacked_sample_matrix` in place.
-
-The latitude weights applied is `1 / sqrt(max(cosd(lat), min_cosd_lat))` to each
-column of the matrix.
-
-The caller is responsible for checking that the latitudes are the same across
-the samples (see `_check_lats_across_samples`).
-"""
-function _apply_lat_weights_to_samples!(
-    stacked_sample_matrix,
-    all_metadata;
-    min_cosd_lat = 0.1,
-)
-    # It is okay to find the latitude weights for a single column and apply it
-    # to all other columns, because the flattening of OutputVars should be the
-    # same for each column
-    flat_lat_weights = _flat_lat_weights(all_metadata; min_cosd_lat)
-    stacked_sample_matrix .*= sqrt.(flat_lat_weights)
-    return nothing
-end
-
-"""
     observation(
         covar_estimator::AbstractCovarianceEstimator,
-        sample_collection::SampleCollection,
+        sample_collection::AbstractSampleCollection,
         i::Integer;
         name = nothing,
     )
@@ -366,10 +337,14 @@ end
 Return an `EKP.Observation` with the `i`th sample of `sample_collection` as the
 observation, a covariance matrix defined by `covar_estimator`, `name`
 determined from the short names of the observation, and metadata.
+
+If `sample_collection` is a `TransformedSampleCollection`, the transforms can
+only affect the covariance matrix, and `covar_estimator` decides how they are
+used. The observation and metadata come from the base `SampleCollection`.
 """
 function ObservationRecipe.observation(
     covar_estimator::AbstractCovarianceEstimator,
-    sample_collection::SampleCollection,
+    sample_collection::AbstractSampleCollection,
     i::Integer;
     name = nothing,
 )
@@ -377,8 +352,10 @@ function ObservationRecipe.observation(
     1 <= i <= total_samples || error(
         "The number of samples is $total_samples, but the $(i)th sample is requested to used as the observation",
     )
-    stacked_sample = collect(view(get_samples(sample_collection), :, i))
-    metadata = collect(view(get_metadata(sample_collection), :, i))
+    # Transforms only affect the covariance; the observation is untransformed
+    base_sample_collection = base(sample_collection)
+    stacked_sample = collect(view(get_samples(base_sample_collection), :, i))
+    metadata = collect(view(get_metadata(base_sample_collection), :, i))
 
     any(==(""), ClimaAnalysis.short_name.(metadata)) && @warn(
         "There are OutputVar(s) with no short name. You will not be able to use GEnsembleBuilder"
@@ -467,19 +444,19 @@ concatenated to match `all_metadata`, an iterable of
 `ClimaAnalysis.Var.Metadata`.
 """
 function _flat_lat_weights(all_metadata; min_cosd_lat = 0.1)
-    parts = Vector[]
-    for metadata in all_metadata
-        data_length = ClimaAnalysis.flattened_length(metadata)
-        var = ClimaAnalysis.unflatten(metadata, ones(data_length))
-        push!(
-            parts,
-            ClimaAnalysis.flatten(
-                _lat_weights_var(var; min_cosd_lat),
-                metadata,
-            ).data,
-        )
-    end
-    return reduce(vcat, parts)
+    return reduce(
+        vcat,
+        [_flat_lat_weights(md; min_cosd_lat) for md in all_metadata],
+    )
+end
+
+function _flat_lat_weights(
+    metadata::ClimaAnalysis.Var.Metadata;
+    min_cosd_lat = 0.1,
+)
+    data_length = ClimaAnalysis.flattened_length(metadata)
+    var = ClimaAnalysis.unflatten(metadata, ones(data_length))
+    return ClimaAnalysis.flatten(_lat_weights_var(var; min_cosd_lat), metadata).data
 end
 
 """

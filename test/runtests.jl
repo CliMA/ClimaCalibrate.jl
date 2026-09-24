@@ -28,6 +28,7 @@ testsuite = Dict(
     "Worker pool" => @include("worker_pool.jl"),
     "Worker registry" => @include("worker_registry.jl"),
     "Sampler" => @include("sample_builder.jl"),
+    "Transform" => @include("transform.jl"),
     "Diagonal term" => @include("diagonal_term.jl"),
     "Observation recipe" => @include("observation_recipe.jl"),
     "Ensemble builder" => @include("ensemble_builder.jl"),
