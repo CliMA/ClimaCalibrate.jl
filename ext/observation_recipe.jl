@@ -248,10 +248,11 @@ function ObservationRecipe.covariance(
     covar_estimator::SVDplusDCovariance,
     sample_collection::SampleCollection,
 )
-    stacked_sample_matrix = copy(get_samples(sample_collection))
+    (; latitude_weighting, use_weighted_samples_for_diagonal, rank) =
+        covar_estimator
     metadata = _metadata_of_first_sample(sample_collection)
 
-    n_samples = size(stacked_sample_matrix, 2)
+    n_samples = num_samples(sample_collection)
     n_samples >= 2 || error(
         "SVDplusDCovariance needs at least 2 samples to estimate a covariance; \
         got $n_samples. Window the time series into more samples with \
@@ -260,24 +261,12 @@ function ObservationRecipe.covariance(
 
     # Apply latitude weights first so that both the SVD and the model error
     # scale (the mean) are computed from the weighted matrix.
-    if covar_estimator.use_latitude_weights
-        _check_lats_across_samples(get_metadata(sample_collection))
-        _apply_lat_weights_to_samples!(
-            stacked_sample_matrix,
-            metadata,
-            min_cosd_lat = covar_estimator.min_cosd_lat,
-        )
-        # Remake the sample collection with the latitude weighted sample matrix
-        if covar_estimator.use_weighted_samples_for_diagonal
-            sample_collection = SampleCollection(
-                stacked_sample_matrix,
-                get_metadata(sample_collection),
-            )
-        end
-    end
+    weighted =
+        isnothing(latitude_weighting) ? sample_collection :
+        apply_transform(latitude_weighting, sample_collection)
+    stacked_sample_matrix = get_samples(weighted)
 
     # Compute SVD of covariance matrix
-    (; rank) = covar_estimator
     gamma_low_rank = if isnothing(rank)
         EKP.tsvd_cov_from_samples(stacked_sample_matrix)
     else
@@ -295,7 +284,9 @@ function ObservationRecipe.covariance(
     # is the mean of seasonal averages spanned over two years, where the first
     # DJF is the mean of every other DJF and the second DJF is the mean of every
     # other DJF.
-    diag_cov = compute_diagonal(covar_estimator.diagonal, sample_collection)
+    diag_collection =
+        use_weighted_samples_for_diagonal ? weighted : sample_collection
+    diag_cov = compute_diagonal(covar_estimator.diagonal, diag_collection)
     _check_d_term(diag_cov.diag, metadata, n_samples)
     return EKP.SVDplusD(gamma_low_rank, diag_cov)
 end

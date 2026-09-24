@@ -33,6 +33,8 @@ export ScalarCovariance,
     reconstruct_vars,
     reconstruct_residual
 
+import ..SampleBuilder: LatitudeWeighting
+
 include("diagonal_term.jl")
 
 """
@@ -256,23 +258,20 @@ covariance plus a diagonal term.
 """
 struct SVDplusDCovariance{
     D <: AbstractDiagonalTerm,
-    FT <: AbstractFloat,
+    L <: Union{Nothing, LatitudeWeighting},
     R <: Union{Integer, Nothing},
 } <: AbstractCovarianceEstimator
     """A diagonal term that describes the diagonal matrix added to the low rank
     approximation of the covariance matrix"""
     diagonal::D
 
-    """Whether to apply latitude weighting"""
-    use_latitude_weights::Bool
+    """The latitude weighting applied to the samples, or `nothing` for no
+    latitude weighting"""
+    latitude_weighting::L
 
     """Compute the diagonal term from the latitude weighted samples when
     latitude weights are used"""
     use_weighted_samples_for_diagonal::Bool
-
-    """The smallest `cosd(lat)` used in the latitude weight, which caps the
-    weight at `1 / min_cosd_lat`"""
-    min_cosd_lat::FT
 
     """Rank of the singular value decomposition, or `nothing` to infer it from
     the data"""
@@ -283,9 +282,8 @@ end
     SVDplusDCovariance(;
         model_error_scale = 0.0,
         regularization = 0.0,
-        use_latitude_weights = false,
+        latitude_weighting = nothing,
         use_weighted_samples_for_diagonal = true,
-        min_cosd_lat = 0.1,
         rank = nothing
     )
 
@@ -319,17 +317,21 @@ The samples used to compute the covariance matrix come from the
   `regularization * I` is added to the covariance matrix. See
   [`QuantileRegularization`](@ref) for another option for regularization.
 
-- `use_latitude_weights`: If `true`, then latitude weighting is applied to the
-  covariance matrix. Latitude weighting is multiplying the columns of the matrix
+- `latitude_weighting`: TODO
+
+- `use_latitude_weights`: Deprecated, use `latitude_weighting` instead. If
+  `true`, then latitude weighting is applied to the covariance matrix. Latitude weighting is multiplying the columns of the matrix
   of samples by `1 / sqrt(max(cosd(lat), 0.1))`. See the keyword argument
   `min_cosd_lat` for more information.
 
-- `use_weighted_samples_for_diagonal`: If `true` and `use_latitude_weights` is `true`,
-  then the diagonal term is computed from the latitude weighted samples.
-  Otherwise, the diagonal term is computed from the samples without latitude
-  weighting. This has no effect when `use_latitude_weights` is `false`.
+- `use_weighted_samples_for_diagonal`: If `true` and `latitude_weighting` is not
+  `nothing`, then the diagonal term is computed from the latitude weighted
+  samples. Otherwise, the diagonal term is computed from the samples without
+  latitude weighting. This has no effect when `latitude_weighting` is `nothing`.
 
-- `min_cosd_lat`: Control the minimum latitude weight when
+- `min_cosd_lat`: Deprecated, use
+  `latitude_weighting = LatitudeWeighting(; min_cosd_lat)` instead. Control the
+  minimum latitude weight when
   `use_latitude_weights` is `true`. The weight is
   `1 / max(cosd(lat), min_cosd_lat)`, so this is the largest weight any point
   can be given, `1 / min_cosd_lat`. Without it the weight grows without bound
@@ -342,9 +344,10 @@ The samples used to compute the covariance matrix come from the
 function SVDplusDCovariance(;
     model_error_scale = 0.0,
     regularization = 0.0,
-    use_latitude_weights = false,
+    latitude_weighting = nothing,
+    use_latitude_weights = nothing,
     use_weighted_samples_for_diagonal = true,
-    min_cosd_lat = 0.1,
+    min_cosd_lat = nothing,
     rank = nothing,
 )
     model_error_scale < zero(model_error_scale) &&
@@ -356,6 +359,7 @@ function SVDplusDCovariance(;
 
     return SVDplusDCovariance(
         _diagonal_term(model_error_scale, regularization);
+        latitude_weighting,
         use_latitude_weights,
         use_weighted_samples_for_diagonal,
         min_cosd_lat,
@@ -366,9 +370,8 @@ end
 """
     SVDplusDCovariance(
         diagonal::AbstractDiagonalTerm;
-        use_latitude_weights = false,
+        latitude_weighting = nothing,
         use_weighted_samples_for_diagonal = true,
-        min_cosd_lat = 0.1,
         rank = nothing,
     )
 
@@ -384,17 +387,21 @@ constructor is the same as passing
 
 # Keyword Arguments
 
-- `use_latitude_weights`: If `true`, then latitude weighting is applied to the
-  covariance matrix. Latitude weighting is multiplying the columns of the matrix
+- `latitude_weighting`: TODO
+
+- `use_latitude_weights`: Deprecated, use `latitude_weighting` instead. If
+  `true`, then latitude weighting is applied to the covariance matrix. Latitude weighting is multiplying the columns of the matrix
   of samples by `1 / sqrt(max(cosd(lat), 0.1))`. See the keyword argument
   `min_cosd_lat` for more information.
 
-- `use_weighted_samples_for_diagonal`: If `true` and `use_latitude_weights` is `true`,
-  then the diagonal term is computed from the latitude weighted samples.
-  Otherwise, the diagonal term is computed from the samples without latitude
-  weighting. This has no effect when `use_latitude_weights` is `false`.
+- `use_weighted_samples_for_diagonal`: If `true` and `latitude_weighting` is not
+  `nothing`, then the diagonal term is computed from the latitude weighted
+  samples. Otherwise, the diagonal term is computed from the samples without
+  latitude weighting. This has no effect when `latitude_weighting` is `nothing`.
 
-- `min_cosd_lat`: Control the minimum latitude weight when
+- `min_cosd_lat`: Deprecated, use
+  `latitude_weighting = LatitudeWeighting(; min_cosd_lat)` instead. Control the
+  minimum latitude weight when
   `use_latitude_weights` is `true`. The weight is
   `1 / max(cosd(lat), min_cosd_lat)`, so this is the largest weight any point
   can be given, `1 / min_cosd_lat`. Without it the weight grows without bound
@@ -406,27 +413,49 @@ constructor is the same as passing
 """
 function SVDplusDCovariance(
     diagonal::AbstractDiagonalTerm;
-    use_latitude_weights = false,
+    latitude_weighting = nothing,
+    use_latitude_weights = nothing,
     use_weighted_samples_for_diagonal = true,
-    min_cosd_lat = 0.1,
+    min_cosd_lat = nothing,
     rank = nothing,
 )
-    if use_latitude_weights && min_cosd_lat <= zero(min_cosd_lat)
-        error(
-            "The value for min_cosd_lat ($min_cosd_lat) should be greater than zero",
-        )
-    end
+    latitude_weighting = _latitude_weighting(
+        latitude_weighting,
+        use_latitude_weights,
+        min_cosd_lat,
+    )
     isnothing(rank) ||
         rank >= 0 ||
         error("Rank ($rank) should be nothing or non-negative")
 
     return SVDplusDCovariance(
         diagonal,
-        use_latitude_weights,
+        latitude_weighting,
         use_weighted_samples_for_diagonal,
-        min_cosd_lat,
         rank,
     )
+end
+
+function _latitude_weighting(
+    latitude_weighting,
+    use_latitude_weights,
+    min_cosd_lat,
+)
+    isnothing(use_latitude_weights) &&
+        isnothing(min_cosd_lat) &&
+        return latitude_weighting
+    isnothing(latitude_weighting) || error(
+        "`latitude_weighting` cannot be combined with the deprecated keyword arguments `use_latitude_weights` and `min_cosd_lat`",
+    )
+    Base.depwarn(
+        "The keyword arguments `use_latitude_weights` and `min_cosd_lat` are \
+        deprecated. Use `latitude_weighting = LatitudeWeighting(; min_cosd_lat)` \
+        for latitude weighting and `latitude_weighting = nothing` for no \
+        latitude weighting.",
+        :SVDplusDCovariance,
+    )
+    something(use_latitude_weights, false) || return nothing
+    return LatitudeWeighting(min_cosd_lat = something(min_cosd_lat, 0.1))
 end
 
 """
