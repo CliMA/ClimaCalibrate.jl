@@ -3,6 +3,15 @@ import Distributed
 import ClimaCalibrate
 import ClimaCalibrate.Backend:
     multi_worker_script,
+    single_worker_script,
+    _parse_sbatch_output,
+    _parse_qsub_output,
+    _parse_squeue_output,
+    _parse_qstat_output,
+    PENDING,
+    RUNNING,
+    COMPLETED,
+    FAILED,
     shell_quote,
     workers_per_allocation,
     allocation_resource_kwargs,
@@ -34,6 +43,42 @@ import ClimaCalibrate.Backend:
         @test occursin("'--project=@temp proj'", line)
         @test occursin("'--threads=2'", line)
     end
+end
+
+@testset "single_worker_script" begin
+    script = single_worker_script("julia", Cmd(["--project=@temp proj", "-t2"]))
+    lines = split(script, '\n'; keepempty = false)
+    @test lines[1] == "#!/bin/bash"
+    @test startswith(lines[2], "exec 'julia' '--project=@temp proj' '-t2' ")
+    @test occursin("--worker=$(worker_cookie())", lines[2])
+end
+
+@testset "job id parsing" begin
+    @test _parse_sbatch_output("12345") == "12345"
+    @test _parse_sbatch_output("12345;cluster") == "12345"
+    @test isnothing(_parse_sbatch_output(""))
+    @test isnothing(_parse_sbatch_output("sbatch: error"))
+    @test _parse_qsub_output("987.desched1") == "987.desched1"
+    @test isnothing(_parse_qsub_output(""))
+end
+
+@testset "scheduler output parsing" begin
+    squeue = _parse_squeue_output("11 PENDING\n12 RUNNING\n13 COMPLETING\n\n")
+    @test squeue == Dict("11" => PENDING, "12" => RUNNING, "13" => RUNNING)
+    @test isempty(_parse_squeue_output(""))
+
+    qstat = _parse_qstat_output(
+        "Job Id: 1.d|Job_Name = julia|job_state = Q|queue = main\n" *
+        "Job Id: 2.d|job_state = R\n" *
+        "Job Id: 3.d|job_state = F|substate = 93\n" *
+        "Job Id: 4.d|job_state = F|substate = 92\n",
+    )
+    @test qstat == Dict(
+        "1.d" => PENDING,
+        "2.d" => RUNNING,
+        "3.d" => FAILED,
+        "4.d" => COMPLETED,
+    )
 end
 
 @testset "shell_quote" begin

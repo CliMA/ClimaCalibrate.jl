@@ -270,6 +270,59 @@ function remove_worker_from_pool(id)
 end
 
 # ----------------------------------------------------------------------------
+# Cluster managers
+#
+# One `ClusterManager` per scheduler. Their `launch` and `manage` methods are
+# further down, next to the submission code they share.
+# ----------------------------------------------------------------------------
+
+"""
+    SlurmManager(ntasks = 1)
+
+The ClusterManager for Slurm clusters, taking in the number of workers to
+request. Each worker is submitted as its own batch job with `sbatch`.
+
+To submit the jobs, run `addprocs(SlurmManager(ntasks))`.
+
+Keyword arguments can be passed to `sbatch`: `addprocs(SlurmManager(ntasks),
+gpus_per_task=1)`.
+
+By default the workers will inherit the running Julia environment.
+
+To run a calibration, call `calibrate(WorkerBackend(), ...)`.
+
+To run functions on a worker, call `remotecall(func, worker_id, args...)`.
+"""
+struct SlurmManager <: ClusterManager
+    ntasks::Integer
+
+    SlurmManager(ntasks = 1) = new(ntasks)
+end
+
+# TODO: Add examples of usage for SlurmManager and PBSManager in the docstrings
+# Things like `addprocs(SlurmManager(2), t = "00:10:00",ngpus=4)`, then `remotecall` or `calibrate`
+"""
+    PBSManager(ntasks)
+
+The ClusterManager for PBS Pro clusters, taking in the number of workers to
+request. Each allocation is submitted as its own job with `qsub`.
+
+To submit the jobs, run `addprocs(PBSManager(ntasks))`.
+
+Keyword arguments can be passed to `qsub`: `addprocs(PBSManager(ntasks),
+nodes=2)`
+
+By default, the workers will inherit the running Julia environment.
+
+To run a calibration, call `calibrate(WorkerBackend(), ...)`
+
+To run functions on a worker, call `remotecall(func, worker_id, args...)`
+"""
+struct PBSManager <: ClusterManager
+    ntasks::Integer
+end
+
+# ----------------------------------------------------------------------------
 # Job teardown
 #
 # Workers are submitted as individual scheduler allocations (see `launch`). If
@@ -286,6 +339,114 @@ const ATEXIT_HOOK_REGISTERED = Ref(false)
 # below (`scancel`/`qdel`); this only silences those commands' own output and has
 # no effect on forward-model logs, which workers write via `set_worker_logger`.
 _run_quiet(cmd) = run(pipeline(cmd; stdout = devnull, stderr = devnull))
+
+# Seconds between scheduler queries while waiting for workers to start.
+const SCHEDULER_POLL_INTERVAL = 30.0
+
+# Seconds after submission during which a job missing from the scheduler's
+# listing is not treated as finished. A job can take a while to show up: on
+# Derecho `qstat` answers from NCAR's cache, which lags the server by several
+# seconds even with the bypass, and a busy Slurm controller can return a
+# truncated `squeue` listing. Without the grace a worker could be marked failed
+# right after `qsub`, then start anyway and never be connected.
+const UNKNOWN_JOB_GRACE = 60.0
+
+"""
+    scheduler_env(x)
+
+Environment for the scheduler's own commands (`sbatch`, `squeue`, `qsub`,
+`qstat`): a copy of `ENV` with the variables removed that would otherwise leak
+into or break them. `x` is an HPC backend or a cluster manager.
+"""
+function scheduler_env(::Union{SlurmBackend, SlurmManager})
+    clean_env = Dict{String, String}(ENV)
+    for var in SLURM_INHERITED_VARS
+        delete!(clean_env, var)
+    end
+    return clean_env
+end
+
+# The user site-packages directory is disabled and NCAR's qstat-cache bypassed.
+# The cache answers from a snapshot refreshed every few seconds, which reports
+# a job submitted since the last refresh as "Unknown Job Id" (exit 153) and a
+# finished job in whatever state the snapshot caught it in.
+function scheduler_env(::Union{DerechoBackend, PBSManager})
+    clean_env = Dict{String, String}(ENV)
+    for k in PBS_INHERITED_VARS
+        delete!(clean_env, k)
+    end
+    clean_env["PYTHONNOUSERSITE"] = "1"
+    clean_env["QSCACHE_BYPASS"] = "true"
+    return clean_env
+end
+
+"""
+    query_scheduler_states(manager, job_ids)
+
+States of `job_ids` submitted through `manager` as
+`Dict(id => JobStatus | nothing)`, or `nothing` when the scheduler could not be
+queried. Jobs the scheduler no longer lists are absent from the result.
+
+One query covers every job, so the cost does not grow with the number of
+workers.
+"""
+function query_scheduler_states end
+
+# One `squeue` call for every job of this session, matched by the shared job
+# name. `squeue -j` aborts when any listed id has already left the controller.
+function query_scheduler_states(::SlurmManager, job_ids)
+    cmd = `squeue --name $(worker_jobname()) -h -o "%i %T"`
+    out, err, code = try
+        _run_capturing_output(cmd)
+    catch e
+        @warn "squeue could not be run" exception = e maxlog = 5
+        return nothing
+    end
+    if !iszero(code)
+        @warn "squeue failed with exit code $code: $err" maxlog = 5
+        return nothing
+    end
+    return _parse_squeue_output(out)
+end
+
+# Parse `squeue -h -o "%i %T"` output, one `<id> <STATE>` per line.
+function _parse_squeue_output(out)
+    states = Dict{String, Union{JobStatus, Nothing}}()
+    for line in eachline(IOBuffer(out))
+        tokens = split(line)
+        length(tokens) >= 2 || continue
+        states[String(first(tokens))] = _parse_slurm_state(tokens[2])
+    end
+    return states
+end
+
+# One `qstat` call for `job_ids`. `-x` includes finished jobs. `qstat` exits
+# nonzero when any id is unknown but still reports the others.
+function query_scheduler_states(pm::PBSManager, job_ids)
+    cmd = setenv(`qstat -x -f -F dsv $job_ids`, scheduler_env(pm))
+    out, err, code = try
+        _run_capturing_output(cmd)
+    catch e
+        @warn "qstat could not be run" exception = e maxlog = 5
+        return nothing
+    end
+    if isempty(out) && !iszero(code)
+        @warn "qstat failed with exit code $code: $err" maxlog = 5
+        return nothing
+    end
+    return _parse_qstat_output(out)
+end
+
+# Parse `qstat -f -F dsv` output, one `Job Id: <id>|key = value|...` per line.
+function _parse_qstat_output(out)
+    states = Dict{String, Union{JobStatus, Nothing}}()
+    for line in eachline(IOBuffer(out))
+        m = match(r"^Job Id:\s*([^|\s]+)", line)
+        isnothing(m) && continue
+        states[String(m[1])] = _parse_pbs_state(line)
+    end
+    return states
+end
 
 # Ids of this session's PBS jobs, matched by the shared job name via `qselect`.
 _pbs_worker_job_ids(jobname) = filter(
@@ -346,32 +507,6 @@ worker_cookie() = begin
     Distributed.init_multi()
     cluster_cookie()
 end
-worker_cookie_arg() = `--worker=$(worker_cookie())`
-
-"""
-    SlurmManager(ntasks=get(ENV, "SLURM_NTASKS", 1))
-
-The ClusterManager for Slurm clusters, taking in the number of tasks to request
-with `srun`.
-
-To execute the `srun` command, run `addprocs(SlurmManager(ntasks))`.
-
-Keyword arguments can be passed to `srun`: `addprocs(SlurmManager(ntasks),
-gpus_per_task=1)`.
-
-By default the workers will inherit the running Julia environment.
-
-To run a calibration, call `calibrate(WorkerBackend(), ...)`.
-
-To run functions on a worker, call `remotecall(func, worker_id, args...)`.
-"""
-struct SlurmManager <: ClusterManager
-    ntasks::Integer
-
-    function SlurmManager(ntasks = parse(Int, get(ENV, "SLURM_NTASKS", "1")))
-        new(ntasks)
-    end
-end
 
 # This function needs to exist
 function Distributed.manage(
@@ -385,7 +520,9 @@ function Distributed.manage(
     return nothing
 end
 
-# Where a worker's startup output goes, default to a temp dir
+# Where a worker's startup output goes, default to a temp dir under `exehome`.
+# The job writes this file on the node it runs on, so a caller passing `o` or
+# `output` must give a path on the shared filesystem, not `/tmp`.
 function default_worker_output_base(params, exehome, jobname)
     haskey(params, :o) && return params[:o]
     haskey(params, :output) && return params[:output]
@@ -396,65 +533,75 @@ function default_worker_output_base(params, exehome, jobname)
 end
 
 """
-    submit_workers!(instances_arr, launch_condition; single_cmd, multi_worker_cmd, kwargs...)
+    submit_workers!(instances_arr, launch_condition; kwargs...)
 
-Submit `ntasks` workers and fill `instances_arr` as they connect. Shared by the
-Slurm and PBS `launch` methods.
+Submit `ntasks` workers as batch jobs and fill `instances_arr` as they connect.
+Shared by the Slurm and PBS `launch` methods.
 
-When `workers_per_node == 1`, each worker is submitted on its own with
-`single_cmd(output_file)`. Otherwise the workers are grouped into allocations of
-`workers_per_node` and each allocation is submitted with
-`multi_worker_cmd(log_file, script_file)`, where the script runs its workers as
-background processes (see `multi_worker_script`). Worker output files are named
-from `output_base`.
+Workers are grouped into allocations of `workers_per_node` (one per allocation
+by default). Each allocation gets a script under `output_base` that runs its
+workers (see `single_worker_script` and `multi_worker_script`) and is submitted
+with `submit_cmd(output_file, script_file)` under `env`. `parse_job_id` turns
+the submission command's output into a job id, or `nothing`.
 """
 function submit_workers!(
     instances_arr,
     launch_condition;
+    manager,
     ntasks,
     workers_per_node,
     output_base,
     exename,
     exeflags,
     env,
-    single_cmd,
-    multi_worker_cmd,
+    submit_cmd,
+    parse_job_id,
 )
-    pids = []
+    job_ids = Union{String, Nothing}[]
     output_files = String[]
-    # With one worker per allocation (the default), submit each worker on its
-    # own so they schedule and join the pool independently. With several workers
-    # per allocation, group them into one billed allocation.
-    if workers_per_node == 1
-        for i in 1:ntasks
-            output = "$output_base-$i.out"
-            cmd = single_cmd(output)
-            @info "Starting worker job [$i/$ntasks]: $cmd"
-            push!(pids, open(addenv(cmd, env)))
-            push!(output_files, output)
-        end
-    else
-        counts = workers_per_allocation(ntasks, workers_per_node)
-        njobs = length(counts)
-        for (j, nworkers) in enumerate(counts)
+    counts = workers_per_allocation(ntasks, workers_per_node)
+    njobs = length(counts)
+    for (j, nworkers) in enumerate(counts)
+        if workers_per_node == 1
+            outputs = ["$output_base-$j.out"]
+            script_path = "$output_base-$j.sh"
+            write(script_path, single_worker_script(exename, exeflags))
+            cmd = submit_cmd(only(outputs), script_path)
+        else
             outputs = [abspath("$output_base-$j-$g.out") for g in 1:nworkers]
             script_path = "$output_base-multiworker-$j.sh"
             write(script_path, multi_worker_script(exename, exeflags, outputs))
-            chmod(script_path, 0o700)
-            cmd = multi_worker_cmd("$output_base-job$j.log", script_path)
-            @info "Starting worker job [$j/$njobs] with $nworkers workers per node: $cmd"
-            pid = open(addenv(cmd, env))
-            append!(pids, fill(pid, nworkers))
-            append!(output_files, outputs)
+            cmd = submit_cmd("$output_base-job$j.log", script_path)
         end
+        chmod(script_path, 0o700)
+        @info "Submitting worker job [$j/$njobs] with $nworkers worker(s): $cmd"
+        out, err, code = _run_capturing_output(setenv(cmd, env))
+        job_id = iszero(code) ? parse_job_id(out) : nothing
+        if isnothing(job_id)
+            @warn "Worker job [$j/$njobs] was not submitted. Submission exited with $code: $(isempty(err) ? out : err)"
+        else
+            @info "Worker job [$j/$njobs] submitted as job $job_id"
+        end
+        append!(job_ids, fill(job_id, nworkers))
+        append!(output_files, outputs)
     end
     return poll_files_for_worker_startup(
+        manager,
+        job_ids,
         output_files,
-        pids,
         instances_arr,
         launch_condition,
     )
 end
+
+# Job id from `sbatch --parsable` output, which is `<id>` or `<id>;<cluster>`.
+function _parse_sbatch_output(out)
+    m = match(r"^\d+", out)
+    return isnothing(m) ? nothing : String(m.match)
+end
+
+# Job id from `qsub` output, which is the id alone.
+_parse_qsub_output(out) = isempty(out) ? nothing : String(out)
 
 function Distributed.launch(
     sm::SlurmManager,
@@ -474,19 +621,19 @@ function Distributed.launch(
     jobname = worker_jobname()
     output_base = default_worker_output_base(params, exehome, jobname)
 
-    base = `srun -J $jobname -n 1 -D $exehome $worker_args`
+    base = `sbatch --parsable -J $jobname -n 1 -D $exehome $worker_args`
     return submit_workers!(
         instances_arr,
         launch_condition;
+        manager = sm,
         ntasks = sm.ntasks,
         workers_per_node = get(params, :workers_per_node, 1),
         output_base,
         exename,
         exeflags,
-        env,
-        single_cmd = output ->
-            `$base -o $output -- $exename $exeflags $(worker_cookie_arg())`,
-        multi_worker_cmd = (log, script) -> `$base -o $log -- bash $script`,
+        env = merge(scheduler_env(sm), env),
+        submit_cmd = (output, script) -> `$base -o $output $script`,
+        parse_job_id = _parse_sbatch_output,
     )
 end
 
@@ -539,36 +686,58 @@ function propagate_env_vars!(env)
 end
 
 # Poll one output file per worker, pushing each worker's `WorkerConfig` as it
-# appears. `pids[i]` is the launch process that owns `output_files[i]`.
-# Tolerant of partial success: a worker whose launch process errors, or that
-# never starts within the polling window, is logged and skipped so that workers
-# which did start remain usable. Throws only if no workers start at all.
+# appears. `job_ids[i]` is the scheduler job that owns `output_files[i]`, or
+# `nothing` if the submission failed. Tolerant of partial success: a worker
+# whose job ends before it connects, or that never starts within the polling
+# window, is logged and skipped so that workers which did start remain usable.
+# Throws only if no workers start at all.
 function poll_files_for_worker_startup(
+    manager,
+    job_ids,
     output_files,
-    pids,
     instances_arr,
     launch_condition,
 )
-    @assert length(output_files) == length(pids)
+    @assert length(output_files) == length(job_ids)
     ntasks = length(output_files)
     t_start = time()
     # This regex will match the worker's socket, ex: julia_worker:9015#169.254.3.1
     julia_worker_regex = r"([\w]+):([\d]+)#(\d{1,3}.\d{1,3}.\d{1,3}.\d{1,3})"
     retry_delays = ExponentialBackOff(720, 1.0, 30.0, 1.5, 0.1)
     t_waited = 0
+    t_last_query = -Inf
     registered = Set{Int}()   # indices of workers that have registered
-    failed = Set{Int}()       # indices of workers whose launch process errored
+    failed = Set{Int}()       # indices of workers whose job ended first
+    for i in 1:ntasks
+        isnothing(job_ids[i]) && push!(failed, i)
+    end
 
     for retry_delay in [0.0, retry_delays...]
         t_waited = round(Int, time() - t_start)
+        # A worker registers by printing its host and port to its output file.
+        # If its job has ended without doing so it will never connect. One
+        # scheduler query covers all jobs, at most every SCHEDULER_POLL_INTERVAL
+        # seconds and not within UNKNOWN_JOB_GRACE seconds of submission, when
+        # a job can be missing from the listing because it has not appeared yet
+        if t_waited > UNKNOWN_JOB_GRACE &&
+           time() - t_last_query >= SCHEDULER_POLL_INTERVAL
+            t_last_query = time()
+            waiting = setdiff(1:ntasks, registered, failed)
+            states = query_scheduler_states(
+                manager,
+                unique(job_ids[i] for i in waiting),
+            )
+            if !isnothing(states)
+                for i in waiting
+                    status = get(states, job_ids[i], COMPLETED)
+                    (status == COMPLETED || status == FAILED) || continue
+                    @warn "Job $(job_ids[i]) for worker $i/$ntasks ended before connecting; skipping. Check $(output_files[i])."
+                    push!(failed, i)
+                end
+            end
+        end
         for i in 1:ntasks
             (i in registered || i in failed) && continue
-            pid = pids[i]
-            if process_exited(pid) && pid.exitcode != 0
-                @warn "Launch process for worker $i/$ntasks exited with code $(pid.exitcode); skipping. Check the job scheduler output."
-                push!(failed, i)
-                continue
-            end
             job_output_file = output_files[i]
             (isfile(job_output_file) && filesize(job_output_file) > 0) ||
                 continue
@@ -576,7 +745,7 @@ function poll_files_for_worker_startup(
                 for line in eachline(f)
                     re_match = match(julia_worker_regex, line)
                     if !isnothing(re_match)
-                        config = worker_config(re_match, pid)
+                        config = worker_config(re_match, job_ids[i])
                         push!(registered, i)
                         push!(instances_arr, config)
                         @info "Worker ready after $(t_waited)s on host $(config.host), port $(config.port) (worker $i/$ntasks)"
@@ -607,37 +776,13 @@ function poll_files_for_worker_startup(
     return nothing
 end
 
-function worker_config(worker_launch_details, pid)
+# `userdata` carries the worker's scheduler job id.
+function worker_config(worker_launch_details, job_id)
     config = WorkerConfig()
     config.port = parse(Int, worker_launch_details[2])
     config.host = strip(worker_launch_details[3])
-    config.userdata = pid
+    config.userdata = job_id
     return config
-end
-
-# TODO: Add examples of usage for SlurmManager and PBSManager in the docstrings
-# Things like `addprocs(SlurmManager(2), t = "00:10:00",ngpus=4)`, then `remotecall` or `calibrate`
-"""
-    PBSManager(ntasks)
-
-The ClusterManager for PBS/Torque clusters, taking in the number of tasks to
-request with `qsub`.
-
-To execute the `qsub` command, run `addprocs(PBSManager(ntasks))`. Unlike the
-[`SlurmManager`](@ref), this will not nest scheduled jobs, but will acquire new
-resources.
-
-Keyword arguments can be passed to `qsub`: `addprocs(PBSManager(ntasks),
-nodes=2)`
-
-By default, the workers will inherit the running Julia environment.
-
-To run a calibration, call `calibrate(WorkerBackend(), ...)`
-
-To run functions on a worker, call `remotecall(func, worker_id, args...)`
-"""
-struct PBSManager <: ClusterManager
-    ntasks::Integer
 end
 
 function Distributed.manage(
@@ -669,8 +814,6 @@ function Distributed.launch(
 
     worker_args = parse_pbs_worker_params(params)
     jobname = worker_jobname()
-    # PBS rejects `/tmp` for `-o`, so the temp-dir default must be on the shared
-    # working filesystem under `exehome` (which it is).
     output_base = default_worker_output_base(params, exehome, jobname)
 
     # qsub: -V inherit env, -N job name, -j oe merge stdout/stderr, -o output.
@@ -678,21 +821,42 @@ function Distributed.launch(
     return submit_workers!(
         instances_arr,
         launch_condition;
+        manager = pm,
         ntasks = pm.ntasks,
         workers_per_node = get(params, :workers_per_node, 1),
         output_base,
         exename,
         exeflags,
-        env,
-        single_cmd = output ->
-            `$base -o $output -- $exename $exeflags $(worker_cookie_arg())`,
-        multi_worker_cmd = (log, script) -> `$base -o $log $script`,
+        env = merge(scheduler_env(pm), env),
+        submit_cmd = (output, script) -> `$base -o $output $script`,
+        parse_job_id = _parse_qsub_output,
     )
 end
 
 # Quote `s` for bash. Wrap the string in single quotes and replace each
 # existing single quote ' with its escaped version '\''
 shell_quote(s) = "'" * replace(string(s), "'" => "'\\''") * "'"
+
+# Shell-quoted command line that starts a Julia worker.
+_worker_command_string(exename, exeflags) = join(
+    shell_quote.([
+        string(exename),
+        exeflags.exec...,
+        "--worker=$(worker_cookie())",
+    ]),
+    ' ',
+)
+
+"""
+    single_worker_script(exename, exeflags)
+
+Bash script that runs one Julia worker in the foreground, so the job lives as
+long as the worker.
+"""
+single_worker_script(exename, exeflags) = """
+#!/bin/bash
+exec $(_worker_command_string(exename, exeflags))
+"""
 
 """
     multi_worker_script(exename, exeflags, worker_outputs)
@@ -705,14 +869,7 @@ line. The script waits on all workers so the allocation stays alive while
 any of them runs.
 """
 function multi_worker_script(exename, exeflags, worker_outputs)
-    worker_cmd = join(
-        shell_quote.([
-            string(exename),
-            exeflags.exec...,
-            "--worker=$(worker_cookie())",
-        ]),
-        ' ',
-    )
+    worker_cmd = _worker_command_string(exename, exeflags)
     lines = ["#!/bin/bash"]
     for (g, output) in enumerate(worker_outputs)
         push!(
@@ -963,6 +1120,9 @@ that workers joining later get the same setup.
 - `time::Int = DEFAULT_WALLTIME`: Walltime in minutes, will be formatted
   appropriately for the cluster system
 - `workers_per_node::Int = 1`: Number of workers to run per node.
+- `o`: Base path for the workers' output files, which the job writes on the
+  node it runs on, so it must be on the shared filesystem. Defaults to a
+  `.julia_worker_*` directory in the working directory.
 - `kwargs`: Other kwargs can be passed directly through to `addprocs`.
 
 # Returns
