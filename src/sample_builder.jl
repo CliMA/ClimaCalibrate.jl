@@ -14,13 +14,25 @@ Requires ClimaAnalysis to be loaded.
 """
 module SampleBuilder
 
-export build_samples,
+export AbstractSampleCollection,
+    build_samples,
     build_samples_by_times,
     num_samples,
     reconstruct_col,
     get_samples,
     get_metadata,
-    var_indices
+    var_indices,
+    base
+
+"""
+    AbstractSampleCollection
+
+Supertype for objects representing a collection of samples and their associated
+metadata. The concrete types are
+[`SampleCollection`](@ref ClimaCalibrateClimaAnalysisExt.SampleCollection) and
+[`TransformedSampleCollection`](@ref ClimaCalibrateClimaAnalysisExt.TransformedSampleCollection).
+"""
+abstract type AbstractSampleCollection end
 
 function build_samples end
 
@@ -35,5 +47,9 @@ function get_samples end
 function get_metadata end
 
 function var_indices end
+
+function base end
+
+include("transform.jl")
 
 end

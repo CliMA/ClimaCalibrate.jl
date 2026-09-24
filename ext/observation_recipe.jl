@@ -358,7 +358,7 @@ end
 """
     observation(
         covar_estimator::AbstractCovarianceEstimator,
-        sample_collection::SampleCollection,
+        sample_collection::AbstractSampleCollection,
         i::Integer;
         name = nothing,
     )
@@ -366,10 +366,14 @@ end
 Return an `EKP.Observation` with the `i`th sample of `sample_collection` as the
 observation, a covariance matrix defined by `covar_estimator`, `name`
 determined from the short names of the observation, and metadata.
+
+If `sample_collection` is a `TransformedSampleCollection`, the transforms are
+applied only when computing the covariance matrix. The observation and metadata
+come from the base `SampleCollection`.
 """
 function ObservationRecipe.observation(
     covar_estimator::AbstractCovarianceEstimator,
-    sample_collection::SampleCollection,
+    sample_collection::AbstractSampleCollection,
     i::Integer;
     name = nothing,
 )
@@ -377,8 +381,10 @@ function ObservationRecipe.observation(
     1 <= i <= total_samples || error(
         "The number of samples is $total_samples, but the $(i)th sample is requested to used as the observation",
     )
-    stacked_sample = collect(view(get_samples(sample_collection), :, i))
-    metadata = collect(view(get_metadata(sample_collection), :, i))
+    # Transforms only affect the covariance; the observation is untransformed
+    base_sample_collection = base(sample_collection)
+    stacked_sample = collect(view(get_samples(base_sample_collection), :, i))
+    metadata = collect(view(get_metadata(base_sample_collection), :, i))
 
     any(==(""), ClimaAnalysis.short_name.(metadata)) && @warn(
         "There are OutputVar(s) with no short name. You will not be able to use GEnsembleBuilder"
@@ -467,19 +473,19 @@ concatenated to match `all_metadata`, an iterable of
 `ClimaAnalysis.Var.Metadata`.
 """
 function _flat_lat_weights(all_metadata; min_cosd_lat = 0.1)
-    parts = Vector[]
-    for metadata in all_metadata
-        data_length = ClimaAnalysis.flattened_length(metadata)
-        var = ClimaAnalysis.unflatten(metadata, ones(data_length))
-        push!(
-            parts,
-            ClimaAnalysis.flatten(
-                _lat_weights_var(var; min_cosd_lat),
-                metadata,
-            ).data,
-        )
-    end
-    return reduce(vcat, parts)
+    return reduce(
+        vcat,
+        [_flat_lat_weights(md; min_cosd_lat) for md in all_metadata],
+    )
+end
+
+function _flat_lat_weights(
+    metadata::ClimaAnalysis.Var.Metadata;
+    min_cosd_lat = 0.1,
+)
+    data_length = ClimaAnalysis.flattened_length(metadata)
+    var = ClimaAnalysis.unflatten(metadata, ones(data_length))
+    return ClimaAnalysis.flatten(_lat_weights_var(var; min_cosd_lat), metadata).data
 end
 
 """
