@@ -142,10 +142,6 @@ end
     @test_throws ErrorException ObservationRecipe.SVDplusDCovariance(
         model_error_scale = -2.0,
     )
-    @test_throws ErrorException ObservationRecipe.SVDplusDCovariance(
-        use_latitude_weights = true,
-        min_cosd_lat = -0.1,
-    )
 end
 
 @testset "Lat weights" begin
@@ -315,6 +311,13 @@ end
             ext._lat_weights_var(window_nan_var, min_cosd_lat = 0.2),
         ).data,
     )
+
+    # Transforms are not supported
+    covar_estimator = ObservationRecipe.ScalarCovariance(scalar = 10.0)
+    @test_throws r"does not support transforms" ObservationRecipe.covariance(
+        covar_estimator,
+        sample_collection |> SampleBuilder.PerCollectionWeighting(2.0),
+    )
 end
 
 @testset "ScalarCovariance for OutputVars with no time dimension" begin
@@ -357,58 +360,6 @@ end
     )
 end
 
-@testset "Latitude weights to matrix of samples" begin
-    lat = [-90.0, -30.0, 30.0, 90.0]
-    lon = [-60.0, -30.0, 0.0, 30.0, 60.0]
-    time = ClimaAnalysis.Utils.date_to_time.(
-        Dates.DateTime(2007, 12),
-        [Dates.DateTime(i, 12, 1) for i in 2007:2009],
-    )
-    var =
-        TemplateVar() |>
-        add_dim("time", time, units = "s") |>
-        add_dim("lon", lon, units = "degrees") |>
-        add_dim("lat", lat, units = "degrees") |>
-        add_attribs(
-            short_name = "hi",
-            long_name = "hello",
-            start_date = "2007-12-1",
-            blah = "blah2",
-        ) |>
-        one_to_n_data(collected = true) |>
-        initialize
-
-    sample_date_ranges = [
-        (Dates.DateTime(i, 12, 1), Dates.DateTime(i, 12, 1)) for i in 2007:2009
-    ]
-
-    sc = SampleBuilder.build_samples_by_times(
-        [var],
-        sample_date_ranges;
-        FT = Float64,
-    )
-    stacked_sample_matrix_no_lat_weights = copy(sc.samples)
-    stacked_sample_matrix_with_lat_weights = copy(sc.samples)
-
-    ext._apply_lat_weights_to_samples!(
-        stacked_sample_matrix_with_lat_weights,
-        sc.metadata[:, 1],
-        min_cosd_lat = 0.15,
-    )
-    time_slice = ClimaAnalysis.slice(var, time = Dates.DateTime(2007, 12, 1))
-    lat_weights_per_column = sqrt.(
-        ClimaAnalysis.flatten(
-            ext._lat_weights_var(time_slice, min_cosd_lat = 0.15),
-        ).data,
-    )
-    lat_weights_per_column =
-        reshape(lat_weights_per_column, length(lat_weights_per_column), 1)
-    @test isequal(
-        stacked_sample_matrix_with_lat_weights,
-        stacked_sample_matrix_no_lat_weights .* lat_weights_per_column,
-    )
-end
-
 @testset "Covariance with latitudes that differ across samples" begin
     lats1 = [-90.0, -30.0, 30.0, 90.0]
     lats2 = [-60.0, -20.0, 20.0, 60.0]
@@ -426,16 +377,25 @@ end
         ignore_dims = ("lat",),
     )
 
-    for covar_estimator in (
-        ObservationRecipe.ScalarCovariance(use_latitude_weights = true),
-        ObservationRecipe.SVDplusDCovariance(use_latitude_weights = true),
-        ObservationRecipe.SeasonalDiagonalCovariance(
-            use_latitude_weights = true,
+    for (covar_estimator, collection) in (
+        (
+            ObservationRecipe.ScalarCovariance(use_latitude_weights = true),
+            sample_collection,
+        ),
+        (
+            ObservationRecipe.SVDplusDCovariance(),
+            sample_collection |> SampleBuilder.LatitudeWeighting(),
+        ),
+        (
+            ObservationRecipe.SeasonalDiagonalCovariance(
+                use_latitude_weights = true,
+            ),
+            sample_collection,
         ),
     )
         @test_throws r"latitudes of sample 2" ObservationRecipe.covariance(
             covar_estimator,
-            sample_collection,
+            collection,
         )
     end
 
@@ -532,20 +492,14 @@ end
     )
 
     # Test latitude weights
-    covar_estimator_lat_weights = ObservationRecipe.SVDplusDCovariance(
-        use_latitude_weights = true,
-        min_cosd_lat = 0.2,
-    )
-    covar_estimator_no_lat_weights =
-        ObservationRecipe.SVDplusDCovariance(use_latitude_weights = false)
+    covar_estimator = ObservationRecipe.SVDplusDCovariance()
     svd_plus_d_covar_with_lat_weights = ObservationRecipe.covariance(
-        covar_estimator_lat_weights,
-        sample_collection,
+        covar_estimator,
+        sample_collection |>
+        SampleBuilder.LatitudeWeighting(min_cosd_lat = 0.2),
     )
-    svd_plus_d_covar_with_no_lat_weights = ObservationRecipe.covariance(
-        covar_estimator_no_lat_weights,
-        sample_collection,
-    )
+    svd_plus_d_covar_with_no_lat_weights =
+        ObservationRecipe.covariance(covar_estimator, sample_collection)
     # Note: Computing the SVD part of the covariance matrix is random, so it is
     # difficult to test. As such, we check that the result is different when
     # latitude weights is not applied
@@ -556,6 +510,38 @@ end
     @test any(
         .!isapprox.(reconstruct(svd_plus_d_covar_with_lat_weights.svd_cov), reconstruct(svd_plus_d_covar_with_no_lat_weights.svd_cov)),
     )
+
+    # Variables without a latitude dimension are not latitude weighted
+    lon_var =
+        TemplateVar() |>
+        add_dim("time", time, units = "s") |>
+        add_dim("lon", lon, units = "degrees") |>
+        add_attribs(short_name = "hello", start_date = "2007-12-1") |>
+        one_to_n_data(collected = true) |>
+        initialize
+    lon_var = ClimaAnalysis.average_season_across_time(lon_var)
+    lat_and_lon_collection = SampleBuilder.build_samples_by_times(
+        [var, lon_var],
+        sample_date_ranges;
+        FT = Float64,
+    )
+    lat_weighted_covar = ObservationRecipe.covariance(
+        ObservationRecipe.SVDplusDCovariance(model_error_scale = 0.05),
+        lat_and_lon_collection |> SampleBuilder.LatitudeWeighting(),
+    )
+    unweighted_covar = ObservationRecipe.covariance(
+        ObservationRecipe.SVDplusDCovariance(model_error_scale = 0.05),
+        lat_and_lon_collection,
+    )
+    # Weighting the samples by sqrt(w) scales the model error scale term by w
+    lat_rows, lon_rows = SampleBuilder.var_indices(lat_and_lon_collection)
+    lat_weights = ext._flat_lat_weights(
+        first(ext._metadata_of_first_sample(lat_and_lon_collection)),
+    )
+    @test lat_weighted_covar.diag_cov.diag[lat_rows] ≈
+          lat_weights .* unweighted_covar.diag_cov.diag[lat_rows]
+    @test lat_weighted_covar.diag_cov.diag[lon_rows] ==
+          unweighted_covar.diag_cov.diag[lon_rows]
 
     # Test rank
     covar_estimator_rank0 = ObservationRecipe.SVDplusDCovariance(; rank = 0)
@@ -602,6 +588,31 @@ end
         ObservationRecipe.covariance(covar_estimator, sample_collection32)
     @test eltype(svd_plus_d_covar.diag_cov.diag) == Float32
     @test eltype(svd_plus_d_covar.svd_cov.S) == Float32
+
+    # Lazy and eager sample collections give the same covariance matrix, with
+    # and without latitude weighting
+    covar_estimator = ObservationRecipe.SVDplusDCovariance(
+        model_error_scale = 0.05,
+        regularization = 1e-6,
+    )
+    per_collection_weighting = SampleBuilder.PerCollectionWeighting(2.0)
+    for transformed_collection in (
+        sample_collection |> per_collection_weighting,
+        sample_collection |>
+        per_collection_weighting |>
+        SampleBuilder.LatitudeWeighting(),
+    )
+        eager_collection = SampleBuilder.apply_transform(transformed_collection)
+        lazy_covar = ObservationRecipe.covariance(
+            covar_estimator,
+            transformed_collection,
+        )
+        eager_covar =
+            ObservationRecipe.covariance(covar_estimator, eager_collection)
+        @test lazy_covar.svd_cov.U == eager_covar.svd_cov.U
+        @test lazy_covar.svd_cov.S == eager_covar.svd_cov.S
+        @test lazy_covar.diag_cov == eager_covar.diag_cov
+    end
 
     # Error handling: negative rank
     @test_throws ErrorException ObservationRecipe.SVDplusDCovariance(rank = -1)
@@ -888,8 +899,6 @@ end
         sample_collection,
     ).diag_cov == Diagonal(fill(2.0, 4))
 
-    # use_weighted_samples_for_diagonal controls whether the diagonal term is
-    # computed from the latitude weighted samples
     lat = [-90.0, -30.0, 30.0, 90.0]
     lon = [-60.0, -30.0, 0.0, 30.0, 60.0]
     lat_var =
@@ -935,27 +944,12 @@ end
         sample_collection,
     )
 
+    lat_weighting = SampleBuilder.LatitudeWeighting(min_cosd_lat = 0.2)
     diag_cov_weighted = ObservationRecipe.covariance(
-        ObservationRecipe.SVDplusDCovariance(
-            mes_term;
-            use_latitude_weights = true,
-            min_cosd_lat = 0.2,
-        ),
-        lat_sample_collection,
+        ObservationRecipe.SVDplusDCovariance(mes_term),
+        lat_sample_collection |> lat_weighting,
     ).diag_cov
     diag_cov_unweighted = ObservationRecipe.covariance(
-        ObservationRecipe.SVDplusDCovariance(
-            mes_term;
-            use_latitude_weights = true,
-            use_weighted_samples_for_diagonal = false,
-            min_cosd_lat = 0.2,
-        ),
-        lat_sample_collection,
-    ).diag_cov
-
-    # Computing the diagonal term from the samples without latitude weighting
-    # is the same as not using latitude weights at all for the diagonal
-    @test diag_cov_unweighted == ObservationRecipe.covariance(
         ObservationRecipe.SVDplusDCovariance(mes_term),
         lat_sample_collection,
     ).diag_cov
@@ -970,17 +964,26 @@ end
     var_term = ObservationRecipe.VarianceDiagonal()
     @test ObservationRecipe.covariance(
         ObservationRecipe.SVDplusDCovariance(
-            var_term .+ ObservationRecipe.ScalarDiagonal(1.0);
-            use_latitude_weights = true,
-            min_cosd_lat = 0.2,
+            var_term .+ ObservationRecipe.ScalarDiagonal(1.0),
         ),
-        lat_sample_collection,
+        lat_sample_collection |> lat_weighting,
     ).diag_cov ≈ Diagonal(
         ObservationRecipe.covariance(
             ObservationRecipe.SVDplusDCovariance(var_term),
             lat_sample_collection,
         ).diag_cov.diag .* lat_weights .+ 1.0,
     )
+
+    # The transforms of the sample collection are applied to the diagonal term
+    for (transform, factor) in (
+        (SampleBuilder.PerVariableWeighting([2.0]), 4.0),
+        (SampleBuilder.PerCollectionWeighting(3.0), 9.0),
+    )
+        @test ObservationRecipe.covariance(
+            ObservationRecipe.SVDplusDCovariance(mes_term),
+            lat_sample_collection |> transform,
+        ).diag_cov ≈ factor * diag_cov_unweighted
+    end
 end
 
 @testset "Seasonal diagonal covariance" begin
@@ -1105,6 +1108,21 @@ end
           (1 / 2) *
           Diagonal(ClimaAnalysis.flatten(ext._lat_weights_var(sliced_var)).data)
 
+    # Transforms are applied
+    covar_estimator = ObservationRecipe.SeasonalDiagonalCovariance(
+        model_error_scale = 0.05,
+        regularization = 1e-6,
+    )
+    transformed_collection =
+        sample_collection |> SampleBuilder.PerCollectionWeighting(2.0)
+    @test ObservationRecipe.covariance(
+        covar_estimator,
+        transformed_collection,
+    ) == ObservationRecipe.covariance(
+        covar_estimator,
+        SampleBuilder.apply_transform(transformed_collection),
+    )
+
     # Check float type
     covar_estimator = ObservationRecipe.SeasonalDiagonalCovariance()
     sample_collection32 = SampleBuilder.build_samples_by_times(
@@ -1138,6 +1156,14 @@ end
     @test_throws ErrorException ObservationRecipe.covariance(
         covar_estimator,
         one_sample_collection,
+    )
+
+    # The LatitudeWeighting transform is not supported
+    @test_throws r"not supported by SeasonalDiagonalCovariance" ObservationRecipe.covariance(
+        covar_estimator,
+        lat_sample_collection |>
+        SampleBuilder.LatitudeWeighting() |>
+        SampleBuilder.PerCollectionWeighting(2.0),
     )
 
     seasonal_time = ClimaAnalysis.Utils.date_to_time.(
@@ -1338,6 +1364,24 @@ end
     @test neg_unflattened_var.attributes == neg_windowed_var.attributes
     @test neg_unflattened_var.dim_attributes == neg_windowed_var.dim_attributes
     @test neg_unflattened_var.dims == neg_windowed_var.dims
+
+    # With a TransformedSampleCollection, the observation and metadata come from
+    # the untransformed samples and the covariance matrix comes from the
+    # transformed samples
+    transformed_collection =
+        sample_collection |> SampleBuilder.PerCollectionWeighting(2.0)
+    transformed_obs = ObservationRecipe.observation(
+        covar_estimator,
+        transformed_collection,
+        1,
+    )
+    @test transformed_obs.samples == obs.samples
+    @test transformed_obs.metadata == obs.metadata
+    @test only(EKP.get_covs(transformed_obs)).diag_cov ==
+          ObservationRecipe.covariance(
+        covar_estimator,
+        SampleBuilder.apply_transform(transformed_collection),
+    ).diag_cov
 
     # Error handling for out-of-bounds sample index
     @test_throws ErrorException ObservationRecipe.observation(

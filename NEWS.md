@@ -16,6 +16,40 @@ main
   unchanged; unexported helpers such as `GLOBAL_WORKER_POOL` are now under
   `Backend.Workers`.
 
+### Breaking
+
+- The `use_latitude_weights`, `min_cosd_lat`, and
+  `use_weighted_samples_for_diagonal` keyword arguments of `SVDplusDCovariance`
+  are removed. To apply latitude weighting, pipe the sample collection into a
+  `LatitudeWeighting` before passing it to `observation`. For example, replace
+  `use_latitude_weights = true, min_cosd_lat = x` with
+  `sample_collection |> SampleBuilder.LatitudeWeighting(min_cosd_lat = x)`. The
+  diagonal term is always computed from the weighted samples, which was the
+  default [#381](https://github.com/CliMA/ClimaCalibrate.jl/pull/381).
+
+### Observation pipeline
+
+- Add transforms, which weight the samples used to estimate the covariance
+  matrix without changing the observation
+  [#381](https://github.com/CliMA/ClimaCalibrate.jl/pull/381).
+  - `sample_collection |> transform` returns a `TransformedSampleCollection`.
+    Passing it to the `observation` function weights only the covariance matrix.
+  - The transforms are `LatitudeWeighting`, `PerVariableWeighting`, and
+    `PerCollectionWeighting`. They are `AbstractWeighting`s, which multiply the
+    samples by positive weights.
+  - `SVDplusDCovariance` and `SeasonalDiagonalCovariance` apply the transforms,
+    but `SeasonalDiagonalCovariance` throws an error for a `LatitudeWeighting`.
+    `ScalarCovariance` throws an error for any transform.
+  - A custom covariance estimator can now receive a
+    `TransformedSampleCollection`. Call `SampleBuilder.apply_transform` or
+    `SampleBuilder.base` on it to get a `SampleCollection`.
+- With a `LatitudeWeighting` transform, `SVDplusDCovariance` now skips the
+  variables without a latitude dimension instead of throwing an error. It still
+  throws an error if no variable has one. With `use_latitude_weights = true`,
+  `ScalarCovariance` and `SeasonalDiagonalCovariance` still throw an error for
+  any variable without a latitude dimension
+  [#381](https://github.com/CliMA/ClimaCalibrate.jl/pull/381).
+
 v0.6.0
 -------
 - Slurm workers are submitted with `sbatch` instead of `srun`, so each is an
