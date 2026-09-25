@@ -317,10 +317,11 @@ The samples used to compute the covariance matrix come from the
   `regularization * I` is added to the covariance matrix. See
   [`QuantileRegularization`](@ref) for another option for regularization.
 
-- `latitude_weighting`: Apply the latitude weighting to the matrix of samples.
-  Without it the weight grows without bound toward the poles, where `cosd(lat)`
-  reaches zero, and the diagonal entries span so many orders of magnitude that
-  the covariance is badly conditioned.
+- `latitude_weighting`: A [`LatitudeWeighting`](@ref
+  ClimaCalibrate.SampleBuilder.LatitudeWeighting) applied to the matrix of
+  samples before the covariance matrix is computed, or `nothing` for no latitude
+  weighting. An error is thrown if the sample collection already has a
+  `LatitudeWeighting` transform.
 
 - `use_weighted_samples_for_diagonal`: If `true` and `latitude_weighting` is not
   `nothing`, then the diagonal term is computed from the latitude weighted
@@ -338,11 +339,11 @@ function SVDplusDCovariance(;
     model_error_scale = 0.0,
     regularization = 0.0,
     latitude_weighting = nothing,
-    min_cosd_lat = nothing,
+    use_weighted_samples_for_diagonal = true,
     rank = nothing,
     # Deprecated keyword arguments
     use_latitude_weights = nothing,
-    use_weighted_samples_for_diagonal = true,
+    min_cosd_lat = nothing,
 )
     model_error_scale < zero(model_error_scale) &&
         error("Model_error_scale ($model_error_scale) should not be negative")
@@ -381,10 +382,11 @@ constructor is the same as passing
 
 # Keyword Arguments
 
-- `latitude_weighting`: Apply the latitude weighting to the matrix of samples.
-  Without it the weight grows without bound toward the poles, where `cosd(lat)`
-  reaches zero, and the diagonal entries span so many orders of magnitude that
-  the covariance is badly conditioned.
+- `latitude_weighting`: A [`LatitudeWeighting`](@ref
+  ClimaCalibrate.SampleBuilder.LatitudeWeighting) applied to the matrix of
+  samples before the covariance matrix is computed, or `nothing` for no latitude
+  weighting. An error is thrown if the sample collection already has a
+  `LatitudeWeighting` transform.
 
 - `use_weighted_samples_for_diagonal`: If `true` and `latitude_weighting` is not
   `nothing`, then the diagonal term is computed from the latitude weighted
@@ -401,10 +403,11 @@ constructor is the same as passing
 function SVDplusDCovariance(
     diagonal::AbstractDiagonalTerm;
     latitude_weighting = nothing,
-    use_latitude_weights = nothing,
     use_weighted_samples_for_diagonal = true,
-    min_cosd_lat = nothing,
     rank = nothing,
+    # Deprecated keyword arguments
+    use_latitude_weights = nothing,
+    min_cosd_lat = nothing,
 )
     latitude_weighting = _latitude_weighting(
         latitude_weighting,
