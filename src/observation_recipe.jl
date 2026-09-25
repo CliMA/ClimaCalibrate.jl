@@ -317,38 +317,32 @@ The samples used to compute the covariance matrix come from the
   `regularization * I` is added to the covariance matrix. See
   [`QuantileRegularization`](@ref) for another option for regularization.
 
-- `latitude_weighting`: TODO
-
-- `use_latitude_weights`: Deprecated, use `latitude_weighting` instead. If
-  `true`, then latitude weighting is applied to the covariance matrix. Latitude weighting is multiplying the columns of the matrix
-  of samples by `1 / sqrt(max(cosd(lat), 0.1))`. See the keyword argument
-  `min_cosd_lat` for more information.
+- `latitude_weighting`: Apply the latitude weighting to the matrix of samples.
+  Without it the weight grows without bound toward the poles, where `cosd(lat)`
+  reaches zero, and the diagonal entries span so many orders of magnitude that
+  the covariance is badly conditioned.
 
 - `use_weighted_samples_for_diagonal`: If `true` and `latitude_weighting` is not
   `nothing`, then the diagonal term is computed from the latitude weighted
   samples. Otherwise, the diagonal term is computed from the samples without
   latitude weighting. This has no effect when `latitude_weighting` is `nothing`.
 
-- `min_cosd_lat`: Deprecated, use
-  `latitude_weighting = LatitudeWeighting(; min_cosd_lat)` instead. Control the
-  minimum latitude weight when
-  `use_latitude_weights` is `true`. The weight is
-  `1 / max(cosd(lat), min_cosd_lat)`, so this is the largest weight any point
-  can be given, `1 / min_cosd_lat`. Without it the weight grows without bound
-  toward the poles, where `cosd(lat)` reaches zero, and the diagonal entries
-  span so many orders of magnitude that the covariance is badly conditioned.
-
 - `rank`: Rank of the singular value decomposition (SVD). If `nothing` is passed
   in, then the rank is automatically inferred from the data.
+
+!!! warning "Deprecated keyword arguments"
+    The keyword arguments `use_latitude_weights` and `min_cosd_lat` are
+    deprecated and have been replaced by `latitude_weighting`.
 """
 function SVDplusDCovariance(;
     model_error_scale = 0.0,
     regularization = 0.0,
     latitude_weighting = nothing,
-    use_latitude_weights = nothing,
-    use_weighted_samples_for_diagonal = true,
     min_cosd_lat = nothing,
     rank = nothing,
+    # Deprecated keyword arguments
+    use_latitude_weights = nothing,
+    use_weighted_samples_for_diagonal = true,
 )
     model_error_scale < zero(model_error_scale) &&
         error("Model_error_scale ($model_error_scale) should not be negative")
@@ -387,29 +381,22 @@ constructor is the same as passing
 
 # Keyword Arguments
 
-- `latitude_weighting`: TODO
-
-- `use_latitude_weights`: Deprecated, use `latitude_weighting` instead. If
-  `true`, then latitude weighting is applied to the covariance matrix. Latitude weighting is multiplying the columns of the matrix
-  of samples by `1 / sqrt(max(cosd(lat), 0.1))`. See the keyword argument
-  `min_cosd_lat` for more information.
+- `latitude_weighting`: Apply the latitude weighting to the matrix of samples.
+  Without it the weight grows without bound toward the poles, where `cosd(lat)`
+  reaches zero, and the diagonal entries span so many orders of magnitude that
+  the covariance is badly conditioned.
 
 - `use_weighted_samples_for_diagonal`: If `true` and `latitude_weighting` is not
   `nothing`, then the diagonal term is computed from the latitude weighted
   samples. Otherwise, the diagonal term is computed from the samples without
   latitude weighting. This has no effect when `latitude_weighting` is `nothing`.
 
-- `min_cosd_lat`: Deprecated, use
-  `latitude_weighting = LatitudeWeighting(; min_cosd_lat)` instead. Control the
-  minimum latitude weight when
-  `use_latitude_weights` is `true`. The weight is
-  `1 / max(cosd(lat), min_cosd_lat)`, so this is the largest weight any point
-  can be given, `1 / min_cosd_lat`. Without it the weight grows without bound
-  toward the poles, where `cosd(lat)` reaches zero, and the diagonal entries
-  span so many orders of magnitude that the covariance is badly conditioned.
-
 - `rank`: Rank of the singular value decomposition (SVD). If `nothing` is passed
   in, then the rank is automatically inferred from the data.
+
+!!! warning "Deprecated keyword arguments"
+    The keyword arguments `use_latitude_weights` and `min_cosd_lat` are
+    deprecated and have been replaced by `latitude_weighting`.
 """
 function SVDplusDCovariance(
     diagonal::AbstractDiagonalTerm;
@@ -436,8 +423,17 @@ function SVDplusDCovariance(
     )
 end
 
+"""
+    _latitude_weighting(
+        latitude_weighting,
+        use_latitude_weights,
+        min_cosd_lat,
+    )
+
+Return `latitude_weighting` if it is a `LatitudeWeighting`. Otherwise, return a `LatitudeWeighting` or `nothing` from `use_latitude_weights` and `min_cosd_lat`.
+"""
 function _latitude_weighting(
-    latitude_weighting,
+    latitude_weighting::Union{LatitudeWeighting, Nothing},
     use_latitude_weights,
     min_cosd_lat,
 )
