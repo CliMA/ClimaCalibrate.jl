@@ -357,58 +357,6 @@ end
     )
 end
 
-@testset "Latitude weights to matrix of samples" begin
-    lat = [-90.0, -30.0, 30.0, 90.0]
-    lon = [-60.0, -30.0, 0.0, 30.0, 60.0]
-    time = ClimaAnalysis.Utils.date_to_time.(
-        Dates.DateTime(2007, 12),
-        [Dates.DateTime(i, 12, 1) for i in 2007:2009],
-    )
-    var =
-        TemplateVar() |>
-        add_dim("time", time, units = "s") |>
-        add_dim("lon", lon, units = "degrees") |>
-        add_dim("lat", lat, units = "degrees") |>
-        add_attribs(
-            short_name = "hi",
-            long_name = "hello",
-            start_date = "2007-12-1",
-            blah = "blah2",
-        ) |>
-        one_to_n_data(collected = true) |>
-        initialize
-
-    sample_date_ranges = [
-        (Dates.DateTime(i, 12, 1), Dates.DateTime(i, 12, 1)) for i in 2007:2009
-    ]
-
-    sc = SampleBuilder.build_samples_by_times(
-        [var],
-        sample_date_ranges;
-        FT = Float64,
-    )
-    stacked_sample_matrix_no_lat_weights = copy(sc.samples)
-    stacked_sample_matrix_with_lat_weights = copy(sc.samples)
-
-    ext._apply_lat_weights_to_samples!(
-        stacked_sample_matrix_with_lat_weights,
-        sc.metadata[:, 1],
-        min_cosd_lat = 0.15,
-    )
-    time_slice = ClimaAnalysis.slice(var, time = Dates.DateTime(2007, 12, 1))
-    lat_weights_per_column = sqrt.(
-        ClimaAnalysis.flatten(
-            ext._lat_weights_var(time_slice, min_cosd_lat = 0.15),
-        ).data,
-    )
-    lat_weights_per_column =
-        reshape(lat_weights_per_column, length(lat_weights_per_column), 1)
-    @test isequal(
-        stacked_sample_matrix_with_lat_weights,
-        stacked_sample_matrix_no_lat_weights .* lat_weights_per_column,
-    )
-end
-
 @testset "Covariance with latitudes that differ across samples" begin
     lats1 = [-90.0, -30.0, 30.0, 90.0]
     lats2 = [-60.0, -20.0, 20.0, 60.0]

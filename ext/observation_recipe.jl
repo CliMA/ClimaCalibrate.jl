@@ -319,34 +319,6 @@ function _check_d_term(d_diag, all_metadata, n_samples)
 end
 
 """
-    _apply_lat_weights_to_samples!(
-        stacked_sample_matrix,
-        all_metadata;
-        min_cosd_lat = 0.1,
-    )
-
-Apply latitude weights to all columns of `stacked_sample_matrix` in place.
-
-The latitude weights applied is `1 / sqrt(max(cosd(lat), min_cosd_lat))` to each
-column of the matrix.
-
-The caller is responsible for checking that the latitudes are the same across
-the samples (see `_check_lats_across_samples`).
-"""
-function _apply_lat_weights_to_samples!(
-    stacked_sample_matrix,
-    all_metadata;
-    min_cosd_lat = 0.1,
-)
-    # It is okay to find the latitude weights for a single column and apply it
-    # to all other columns, because the flattening of OutputVars should be the
-    # same for each column
-    flat_lat_weights = _flat_lat_weights(all_metadata; min_cosd_lat)
-    stacked_sample_matrix .*= sqrt.(flat_lat_weights)
-    return nothing
-end
-
-"""
     observation(
         covar_estimator::AbstractCovarianceEstimator,
         sample_collection::AbstractSampleCollection,
