@@ -22,7 +22,7 @@ function ObservationRecipe.covariance(
     sample_collection::AbstractSampleCollection,
 )
     if sample_collection isa TransformedSampleCollection
-        @warn "Transforms are not applied for the ScalarCovaraince matrix"
+        @warn "Transforms are not applied for the ScalarCovariance matrix"
         sample_collection = base(sample_collection)
     end
     diag_cov = compute_diagonal(
