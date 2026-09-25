@@ -307,11 +307,14 @@ function SampleBuilder.apply_transform!(
 ) where {D <: AbstractDict}
     metadata = get_metadata(sample_collection)
     (; weights, by) = transform
+    var_keys = [by(md) for md in _metadata_of_first_sample(sample_collection)]
+    missing_keys = filter(key -> !haskey(weights, key), var_keys)
+    isempty(missing_keys) || error(
+        "No weights are given for the variables with the keys $missing_keys",
+    )
     samples = get_samples(sample_collection)
-    metadata_col = _metadata_of_first_sample(sample_collection)
-    for (md, range) in zip(metadata_col, var_indices(sample_collection))
-        weight = weights[by(md)]
-        samples[range, :] .*= weight
+    for (key, range) in zip(var_keys, var_indices(sample_collection))
+        samples[range, :] .*= weights[key]
     end
     return SampleCollection(samples, metadata)
 end
