@@ -7,6 +7,7 @@ import ClimaCalibrate.SampleBuilder:
     apply_transform,
     apply_transform!,
     base,
+    transform_sequence,
     var_indices
 
 """
@@ -133,6 +134,25 @@ function SampleBuilder.num_samples(
     num_samples(base(sample_collection))
 end
 
+"""
+    transform_sequence(
+        sample_collection::Union{SampleCollection, TransformedSampleCollection}
+    )
+
+Return the sequence of transformations applied to `sample_collection`.
+"""
+function SampleBuilder.transform_sequence(::SampleCollection)
+    return ()
+end
+
+function SampleBuilder.transform_sequence(
+    sample_collection::TransformedSampleCollection,
+)
+    return (
+        transform_sequence(sample_collection.parent)...,
+        sample_collection.transform,
+    )
+end
 
 """
     LatitudeWeighting(
@@ -343,7 +363,7 @@ the number of transforms, the size of the matrix of samples, the number of
 samples, values, and variables, and calls the show method of each transform.
 """
 function Base.show(io::IO, sample_collection::TransformedSampleCollection)
-    chain = _transform_sequence(sample_collection)
+    chain = transform_sequence(sample_collection)
     printstyled(io, "TransformedSampleCollection", bold = true)
     print(io, " ($(length(chain)) transform(s) not yet applied)\n")
     _show_summary(io, base(sample_collection))
@@ -352,17 +372,3 @@ function Base.show(io::IO, sample_collection::TransformedSampleCollection)
     end
     return nothing
 end
-
-"""
-    _transform_sequence(
-        sample_collection::Union{SampleCollection, TransformedSampleCollection}
-    )
-
-Recursively create the sequence of transformations applied to
-`sample_collection`.
-"""
-_transform_sequence(::SampleCollection) = ()
-_transform_sequence(sample_collection::TransformedSampleCollection) = (
-    _transform_sequence(sample_collection.parent)...,
-    sample_collection.transform,
-)

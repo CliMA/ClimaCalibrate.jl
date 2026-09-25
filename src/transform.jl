@@ -3,7 +3,8 @@ export AbstractTransform,
     PerVariableWeighting,
     PerCollectionWeighting,
     apply_transform,
-    apply_transform!
+    apply_transform!,
+    transform_sequence
 
 """
     AbstractTransform
@@ -51,6 +52,8 @@ Apply a transform in-place on a `SampleCollection` and return the
 All `AbstractTransform`s must implement their own `apply_transform!`.
 """
 function apply_transform! end
+
+function transform_sequence end
 
 """
     LatitudeWeighting <: AbstractTransform

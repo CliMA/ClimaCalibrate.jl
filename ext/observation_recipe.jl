@@ -10,7 +10,7 @@ include("diagonal_term.jl")
 """
     covariance(
         covar_estimator::ScalarCovariance,
-        sample_collection::SampleCollection,
+        sample_collection::AbstractSampleCollection,
     )
 
 Compute the scalar covariance matrix.
@@ -19,8 +19,12 @@ The data in the matrix of samples in `sample_collection` is ignored.
 """
 function ObservationRecipe.covariance(
     covar_estimator::ScalarCovariance,
-    sample_collection::SampleCollection,
+    sample_collection::AbstractSampleCollection,
 )
+    if sample_collection isa TransformedSampleCollection
+        @warn "Transforms are not applied for the ScalarCovaraince matrix"
+        sample_collection = base(sample_collection)
+    end
     diag_cov = compute_diagonal(
         ScalarDiagonal(covar_estimator.scalar),
         sample_collection,
@@ -38,7 +42,7 @@ end
 """
     covariance(
         covar_estimator::SeasonalDiagonalCovariance,
-        sample_collection::SampleCollection,
+        sample_collection::AbstractSampleCollection,
     )
 
 Compute the diagonal covariance matrix of seasonal quantities from the samples
@@ -52,8 +56,13 @@ variance.
 """
 function ObservationRecipe.covariance(
     covar_estimator::SeasonalDiagonalCovariance,
-    sample_collection::SampleCollection,
+    sample_collection::AbstractSampleCollection,
 )
+    any(t -> t isa LatitudeWeighting, transform_sequence(sample_collection)) &&
+        error(
+            "Using the LatitudeWeighting transform is not supported by SeasonalDiagonalCovariance. Use the keyword argument `use_latitude_weights` instead",
+        )
+    sample_collection = apply_transform(sample_collection)
     samples = get_samples(sample_collection)
     n_samples = size(samples, 2)
     n_samples >= 2 || error(
@@ -238,7 +247,7 @@ end
 """
     covariance(
         covar_estimator::SVDplusDCovariance,
-        sample_collection::SampleCollection,
+        sample_collection::AbstractSampleCollection,
     )
 
 Compute the `EKP.SVDplusD` covariance matrix from the samples in
@@ -246,10 +255,17 @@ Compute the `EKP.SVDplusD` covariance matrix from the samples in
 """
 function ObservationRecipe.covariance(
     covar_estimator::SVDplusDCovariance,
-    sample_collection::SampleCollection,
+    sample_collection::AbstractSampleCollection,
 )
     (; latitude_weighting, use_weighted_samples_for_diagonal, rank) =
         covar_estimator
+    if !isnothing(latitude_weighting) &&
+       any(t -> t isa LatitudeWeighting, transform_sequence(sample_collection))
+        error(
+            "Latitude weighting is being applied twice, since `latitude_weighting` is set and LatitudeWeighting transform is being applied to the sample collection",
+        )
+    end
+    sample_collection = apply_transform(sample_collection)
     metadata = _metadata_of_first_sample(sample_collection)
 
     n_samples = num_samples(sample_collection)

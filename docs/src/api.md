@@ -155,6 +155,7 @@ ClimaCalibrate.SampleBuilder.AbstractTransform
 ClimaCalibrate.SampleBuilder.AbstractTransform(::ClimaCalibrate.SampleBuilder.AbstractSampleCollection)
 ClimaCalibrate.SampleBuilder.apply_transform
 ClimaCalibrate.SampleBuilder.apply_transform!
+ClimaCalibrate.SampleBuilder.transform_sequence
 ClimaCalibrate.SampleBuilder.LatitudeWeighting
 ClimaCalibrate.SampleBuilder.LatitudeWeighting()
 ClimaCalibrate.SampleBuilder.LatitudeWeighting(::Union{AbstractVector, AbstractSet, Tuple})
