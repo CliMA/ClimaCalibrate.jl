@@ -77,6 +77,8 @@ end
 
 """
     apply_transform(sample_collection::TransformedSampleCollection)
+
+Return a `SampleCollection` with every recorded transform applied to it.
 """
 function SampleBuilder.apply_transform(
     sample_collection::TransformedSampleCollection,
