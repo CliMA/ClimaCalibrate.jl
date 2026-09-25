@@ -262,7 +262,7 @@ function ObservationRecipe.covariance(
     if !isnothing(latitude_weighting) &&
        any(t -> t isa LatitudeWeighting, transform_sequence(sample_collection))
         error(
-            "Latitude weighting is being applied twice, since `latitude_weighting` is set and LatitudeWeighting transform is being applied to the sample collection",
+            "Latitude weighting is being applied twice, since `latitude_weighting` is set and a LatitudeWeighting transform is being applied to the sample collection",
         )
     end
     sample_collection = apply_transform(sample_collection)
