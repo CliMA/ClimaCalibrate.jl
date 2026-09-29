@@ -121,6 +121,54 @@ covar_estimator = ObservationRecipe.SVDplusDCovariance(
 obs = ObservationRecipe.observation(covar_estimator, sample_collection, 1)
 ```
 
+### Transforming the samples
+
+To weight the samples used for the covariance matrix, pipe the sample
+collection into a transform before passing it to `observation` (see
+[transformations](sample_builder.md#Transformations)):
+
+```julia
+# One weight for each variable in vars, which has three variables here
+transformed_collection =
+    sample_collection |> SampleBuilder.PerVariableWeighting([2.0, 1.0, 1.0])
+obs = ObservationRecipe.observation(covar_estimator, transformed_collection, 1)
+```
+
+The observation and its metadata come from the untransformed samples. What
+happens to the transforms depends on the estimator.
+
+1. `ScalarCovariance` ignores all transformations since the values of the
+   samples are not used.
+2. `SeasonalDiagonalCovariance` and `SVDplusDCovariance` accepts all
+`TransformedCollection`s, but check latitude weighting is not applied multiple
+times.
+
+Putting it together, here is an example of using transforms to weight the
+covariance matrix.
+
+```julia
+# vars contains the variables pr, tas, and rsut
+transformed_collection =
+    sample_collection |>
+    SampleBuilder.LatitudeWeighting() |>
+    SampleBuilder.PerVariableWeighting(
+        Dict("pr" => 2.0, "tas" => 1.0, "rsut" => 1.0),
+    )
+
+# The latitude weighting is already in transformed_collection, so the
+# latitude_weighting keyword argument is not passed
+covar_estimator = ObservationRecipe.SVDplusDCovariance(
+    model_error_scale = Float32(0.05),
+    regularization = Float32(1e-6),
+)
+
+obs = ObservationRecipe.observation(covar_estimator, transformed_collection, 1)
+```
+
+The covariance matrix of `obs` is estimated from the weighted samples, while
+the observation itself is unweighted, so it can be compared directly with the
+untransformed output of the model in the G ensemble matrix.
+
 ## Metadata
 
 When creating an observation with [`observation`](@ref), metadata is extracted
@@ -191,9 +239,10 @@ The steps are:
 
 ### What you can use
 
-The `sample_collection` argument is a `SampleCollection` storing a matrix of
-samples and a matrix of metadata. Here's a collection of helpful functions from
-the `SampleBuilder` module when creating the covariance matrix.
+The `sample_collection` argument is a `SampleCollection`, which stores a matrix
+of samples and a matrix of metadata, or a `TransformedSampleCollection` if the
+samples were piped into transforms. Here's a collection of helpful functions
+from the `SampleBuilder` module when creating the covariance matrix.
 
 - [`get_samples`](@ref ClimaCalibrate.SampleBuilder.get_samples): return the
   full sample matrix.
@@ -203,9 +252,13 @@ the `SampleBuilder` module when creating the covariance matrix.
 - [`num_samples`](@ref ClimaCalibrate.SampleBuilder.num_samples): return the
   number of samples.
 
+You can get a `SampleCollection` from a `TransformedSampleCollection` with
+either [`apply_transform(sample_collection)`](@ref
+ClimaCalibrate.SampleBuilder.apply_transform) or
+[`base(sample_collection)`](@ref ClimaCalibrate.SampleBuilder.base).
+
 The covariance you return must be a square matrix whose side length equals the
-number of rows of `get_samples(sample_collection)` and must not contain `NaN`
-or `Inf`.
+number of rows of the sample matrix and must not contain `NaN` or `Inf`.
 
 !!! note "How much is the same across the columns of the metadata matrix"
     `build_samples` checks that the short names, the units, the flattened
@@ -280,6 +333,8 @@ function ObservationRecipe.covariance(
     estimator::PerVariableScalar,
     sample_collection,
 )
+    # Only the metadata is used, so the transforms do not matter
+    sample_collection = SampleBuilder.base(sample_collection)
     FT = eltype(SampleBuilder.get_samples(sample_collection))
     # Only the flattened lengths are needed here, and those are the same across
     # the samples, so the first column is enough
@@ -491,11 +546,35 @@ it, so there is nothing to inflate.
 
 **Q: How do I apply latitude weighting to the covariance matrix?**
 
-**A:** All three covariance estimators accept a `use_latitude_weights` keyword
-argument. The weight is `1 / max(cosd(lat), min_cosd_lat)`, which inflates the
+**A:** The weight is `1 / max(cosd(lat), min_cosd_lat)`, which inflates the
 variance of the smaller grid cells toward the poles and so gives them less
 weight in the misfit. The `min_cosd_lat` keyword argument (default `0.1`) caps
 that weight at `1 / min_cosd_lat`. Without a cap the weight grows without bound
 toward the poles, where `cosd(lat)` reaches zero, and the diagonal spans so many
-orders of magnitude that the covariance is badly conditioned. This requires the
-`OutputVar`s to have a latitude dimension.
+orders of magnitude that the covariance is badly conditioned.
+
+For `SVDplusDCovariance`, pass a [`LatitudeWeighting`](@ref
+ClimaCalibrate.SampleBuilder.LatitudeWeighting) to the `latitude_weighting`
+keyword argument:
+
+```julia
+covar_estimator = ObservationRecipe.SVDplusDCovariance(
+    model_error_scale = 0.05,
+    regularization = 1e-6,
+    latitude_weighting = SampleBuilder.LatitudeWeighting(),
+)
+```
+
+For `ScalarCovariance` and `SeasonalDiagonalCovariance`, pass
+`use_latitude_weights = true`. This multiplies the whole diagonal by the weight,
+including `scalar` or `regularization`, and every variable must have a latitude
+dimension.
+
+**Q: How do I make a variable count more or less in the calibration?**
+
+**A:** Pipe the samples into a [`PerVariableWeighting`](@ref
+ClimaCalibrate.SampleBuilder.PerVariableWeighting). A weight smaller than 1
+makes a variable count more. For example, `PerVariableWeighting(Dict("pr" =>
+0.5, "rsut" => 1.0))` makes `pr` count four times as much. See
+[transformations](sample_builder.md#Transformations) for more about the
+transforms.

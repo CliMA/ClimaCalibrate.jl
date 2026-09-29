@@ -1,5 +1,6 @@
 import ClimaCalibrate.SampleBuilder
 import ClimaCalibrate.SampleBuilder:
+    AbstractSampleCollection,
     build_samples,
     build_samples_by_times,
     num_samples,
@@ -35,7 +36,7 @@ it is guaranteed that
 struct SampleCollection{
     FT <: AbstractFloat,
     METADATA <: ClimaAnalysis.Var.Metadata,
-}
+} <: AbstractSampleCollection
     """A matrix of FT values where each column represents a single sample. A
     single sample may represent multiple variables."""
     samples::Matrix{FT}
@@ -440,7 +441,7 @@ function SampleBuilder.var_indices(sample_collection::SampleCollection)
     return _get_indices_of_metadata(view(sample_collection.metadata, :, 1))
 end
 
-function Base.show(io::IO, sc::SampleCollection)
+function _show_summary(io::IO, sc::SampleCollection)
     sample_len, n_samples = size(sc.samples)
     n_vars = size(sc.metadata, 1)
     FT = eltype(sc.samples)
@@ -451,6 +452,11 @@ function Base.show(io::IO, sc::SampleCollection)
         io,
         "\n$n_samples sample(s), each $sample_len value(s) from $n_vars variable(s)",
     )
+    return nothing
+end
+
+function Base.show(io::IO, sc::SampleCollection)
+    _show_summary(io, sc)
 
     # All columns share the same variables, so read metadata from column 1. The
     # ranges give the rows of the sample matrix that belong to each variable.

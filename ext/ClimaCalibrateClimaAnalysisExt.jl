@@ -20,6 +20,7 @@ const FLATTENED_DIMS =
 include("utils.jl")
 include("checkers.jl")
 include("sample_builder.jl")
+include("transform.jl")
 include("observation_recipe.jl")
 include("ensemble_builder.jl")
 
