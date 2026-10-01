@@ -9,6 +9,7 @@ import ClimaCalibrate.ObservationRecipe:
     ModelErrorScaleDiagonal,
     VarianceDiagonal,
     QuantileDiagonal,
+    LatitudeWeightDiagonal,
     BroadcastedDiagonal,
     compute_diagonal
 import ClimaCalibrate.SampleBuilder
@@ -346,6 +347,112 @@ end
         QuantileDiagonal(0.5, VarianceDiagonal() .+ ScalarDiagonal(1.0)),
         multi_sample_collection,
     ) == Diagonal(vcat(fill(31.5, 10), fill(5.0, 3)))
+end
+
+@testset "LatitudeWeightDiagonal" begin
+    term = LatitudeWeightDiagonal()
+    @test term isa AbstractDiagonalTerm
+
+    pr_var =
+        TemplateVar() |>
+        add_dim("lat", [-90.0, 0.0, 90.0], units = "degrees") |>
+        add_attribs(short_name = "pr") |>
+        one_to_n_data(collected = true) |>
+        initialize
+    tas_var =
+        TemplateVar() |>
+        add_dim("lon", [-90.0, 0.0, 30.0, 90.0], units = "degrees") |>
+        add_attribs(short_name = "tas") |>
+        one_to_n_data(collected = true) |>
+        initialize
+    ta_var =
+        TemplateVar() |>
+        add_dim("lat", [0.0, 90.0], units = "degrees") |>
+        add_attribs(short_name = "ta") |>
+        one_to_n_data(collected = true) |>
+        initialize
+
+    # The rows of the samples are pr (1:3), tas (4:7), and ta (8:9)
+    sample_collection =
+        SampleBuilder.build_samples(reshape([pr_var, tas_var, ta_var], 3, 1))
+
+    # With min_cosd_lat = 0.25, the weights at the latitudes 0 and ±90 degrees
+    # are 1 and 4 respectively, and tas does not have a latitude dimension
+    @test compute_diagonal(
+        LatitudeWeightDiagonal(min_cosd_lat = 0.25),
+        sample_collection,
+    ) == Diagonal([4.0, 1.0, 4.0, 1.0, 1.0, 1.0, 1.0, 1.0, 4.0])
+
+    # The default min_cosd_lat of 0.1 caps the weights at 10
+    @test compute_diagonal(LatitudeWeightDiagonal(), sample_collection) ==
+          Diagonal([10.0, 1.0, 10.0, 1.0, 1.0, 1.0, 1.0, 1.0, 10.0])
+
+    # Only the selected variables are weighted, and the selected variables can
+    # also be a tuple or a set
+    for selected in (["pr"], ("pr",), Set(["pr"]))
+        @test compute_diagonal(
+            LatitudeWeightDiagonal(selected; min_cosd_lat = 0.25),
+            sample_collection,
+        ) == Diagonal([4.0, 1.0, 4.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0])
+    end
+
+    # Selecting every variable with a latitude is the same as the default
+    @test compute_diagonal(
+        LatitudeWeightDiagonal(
+            [true];
+            by = ClimaAnalysis.has_latitude,
+            min_cosd_lat = 0.25,
+        ),
+        sample_collection,
+    ) == Diagonal([4.0, 1.0, 4.0, 1.0, 1.0, 1.0, 1.0, 1.0, 4.0])
+
+    # The entries are the squares of the weights of the LatitudeWeighting
+    # transform
+    transform_weights = SampleBuilder.compute_weights(
+        SampleBuilder.LatitudeWeighting(),
+        sample_collection,
+    )
+    @test compute_diagonal(LatitudeWeightDiagonal(), sample_collection) ≈
+          Diagonal(transform_weights .^ 2)
+
+    # The eltype of the diagonal matches the eltype of the samples
+    @test compute_diagonal(LatitudeWeightDiagonal(), sample_collection) isa
+          Diagonal{Float32}
+    sample_collection64 = SampleBuilder.build_samples(
+        reshape([pr_var, tas_var, ta_var], 3, 1);
+        FT = Float64,
+    )
+    @test compute_diagonal(LatitudeWeightDiagonal(), sample_collection64) isa
+          Diagonal{Float64}
+
+    # The term can be broadcast with other diagonal terms
+    @test compute_diagonal(
+        ScalarDiagonal(2.0) .* LatitudeWeightDiagonal(min_cosd_lat = 0.25),
+        sample_collection,
+    ) == Diagonal([8.0, 2.0, 8.0, 2.0, 2.0, 2.0, 2.0, 2.0, 8.0])
+
+    # The errors of LatitudeWeighting are thrown when the diagonal is computed
+    @test_throws "None of the variables have a latitude" compute_diagonal(
+        LatitudeWeightDiagonal(),
+        SampleBuilder.build_samples([tas_var]),
+    )
+    @test_throws "do not match any variable" compute_diagonal(
+        LatitudeWeightDiagonal(["pr", "rsut"]),
+        sample_collection,
+    )
+    @test_throws "does not have a latitude dimension" compute_diagonal(
+        LatitudeWeightDiagonal(["pr", "tas"]),
+        sample_collection,
+    )
+
+    # min_cosd_lat must be positive
+    @test_throws "should be greater than zero" LatitudeWeightDiagonal(
+        min_cosd_lat = 0.0,
+    )
+    @test_throws "should be greater than zero" LatitudeWeightDiagonal(
+        ["pr"];
+        min_cosd_lat = -0.1,
+    )
 end
 
 @testset "BroadcastedDiagonal" begin

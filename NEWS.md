@@ -26,6 +26,12 @@ main
   `sample_collection |> SampleBuilder.LatitudeWeighting(min_cosd_lat = x)`. The
   diagonal term is always computed from the weighted samples, which was the
   default [#381](https://github.com/CliMA/ClimaCalibrate.jl/pull/381).
+- The `use_latitude_weights` and `min_cosd_lat` keyword arguments of
+  `ScalarCovariance` and `SeasonalDiagonalCovariance` are replaced by the
+  `latitude_weighting` keyword argument, which takes a `LatitudeWeightDiagonal`
+  or `nothing`. Variables without a latitude dimension are left unweighted
+  instead of throwing an error
+  [#XXX](https://github.com/CliMA/ClimaCalibrate.jl/pull/XXX).
 
 ### Observation pipeline
 
@@ -45,10 +51,12 @@ main
     `SampleBuilder.base` on it to get a `SampleCollection`.
 - With a `LatitudeWeighting` transform, `SVDplusDCovariance` now skips the
   variables without a latitude dimension instead of throwing an error. It still
-  throws an error if no variable has one. With `use_latitude_weights = true`,
-  `ScalarCovariance` and `SeasonalDiagonalCovariance` still throw an error for
-  any variable without a latitude dimension
+  throws an error if no variable has one
   [#381](https://github.com/CliMA/ClimaCalibrate.jl/pull/381).
+- Add the `LatitudeWeightDiagonal` diagonal term, whose entries are the latitude
+  weights. Multiply another diagonal term by it to latitude weight that term,
+  as in `ScalarDiagonal(1e-6) .* LatitudeWeightDiagonal()`
+  [#XXX](https://github.com/CliMA/ClimaCalibrate.jl/pull/XXX).
 
 v0.6.0
 -------
