@@ -74,8 +74,6 @@ abstract type AbstractCovarianceEstimator end
 
 Covariance estimator contain the necessary information to construct the scalar
 covariance matrix.
-
-`FT1` and `FT2` are the element types of `scalar` and `min_cosd_lat`.
 """
 struct ScalarCovariance{FT1 <: AbstractFloat, FT2 <: AbstractFloat} <:
        AbstractCovarianceEstimator
