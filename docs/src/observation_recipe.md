@@ -140,8 +140,8 @@ happens to the transforms depends on the estimator.
 1. `ScalarCovariance` throws an error for any transform, since the values of
    the samples are not used.
 2. `SeasonalDiagonalCovariance` applies the transforms before computing the
-   variances, but throws an error for a `LatitudeWeighting`. Use its
-   `use_latitude_weights` keyword argument instead.
+   variances, but throws an error for a `LatitudeWeighting`. Instead, pass a
+   `LatitudeWeightDiagonal` as its `latitude_weighting` keyword argument.
 3. `SVDplusDCovariance` applies the transforms before computing the SVD and the
    diagonal term.
 
@@ -391,6 +391,10 @@ The built-in diagonal terms are
   ClimaCalibrate.ObservationRecipe.QuantileDiagonal): the entries are constant
   for each variable, where the constant is a quantile of the entries that
   another diagonal term produces for that variable.
+- [`LatitudeWeightDiagonal`](@ref
+  ClimaCalibrate.ObservationRecipe.LatitudeWeightDiagonal): the entries are the
+  latitude weights `1 / max(cosd(lat), min_cosd_lat)` for the weighted
+  variables and one for the other variables.
 
 Diagonal terms can be combined with broadcasting, which produces a
 [`BroadcastedDiagonal`](@ref
@@ -547,14 +551,18 @@ it, so there is nothing to inflate.
 
 **Q: How do I apply latitude weighting to the covariance matrix?**
 
-**A:** The weight is `1 / max(cosd(lat), min_cosd_lat)`, which inflates the
-variance of the smaller grid cells toward the poles and so gives them less
-weight in the misfit. The `min_cosd_lat` keyword argument (default `0.1`) caps
-that weight at `1 / min_cosd_lat`. Without a cap the weight grows without bound
-toward the poles, where `cosd(lat)` reaches zero, and the diagonal spans so many
-orders of magnitude that the covariance is badly conditioned.
+**A:** The weight is `1 / max(cosd(lat), min_cosd_lat)` which is applied to the
+diagonal for diagonal covariance matrices and `sqrt(1 / max(cosd(lat),
+min_cosd_lat))` which is applied to the samples for `SVDplusDCovariance`
+matrices. This inflates the variance of the smaller grid cells toward the poles
+and so gives them less weight in the misfit. The `min_cosd_lat` keyword argument
+of `LatitudeWeighting` and `LatitudeWeightDiagonal` (default `0.1`) caps the
+weight at `1 / min_cosd_lat`. Without a cap the weight grows without bound
+toward the poles, where `cosd(lat)` reaches zero, and the variances spans so
+many orders of magnitude that the covariance is badly conditioned.
 
-For `SVDplusDCovariance`, pipe the samples into a [`LatitudeWeighting`](@ref
+For `SVDplusDCovariance`, to apply latitude weighting, you can pipe the samples
+into a [`LatitudeWeighting`](@ref
 ClimaCalibrate.SampleBuilder.LatitudeWeighting):
 
 ```julia
@@ -566,10 +574,22 @@ weighted_collection = sample_collection |> SampleBuilder.LatitudeWeighting()
 obs = ObservationRecipe.observation(covar_estimator, weighted_collection, 1)
 ```
 
-For `ScalarCovariance` and `SeasonalDiagonalCovariance`, pass
-`use_latitude_weights = true`. This multiplies the whole diagonal by the weight,
-including `scalar` or `regularization`, and every variable must have a latitude
-dimension.
+For `ScalarCovariance` and `SeasonalDiagonalCovariance`, pass a
+[`LatitudeWeightDiagonal`](@ref
+ClimaCalibrate.ObservationRecipe.LatitudeWeightDiagonal) as the
+`latitude_weighting` keyword argument instead.
+
+```julia
+covar_estimator = ObservationRecipe.SeasonalDiagonalCovariance(
+    model_error_scale = 0.05,
+    latitude_weighting = ObservationRecipe.LatitudeWeightDiagonal(),
+)
+obs = ObservationRecipe.observation(covar_estimator, sample_collection, 1)
+```
+
+This multiplies the whole diagonal by the weight, including `scalar` or
+`regularization`. The variables without a latitude dimension are not weighted,
+and `ObservationRecipe.LatitudeWeightDiagonal(["pr"])` weights only `pr`.
 
 **Q: How do I make a variable count more or less in the calibration?**
 

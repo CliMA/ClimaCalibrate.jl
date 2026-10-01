@@ -2,6 +2,7 @@ export ScalarDiagonal,
     ModelErrorScaleDiagonal,
     VarianceDiagonal,
     QuantileDiagonal,
+    LatitudeWeightDiagonal,
     BroadcastedDiagonal,
     compute_diagonal
 
@@ -175,6 +176,32 @@ function QuantileDiagonal(
     diag_term::AbstractDiagonalTerm,
 )
     QuantileDiagonal([quantile], diag_term)
+end
+
+"""
+    LatitudeWeightDiagonal <: AbstractDiagonalTerm
+
+A diagonal term whose entries are `1 / max(cosd(lat), min_cosd_lat)` for each
+weighted variable and `1` for the other variables, where `lat` is the latitude
+of the entry.
+
+The weights grow toward the poles, where `cosd(lat)` reaches zero.
+`min_cosd_lat` floors `cosd(lat)`, so it caps the weights at
+`1 / min_cosd_lat`.
+"""
+struct LatitudeWeightDiagonal{L <: LatitudeWeighting} <: AbstractDiagonalTerm
+    latitude_weighting::L
+end
+
+"""
+    LatitudeWeightDiagonal(; min_cosd_lat::AbstractFloat = 0.1)
+
+A diagonal term whose entries are `1 / max(cosd(lat), min_cosd_lat)` for all
+variables with a latitude dimension and `1` for variables with no latitude
+dimension.
+"""
+function LatitudeWeightDiagonal(; min_cosd_lat::AbstractFloat = 0.1)
+    return LatitudeWeightDiagonal(LatitudeWeighting(; min_cosd_lat))
 end
 
 # Implement the styles needed for broadcasting with scalars, matrices, and other

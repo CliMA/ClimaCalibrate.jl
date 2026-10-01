@@ -4,6 +4,7 @@ import ClimaCalibrate.ObservationRecipe:
     ModelErrorScaleDiagonal,
     VarianceDiagonal,
     QuantileDiagonal,
+    LatitudeWeightDiagonal,
     BroadcastedDiagonal,
     compute_diagonal
 
@@ -142,6 +143,59 @@ function compute_diagonal(
             reduce(vcat, fill.(quantile_vals_vec, length.(ranges))),
         ),
     )
+end
+
+"""
+    LatitudeWeightDiagonal(
+        selected::Union{AbstractVector, AbstractSet, Tuple};
+        by = ClimaAnalysis.short_name,
+        min_cosd_lat::AbstractFloat = 0.1,
+    )
+
+A diagonal term whose entries are `1 / max(cosd(lat), min_cosd_lat)` for
+variables whose key is in `selected` and `1` for all other variables.
+
+The key of a variable is `by(metadata)`, where `metadata` is the
+`ClimaAnalysis.Var.Metadata` of that variable.
+
+See [`LatitudeWeighting`](@ref
+ClimaCalibrate.SampleBuilder.LatitudeWeighting(::Union{AbstractVector,
+AbstractSet, Tuple})) for the errors that are thrown.
+
+# Example
+
+Weight only the variables with the short names `pr` and `tas`, leaving the
+other variables in the sample collection unweighted:
+
+```julia
+lat_weight_diagonal = LatitudeWeightDiagonal(["pr", "tas"])
+```
+"""
+function LatitudeWeightDiagonal(
+    selected::Union{AbstractVector, AbstractSet, Tuple};
+    by = ClimaAnalysis.short_name,
+    min_cosd_lat::AbstractFloat = 0.1,
+)
+    return LatitudeWeightDiagonal(LatitudeWeighting(selected; by, min_cosd_lat))
+end
+
+"""
+    compute_diagonal(
+        diagonal_term::LatitudeWeightDiagonal,
+        sample_collection::SampleCollection,
+    )
+
+Compute a diagonal matrix whose entries are the latitude weights
+`1 / max(cosd(lat), min_cosd_lat)` for the weighted variables in
+`sample_collection` and one for unweighted variables.
+"""
+function compute_diagonal(
+    diagonal_term::LatitudeWeightDiagonal,
+    sample_collection::SampleCollection,
+)
+    weights = _lat_weights(diagonal_term.latitude_weighting, sample_collection)
+    FT = eltype(get_samples(sample_collection))
+    return Diagonal(convert(Vector{FT}, weights))
 end
 
 """

@@ -212,6 +212,9 @@ ClimaCalibrate.ObservationRecipe.ModelErrorScaleDiagonal(::AbstractFloat)
 ClimaCalibrate.ObservationRecipe.VarianceDiagonal
 ClimaCalibrate.ObservationRecipe.QuantileDiagonal
 ClimaCalibrate.ObservationRecipe.QuantileDiagonal(::AbstractFloat, ::ClimaCalibrate.ObservationRecipe.AbstractDiagonalTerm)
+ClimaCalibrate.ObservationRecipe.LatitudeWeightDiagonal
+ClimaCalibrate.ObservationRecipe.LatitudeWeightDiagonal()
+ClimaCalibrate.ObservationRecipe.LatitudeWeightDiagonal(::Union{AbstractVector, AbstractSet, Tuple})
 ClimaCalibrate.ObservationRecipe.BroadcastedDiagonal
 ```
 

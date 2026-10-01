@@ -109,22 +109,11 @@ end
     # Negative value for scalar
     @test_throws ErrorException ObservationRecipe.ScalarCovariance(;
         scalar = -1.0,
-        use_latitude_weights = false,
-        min_cosd_lat = 0.1,
     )
 
     # Zero value for scalar
     @test_throws ErrorException ObservationRecipe.ScalarCovariance(;
         scalar = 0.0,
-        use_latitude_weights = false,
-        min_cosd_lat = 0.1,
-    )
-
-    # Negative cosine weights
-    @test_throws ErrorException ObservationRecipe.ScalarCovariance(;
-        scalar = 1.0,
-        use_latitude_weights = true,
-        min_cosd_lat = -0.1,
     )
 
     # Negative values for model_error_scale and regularization
@@ -262,8 +251,9 @@ end
     # Latitude weights
     covar_estimator = ObservationRecipe.ScalarCovariance(
         scalar = 10.0,
-        use_latitude_weights = true,
-        min_cosd_lat = 0.2,
+        latitude_weighting = ObservationRecipe.LatitudeWeightDiagonal(
+            min_cosd_lat = 0.2,
+        ),
     )
     scalar_covar =
         ObservationRecipe.covariance(covar_estimator, sample_collection)
@@ -300,8 +290,9 @@ end
     # Latitude weights with NaNs
     covar_estimator = ObservationRecipe.ScalarCovariance(
         scalar = 10.0,
-        use_latitude_weights = true,
-        min_cosd_lat = 0.2,
+        latitude_weighting = ObservationRecipe.LatitudeWeightDiagonal(
+            min_cosd_lat = 0.2,
+        ),
     )
     scalar_covar =
         ObservationRecipe.covariance(covar_estimator, nan_sample_collection)
@@ -349,8 +340,9 @@ end
     # Scalar and latitude weights
     covar_estimator = ObservationRecipe.ScalarCovariance(
         scalar = 10.0,
-        use_latitude_weights = true,
-        min_cosd_lat = 0.2,
+        latitude_weighting = ObservationRecipe.LatitudeWeightDiagonal(
+            min_cosd_lat = 0.2,
+        ),
     )
     scalar_covar =
         ObservationRecipe.covariance(covar_estimator, sample_collection)
@@ -379,7 +371,9 @@ end
 
     for (covar_estimator, collection) in (
         (
-            ObservationRecipe.ScalarCovariance(use_latitude_weights = true),
+            ObservationRecipe.ScalarCovariance(
+                latitude_weighting = ObservationRecipe.LatitudeWeightDiagonal(),
+            ),
             sample_collection,
         ),
         (
@@ -388,7 +382,7 @@ end
         ),
         (
             ObservationRecipe.SeasonalDiagonalCovariance(
-                use_latitude_weights = true,
+                latitude_weighting = ObservationRecipe.LatitudeWeightDiagonal(),
             ),
             sample_collection,
         ),
@@ -412,9 +406,44 @@ end
         ignore_dims = ("lat",),
     )
     @test ObservationRecipe.covariance(
-        ObservationRecipe.ScalarCovariance(use_latitude_weights = true),
+        ObservationRecipe.ScalarCovariance(
+            latitude_weighting = ObservationRecipe.LatitudeWeightDiagonal(),
+        ),
         same_lat_collection,
     ) isa Diagonal
+end
+
+@testset "Covariance with variables without a latitude dimension" begin
+    pr_var =
+        TemplateVar() |>
+        add_dim("lat", [-90.0, 0.0, 90.0], units = "degrees") |>
+        add_attribs(short_name = "pr") |>
+        one_to_n_data(collected = true) |>
+        initialize
+    tas_var =
+        TemplateVar() |>
+        add_dim("lon", [-90.0, 0.0, 30.0, 90.0], units = "degrees") |>
+        add_attribs(short_name = "tas") |>
+        one_to_n_data(collected = true) |>
+        initialize
+
+    # The rows of the samples are pr (1:3) and tas (4:7)
+    sample_collection = SampleBuilder.build_samples(
+        [pr_var pr_var; tas_var tas_var];
+        FT = Float64,
+    )
+
+    # With min_cosd_lat = 0.25, the weights at the latitudes 0 and ±90 degrees
+    # are 1 and 4 respectively, and tas is not weighted
+    lat_weights = [4.0, 1.0, 4.0, 1.0, 1.0, 1.0, 1.0]
+    covar_estimator = ObservationRecipe.ScalarCovariance(
+        scalar = 2.0,
+        latitude_weighting = ObservationRecipe.LatitudeWeightDiagonal(
+            min_cosd_lat = 0.25,
+        ),
+    )
+    @test ObservationRecipe.covariance(covar_estimator, sample_collection) ==
+          Diagonal(2.0 .* lat_weights)
 end
 
 @testset "SVDplusDCovariance" begin
@@ -1077,7 +1106,7 @@ end
         (Dates.DateTime(i, 12, 1), Dates.DateTime(i, 12, 1)) for i in 2007:2008
     ]
     covar_estimator = ObservationRecipe.SeasonalDiagonalCovariance(
-        use_latitude_weights = true,
+        latitude_weighting = ObservationRecipe.LatitudeWeightDiagonal(),
     )
     lat_sample_collection = SampleBuilder.build_samples_by_times(
         [lat_var],
@@ -1090,6 +1119,24 @@ end
     @test seasonal_covariance ==
           (1 / 2) *
           Diagonal(ClimaAnalysis.flatten(ext._lat_weights_var(sliced_var)).data)
+
+    # The model error scale and the regularization are added before weighting.
+    # The samples are all ones and all twos, so the variance is 0.5 and the mean
+    # is 1.5
+    weighted_estimator = ObservationRecipe.SeasonalDiagonalCovariance(
+        model_error_scale = 0.1,
+        regularization = 1e-3,
+        latitude_weighting = ObservationRecipe.LatitudeWeightDiagonal(
+            min_cosd_lat = 0.2,
+        ),
+    )
+    lat_weights = ClimaAnalysis.flatten(
+        ext._lat_weights_var(sliced_var, min_cosd_lat = 0.2),
+    ).data
+    @test ObservationRecipe.covariance(
+        weighted_estimator,
+        lat_sample_collection,
+    ) ≈ Diagonal((0.5 + (0.1 * 1.5)^2 + 1e-3) .* lat_weights)
 
     # Lat weight with NaN in data (NaN positions consistent across years)
     data = lat_var.data
@@ -2082,8 +2129,9 @@ end
 
     covar_estimator = ObservationRecipe.ScalarCovariance(
         scalar = 5.0,
-        use_latitude_weights = true,
-        min_cosd_lat = 0.01,
+        latitude_weighting = ObservationRecipe.LatitudeWeightDiagonal(
+            min_cosd_lat = 0.01,
+        ),
     )
     obs4 = ObservationRecipe.observation(
         covar_estimator,
