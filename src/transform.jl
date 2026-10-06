@@ -1,9 +1,11 @@
 export AbstractTransform,
+    AbstractWeighting,
     LatitudeWeighting,
     PerVariableWeighting,
     PerCollectionWeighting,
     apply_transform,
     apply_transform!,
+    compute_weights,
     transform_sequence
 
 """
@@ -17,28 +19,13 @@ metadata, and a covariance matrix generated from transformed samples.
 # Interface
 
 To define a new `AbstractTransform`, your subtype must implement
-[`SampleBuilder.apply_transform!`](@ref). Every `AbstractTransform` can then be
-called on an `AbstractSampleCollection` to create a
+[`SampleBuilder.apply_transform!`](@ref). If the transform multiplies the
+samples by weights, subtype [`AbstractWeighting`](@ref) and implement
+[`SampleBuilder.compute_weights`](@ref) instead. Every `AbstractTransform` can
+then be called on an `AbstractSampleCollection` to create a
 `TransformedSampleCollection`, and works with
 [`SampleBuilder.apply_transform`](@ref), which is implemented in terms of
 [`SampleBuilder.apply_transform!`](@ref).
-
-# Examples
-
-A transform that zeroes out the values of the samples.
-
-```julia
-import ClimaCalibrate.SampleBuilder
-
-struct ZeroTransform <: SampleBuilder.AbstractTransform end
-
-function SampleBuilder.apply_transform!(sample_collection, transform::ZeroTransform)
-    SampleBuilder.get_samples(sample_collection) .*= 0.0
-    return sample_collection
-end
-
-zeroed = sample_collection |> ZeroTransform()
-```
 """
 abstract type AbstractTransform end
 
@@ -53,10 +40,10 @@ untransformed samples, metadata, and a covariance matrix generated from
 transformed samples.
 """
 struct TransformedSampleCollection{
-    P <: AbstractSampleCollection,
+    ASC <: AbstractSampleCollection,
     T <: AbstractTransform,
 } <: AbstractSampleCollection
-    parent::P
+    parent::ASC
     transform::T
 end
 
@@ -68,16 +55,67 @@ function apply_transform end
 Apply a transform to a `SampleCollection` and return the transformed
 `SampleCollection`.
 
-All `AbstractTransform`s must implement their own `apply_transform!`. An
-implementation may mutate the `SampleCollection`, but it must return the
-transformed `SampleCollection` with the metadata unchanged.
+Every `AbstractTransform` that is not an [`AbstractWeighting`](@ref) must
+implement its own `apply_transform!`. An implementation may mutate the
+`SampleCollection`, but it must return the transformed `SampleCollection` with
+the metadata unchanged. An `AbstractWeighting` implements
+[`SampleBuilder.compute_weights`](@ref) instead.
 """
 function apply_transform! end
 
 function transform_sequence end
 
 """
-    LatitudeWeighting <: AbstractTransform
+    AbstractWeighting <: AbstractTransform
+
+A transform that multiplies the matrix of samples by positive weights.
+
+# Interface
+
+To define a new `AbstractWeighting`, your subtype must implement
+[`SampleBuilder.compute_weights`](@ref). Its
+[`SampleBuilder.apply_transform!`](@ref) is already defined and multiplies the
+samples by the weights, so the weighting works like the built-in ones.
+
+# Examples
+
+A weighting that multiplies the samples of the `i`th variable by `i`.
+
+```julia
+import ClimaCalibrate.SampleBuilder
+
+struct IndexWeighting <: SampleBuilder.AbstractWeighting end
+
+function SampleBuilder.compute_weights(::IndexWeighting, sample_collection)
+    ranges = SampleBuilder.var_indices(sample_collection)
+    # One weight per entry of a sample
+    return [Float64(i) for (i, rows) in enumerate(ranges) for _ in rows]
+end
+
+weighted = sample_collection |> IndexWeighting()
+```
+"""
+abstract type AbstractWeighting <: AbstractTransform end
+
+"""
+    compute_weights(weighting::AbstractWeighting, sample_collection)
+
+Return the weights that `weighting` multiplies the matrix of samples of the
+`SampleCollection` `sample_collection` by.
+
+The weights are either a `Real`, which multiplies every entry, or an
+`AbstractVector` of `Real`s with one weight per entry of a sample, that is, one
+per row of the matrix of samples. Every weight must be positive. Use
+[`SampleBuilder.var_indices`](@ref) to find the rows that belong to each
+variable.
+
+Every [`AbstractWeighting`](@ref) must implement `compute_weights`, and it must
+not modify `sample_collection`.
+"""
+function compute_weights end
+
+"""
+    LatitudeWeighting <: AbstractWeighting
 
 A transform that applies latitude weighting to the matrix of samples.
 
@@ -90,7 +128,7 @@ struct LatitudeWeighting{
     S <: Union{Nothing, AbstractSet},
     FT <: AbstractFloat,
     B,
-} <: AbstractTransform
+} <: AbstractWeighting
     min_cosd_lat::FT
     by::B
     selected::S
@@ -120,14 +158,14 @@ function LatitudeWeighting(; min_cosd_lat::AbstractFloat = 0.1)
 end
 
 """
-    PerVariableWeighting <: AbstractTransform
+    PerVariableWeighting <: AbstractWeighting
 
 A transform that applies per-variable weighting to the matrix of samples.
 """
 struct PerVariableWeighting{
     W <: Union{AbstractVector{<:Real}, AbstractDict{<:Any, <:Real}},
     B,
-} <: AbstractTransform
+} <: AbstractWeighting
     weights::W
     by::B
     function PerVariableWeighting(
@@ -152,7 +190,7 @@ function PerVariableWeighting(weights::AbstractVector{<:Real})
 end
 
 """
-    PerCollectionWeighting <: AbstractTransform
+    PerCollectionWeighting <: AbstractWeighting
 
 A transform that applies the same weight to the matrix of samples.
 
@@ -166,7 +204,7 @@ transform = PerCollectionWeighting(3.0)
 weighted = sample_collection |> transform
 ```
 """
-struct PerCollectionWeighting{FT <: AbstractFloat} <: AbstractTransform
+struct PerCollectionWeighting{FT <: AbstractFloat} <: AbstractWeighting
     weight::FT
 end
 

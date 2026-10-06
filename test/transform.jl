@@ -4,7 +4,7 @@ import ClimaAnalysis
 import ClimaCalibrate
 import ClimaCalibrate.SampleBuilder
 import ClimaCalibrate.SampleBuilder:
-    AbstractTransform, LatitudeWeighting, PerCollectionWeighting
+    AbstractWeighting, LatitudeWeighting, PerCollectionWeighting
 
 import ClimaAnalysis.Template:
     TemplateVar, add_dim, add_attribs, one_to_n_data, initialize
@@ -491,76 +491,82 @@ end
     @test SampleBuilder.get_samples(sample_collection) == samples
 end
 
-@testset "Implementation of custom transform" begin
-    # Add a constant to the samples without mutating them and count the number
-    # of times the transform is applied. Annotating the sample collection as a
-    # SampleCollection checks that the transform is only applied to one.
-    struct ShiftTransform <: AbstractTransform
-        shift::Float64
+@testset "Implementation of custom weighting" begin
+    # Multiply the samples of the ith variable by i and count the number of
+    # times the weights are computed
+    struct IndexWeighting <: AbstractWeighting
         num_calls::Base.RefValue{Int}
-        ShiftTransform(shift) = new(shift, Ref(0))
+        IndexWeighting() = new(Ref(0))
     end
 
-    function SampleBuilder.apply_transform!(
+    function SampleBuilder.compute_weights(
+        weighting::IndexWeighting,
         sample_collection::ext.SampleCollection,
-        transform::ShiftTransform,
     )
-        transform.num_calls[] += 1
-        return ext.SampleCollection(
-            SampleBuilder.get_samples(sample_collection) .+ transform.shift,
-            SampleBuilder.get_metadata(sample_collection),
-        )
+        weighting.num_calls[] += 1
+        ranges = SampleBuilder.var_indices(sample_collection)
+        return [Float64(i) for (i, rows) in enumerate(ranges) for _ in rows]
     end
 
-    var =
+    make_var(short_name) =
         TemplateVar() |>
         add_dim("lat", [-60.0, 0.0, 60.0], units = "degrees") |>
-        add_attribs(short_name = "hi", start_date = "2007-12-1") |>
+        add_attribs(short_name = short_name, start_date = "2007-12-1") |>
         one_to_n_data(collected = true) |>
         initialize
-    sample_collection = SampleBuilder.build_samples([var]; FT = Float64)
+    sample_collection = SampleBuilder.build_samples(
+        [make_var("hi"), make_var("bye")];
+        FT = Float64,
+    )
     samples = copy(SampleBuilder.get_samples(sample_collection))
+    # The rows of the samples are hi (1:3) and bye (4:6)
+    index_weights = [1.0, 1.0, 1.0, 2.0, 2.0, 2.0]
 
-    # Building and showing the transformed sample collection do not apply the
-    # transform
-    transform = ShiftTransform(1.0)
-    transformed_collection = sample_collection |> transform |> transform
+    # Building and showing the transformed sample collection do not compute the
+    # weights
+    weighting = IndexWeighting()
+    transformed_collection = sample_collection |> weighting |> weighting
     @test transformed_collection isa SampleBuilder.TransformedSampleCollection
     @test SampleBuilder.base(transformed_collection) === sample_collection
     @test SampleBuilder.num_samples(transformed_collection) ==
           SampleBuilder.num_samples(sample_collection)
     @test SampleBuilder.transform_sequence(transformed_collection) ==
-          (transform, transform)
-    @test occursin("↳ " * repr(transform), sprint(show, transformed_collection))
-    @test transform.num_calls[] == 0
+          (weighting, weighting)
+    @test occursin("↳ " * repr(weighting), sprint(show, transformed_collection))
+    @test weighting.num_calls[] == 0
 
-    # The transform is applied once for each time it appears in the chain and
-    # its return value is used
-    shifted_collection = SampleBuilder.apply_transform(transformed_collection)
-    @test SampleBuilder.get_samples(shifted_collection) == samples .+ 2.0
-    @test transform.num_calls[] == 2
+    # The weights are computed once for each time the weighting appears in the
+    # chain
+    weighted_collection = SampleBuilder.apply_transform(transformed_collection)
+    @test SampleBuilder.get_samples(weighted_collection) ==
+          index_weights .^ 2 .* samples
+    @test weighting.num_calls[] == 2
     @test SampleBuilder.get_samples(sample_collection) == samples
 
     # Eager application
     eager_collection =
-        SampleBuilder.apply_transform(sample_collection, ShiftTransform(1.0))
-    @test SampleBuilder.get_samples(eager_collection) == samples .+ 1.0
+        SampleBuilder.apply_transform(sample_collection, IndexWeighting())
+    @test SampleBuilder.get_samples(eager_collection) ==
+          index_weights .* samples
 
-    # Transforms are applied in the order of the chain, including built-in
-    # transforms
-    shift_transform = ShiftTransform(1.0)
+    # apply_transform! weights the samples in place
+    deepcopy_collection = deepcopy(sample_collection)
+    @test SampleBuilder.apply_transform!(
+        deepcopy_collection,
+        IndexWeighting(),
+    ) === deepcopy_collection
+    @test SampleBuilder.get_samples(deepcopy_collection) ==
+          index_weights .* samples
+
+    # Custom and built-in weightings can be chained
+    index_weighting = IndexWeighting()
     per_collection_weighting = PerCollectionWeighting(2.0)
-    shift_then_weight =
-        sample_collection |> shift_transform |> per_collection_weighting
-    weight_then_shift =
-        sample_collection |> per_collection_weighting |> shift_transform
-    @test SampleBuilder.transform_sequence(shift_then_weight) ==
-          (shift_transform, per_collection_weighting)
+    chained_collection =
+        sample_collection |> index_weighting |> per_collection_weighting
+    @test SampleBuilder.transform_sequence(chained_collection) ==
+          (index_weighting, per_collection_weighting)
     @test SampleBuilder.get_samples(
-        SampleBuilder.apply_transform(shift_then_weight),
-    ) == 2.0 .* (samples .+ 1.0)
-    @test SampleBuilder.get_samples(
-        SampleBuilder.apply_transform(weight_then_shift),
-    ) == 2.0 .* samples .+ 1.0
+        SampleBuilder.apply_transform(chained_collection),
+    ) == 2.0 .* index_weights .* samples
     @test SampleBuilder.get_samples(sample_collection) == samples
 end

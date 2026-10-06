@@ -137,11 +137,17 @@ obs = ObservationRecipe.observation(covar_estimator, transformed_collection, 1)
 The observation and its metadata come from the untransformed samples. What
 happens to the transforms depends on the estimator.
 
-1. `ScalarCovariance` ignores all transformations since the values of the
-   samples are not used.
-2. `SeasonalDiagonalCovariance` and `SVDplusDCovariance` accepts all
-`TransformedCollection`s, but check latitude weighting is not applied multiple
-times.
+1. `ScalarCovariance` ignores all transformations with a warning, since the
+   values of the samples are not used.
+2. `SeasonalDiagonalCovariance` applies the transforms before computing the
+   variances, but throws an error for a `LatitudeWeighting`. Use its
+   `use_latitude_weights` keyword argument instead.
+3. `SVDplusDCovariance` applies the transforms before computing the SVD and the
+   diagonal term. It throws an error if its `latitude_weighting` keyword
+   argument is set and the transforms include a `LatitudeWeighting`, since the
+   latitude weighting would be applied twice. With
+   `use_weighted_samples_for_diagonal = false`, the diagonal term is computed
+   from the untransformed samples.
 
 Putting it together, here is an example of using transforms to weight the
 covariance matrix.
@@ -565,6 +571,9 @@ covar_estimator = ObservationRecipe.SVDplusDCovariance(
 )
 ```
 
+Piping the samples into `SampleBuilder.LatitudeWeighting()` instead gives the
+same covariance matrix.
+
 For `ScalarCovariance` and `SeasonalDiagonalCovariance`, pass
 `use_latitude_weights = true`. This multiplies the whole diagonal by the weight,
 including `scalar` or `regularization`, and every variable must have a latitude
@@ -573,8 +582,8 @@ dimension.
 **Q: How do I make a variable count more or less in the calibration?**
 
 **A:** Pipe the samples into a [`PerVariableWeighting`](@ref
-ClimaCalibrate.SampleBuilder.PerVariableWeighting). A weight smaller than 1
-makes a variable count more. For example, `PerVariableWeighting(Dict("pr" =>
-0.5, "rsut" => 1.0))` makes `pr` count four times as much. See
-[transformations](sample_builder.md#Transformations) for more about the
-transforms.
+ClimaCalibrate.SampleBuilder.PerVariableWeighting). The weights must be
+positive, and a weight smaller than 1 makes a variable count more. For example,
+`PerVariableWeighting(Dict("pr" => 0.5, "rsut" => 1.0))` makes `pr` count four
+times as much. See [transformations](sample_builder.md#Transformations) for more
+about the transforms.

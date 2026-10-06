@@ -1,6 +1,7 @@
 import ClimaCalibrate.SampleBuilder:
     AbstractSampleCollection,
     AbstractTransform,
+    AbstractWeighting,
     LatitudeWeighting,
     PerCollectionWeighting,
     PerVariableWeighting,
@@ -8,6 +9,7 @@ import ClimaCalibrate.SampleBuilder:
     apply_transform,
     apply_transform!,
     base,
+    compute_weights,
     transform_sequence,
     var_indices
 
@@ -141,6 +143,57 @@ function SampleBuilder.transform_sequence(
 end
 
 """
+    apply_transform!(
+        sample_collection::SampleCollection,
+        weighting::AbstractWeighting,
+    )
+
+Apply the weights to the matrix of samples in `sample_collection` by
+broadcasting.
+
+Weights must be positive.
+"""
+function SampleBuilder.apply_transform!(
+    sample_collection::SampleCollection,
+    weighting::AbstractWeighting,
+)
+    weights = compute_weights(weighting, sample_collection)
+    weighting_name = nameof(typeof(weighting))
+    weights isa Union{Real, AbstractVector{<:Real}} || error(
+        "The weights computed by $weighting_name must be a Real or an AbstractVector of Reals, but they are a $(typeof(weights))",
+    )
+    if weights isa AbstractVector
+        n_weights = length(weights)
+        n_entries = size(get_samples(sample_collection), 1)
+        n_weights == n_entries || error(
+            "The number of weights ($n_weights) computed by $weighting_name is not the same as the number of entries in a sample ($n_entries)",
+        )
+    end
+
+    # Check all weights are positive. We do it here since weighting might be
+    # user provided
+    FT = eltype(weights)
+    all(>(FT(0)), weights) ||
+        error("The weights computed by $weighting_name are not all positive")
+
+    get_samples(sample_collection) .*= weights
+    return sample_collection
+end
+
+"""
+    _entry_weights(var_weights, sample_collection::SampleCollection)
+
+Return a vector of weight per entry of a sample from a vector of one weight per
+variable.
+"""
+function _entry_weights(var_weights, sample_collection::SampleCollection)
+    return reduce(
+        vcat,
+        fill.(var_weights, length.(var_indices(sample_collection))),
+    )
+end
+
+"""
     LatitudeWeighting(
         selected::Union{AbstractVector, AbstractSet, Tuple};
         by = ClimaAnalysis.short_name,
@@ -174,13 +227,14 @@ function LatitudeWeighting(
 end
 
 """
-    apply_transform!(
-        sample_collection::SampleCollection,
+    compute_weights(
         transform::LatitudeWeighting,
+        sample_collection::SampleCollection,
     )
 
-Apply latitude weighting to `sample_collection` in place according to
-`transform` and return `sample_collection`.
+Return the latitude weights of `sample_collection` according to `transform`,
+with one weight per entry of a sample. The entries of the variables that are not
+weighted have a weight of one.
 
 An error is thrown if
 - no variable is weighted, either because none of the variables have a latitude
@@ -190,25 +244,26 @@ An error is thrown if
 - the latitudes of a weighted variable are not the same across samples, or
 - the latitude dimension of a weighted variable is not in degrees.
 """
-function SampleBuilder.apply_transform!(
-    sample_collection::SampleCollection,
+function SampleBuilder.compute_weights(
     transform::LatitudeWeighting,
+    sample_collection::SampleCollection,
 )
     metadata = get_metadata(sample_collection)
     metadata_col = _metadata_of_first_sample(sample_collection)
     mask = _lat_weighting_mask(transform, metadata_col)
     _check_lats_across_samples(metadata[mask, :])
     (; min_cosd_lat) = transform
-    # Compute every weight first, so an error leaves the samples unchanged
-    lat_weights = [
-        sqrt.(_flat_lat_weights(md; min_cosd_lat)) for md in metadata_col[mask]
-    ]
-    samples = get_samples(sample_collection)
-    for (weights, rows) in
-        zip(lat_weights, var_indices(sample_collection)[mask])
-        samples[rows, :] .*= weights
+    FT = eltype(get_samples(sample_collection))
+    # vcat promotes the element type, so no latitude weight is rounded
+    var_weights = map(
+        metadata_col,
+        var_indices(sample_collection),
+        mask,
+    ) do md, rows, weighted
+        weighted ? sqrt.(_flat_lat_weights(md; min_cosd_lat)) :
+        ones(FT, length(rows))
     end
-    return sample_collection
+    return reduce(vcat, var_weights)
 end
 
 """
@@ -281,20 +336,20 @@ function PerVariableWeighting(
 end
 
 """
-    apply_transform!(
-        sample_collection::SampleCollection,
+    compute_weights(
         transform::PerVariableWeighting{V},
+        sample_collection::SampleCollection,
     ) where {V <: AbstractVector}
 
-Apply per-variable weighting to `sample_collection` in place according to
-`transform` and return `sample_collection`.
+Return the per-variable weights of `sample_collection` according to
+`transform`, with one weight per entry of a sample.
 
 An error is thrown if the number of weights is not equal to the number of
 variables.
 """
-function SampleBuilder.apply_transform!(
-    sample_collection::SampleCollection,
+function SampleBuilder.compute_weights(
     transform::PerVariableWeighting{V},
+    sample_collection::SampleCollection,
 ) where {V <: AbstractVector}
     metadata = get_metadata(sample_collection)
     (; weights) = transform
@@ -302,28 +357,24 @@ function SampleBuilder.apply_transform!(
     n_weights == n_vars || error(
         "The number of weights ($n_weights) is not the same as the number of variables ($n_vars)",
     )
-    samples = get_samples(sample_collection)
-    for (weight, range) in zip(weights, var_indices(sample_collection))
-        samples[range, :] .*= weight
-    end
-    return sample_collection
+    return _entry_weights(weights, sample_collection)
 end
 
 """
-    apply_transform!(
-        sample_collection::SampleCollection,
+    compute_weights(
         transform::PerVariableWeighting{D},
+        sample_collection::SampleCollection,
     ) where {D <: AbstractDict}
 
-Apply per-variable weighting to `sample_collection` in place according to
-`transform` and return `sample_collection`.
+Return the per-variable weights of `sample_collection` according to
+`transform`, with one weight per entry of a sample.
 
 An error is thrown if a variable in `sample_collection` does not have a weight,
 that is, if `by(metadata)` is not a key of `weights`.
 """
-function SampleBuilder.apply_transform!(
-    sample_collection::SampleCollection,
+function SampleBuilder.compute_weights(
     transform::PerVariableWeighting{D},
+    sample_collection::SampleCollection,
 ) where {D <: AbstractDict}
     (; weights, by) = transform
     var_keys = [by(md) for md in _metadata_of_first_sample(sample_collection)]
@@ -331,28 +382,23 @@ function SampleBuilder.apply_transform!(
     isempty(missing_keys) || error(
         "No weights are given for the variables with the keys $missing_keys",
     )
-    samples = get_samples(sample_collection)
-    for (key, range) in zip(var_keys, var_indices(sample_collection))
-        samples[range, :] .*= weights[key]
-    end
-    return sample_collection
+    return _entry_weights([weights[key] for key in var_keys], sample_collection)
 end
 
 """
-    apply_transform!(
-        sample_collection::SampleCollection,
+    compute_weights(
         transform::PerCollectionWeighting,
+        sample_collection::SampleCollection,
     )
 
-Apply per-collection weighting by the scalar in `transform` to
-`sample_collection` in place and return `sample_collection`.
+Return the scalar in `transform`, which weights every entry of
+`sample_collection`.
 """
-function SampleBuilder.apply_transform!(
-    sample_collection::SampleCollection,
+function SampleBuilder.compute_weights(
     transform::PerCollectionWeighting,
+    ::SampleCollection,
 )
-    get_samples(sample_collection) .*= transform.weight
-    return sample_collection
+    return transform.weight
 end
 
 """
