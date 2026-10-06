@@ -195,10 +195,130 @@ col_vars = SampleBuilder.reconstruct_col(sample_collection, 1)
 first(col_vars)
 ```
 
+## Transformations
+
+There are cases where you want to apply a transform, such as per-variable
+weighting or latitude weighting, to the samples for estimating the covariance
+matrix, but not to the samples when forming the observations. In
+ClimaCalibrate, these operations are [`AbstractTransform`](@ref)s. Transforms
+that multiply the samples by weights, such as the built-in ones, are
+[`AbstractWeighting`](@ref)s.
+
+### Using a transform
+
+In this example, a sample collection is piped into a transform to apply latitude
+weighting and per-variable weighting and `apply_transform` is used to
+materialize it.
+
+```@example samples
+transformed_collection =
+    sample_collection |>
+    SampleBuilder.LatitudeWeighting() |>
+    SampleBuilder.PerVariableWeighting(Dict("pr" => 2.0, "rsut" => 1.0))
+weighted_collection = SampleBuilder.apply_transform(transformed_collection)
+```
+
+A transform does not eagerly change the samples. It returns a
+[`TransformedSampleCollection`](@ref), which keeps the original samples and the
+transforms to apply. See the next page,
+[building observations](observation_recipe.md), for how
+[`TransformedSampleCollection`](@ref)s are used.
+
+### Built-in transforms
+
+- [`LatitudeWeighting`](@ref) multiplies each value at latitude `lat` by
+  `sqrt(1 / max(cosd(lat), min_cosd_lat))`, which inflates the variance of the
+  smaller grid cells toward the poles so that they count less. By default,
+  every variable with a latitude
+  dimension is weighted. To weight only some variables, pass their short names,
+  as in `LatitudeWeighting(["pr"])`.
+- [`PerVariableWeighting`](@ref) multiplies the samples of each variable by a
+  weight. Pass either a vector with one weight per variable, in the order the
+  variables were passed to `build_samples` or `build_samples_by_times`, or a
+  dictionary from short names to weights, as in
+  `PerVariableWeighting(Dict("pr" => 2.0, "rsut" => 1.0))`.
+- [`PerCollectionWeighting`](@ref) multiplies all the samples by one weight, for
+  example to weight this observation against others that it is combined with.
+
+The weights must be positive. Otherwise, an error is thrown when the transforms
+are applied.
+
+### Working with transformed samples
+
+Showing a `TransformedSampleCollection` lists its transforms in the order they
+are applied. You can get the sequence of transformations with
+[`transform_sequence`](@ref).
+
+```@example samples
+transformed_collection
+```
+
+You can get the original samples with
+[`base`](@ref base(::TransformedSampleCollection)).
+
+```@example samples
+SampleBuilder.base(transformed_collection) === sample_collection
+```
+
+To apply a single transform to a `SampleCollection` directly, for example to
+test a transform, use [`apply_transform!`](@ref).
+
+```@example samples
+doubled_collection = SampleBuilder.apply_transform!(
+    weighted_collection,
+    SampleBuilder.PerCollectionWeighting(2.0),
+)
+SampleBuilder.get_samples(doubled_collection) ==
+2 .* SampleBuilder.get_samples(
+    SampleBuilder.apply_transform(transformed_collection),
+)
+```
+
+### Writing your own weighting
+
+A custom weighting is a subtype of [`AbstractWeighting`](@ref) with a method of
+[`compute_weights`](@ref). The following weighting multiplies the samples of the
+`i`th variable by `i`, which is not practically useful, but serves as an
+illustrative example.
+
+```@example samples
+struct IndexWeighting <: SampleBuilder.AbstractWeighting end
+
+function SampleBuilder.compute_weights(::IndexWeighting, sample_collection)
+    ranges = SampleBuilder.var_indices(sample_collection)
+    # One weight per entry of a sample
+    return [Float64(i) for (i, rows) in enumerate(ranges) for _ in rows]
+end
+
+index_weighted_collection =
+    SampleBuilder.apply_transform(sample_collection |> IndexWeighting())
+index_weighted_samples = SampleBuilder.get_samples(index_weighted_collection)
+pr_rows, rsut_rows = SampleBuilder.var_indices(sample_collection)
+# Whether the samples of pr are unchanged and the samples of rsut are doubled
+index_weighted_samples[pr_rows, :] == samples[pr_rows, :],
+index_weighted_samples[rsut_rows, :] == 2 .* samples[rsut_rows, :]
+```
+
+`compute_weights` returns either a single weight for every entry of a sample or
+a vector with one weight per entry, that is, one per row of the matrix of
+samples. The weights must be positive. You can expect the `IndexWeighting` to
+behave like the built-in transforms where `apply_transform`,
+`apply_transform!`, piping, calling the transform directly as in
+`IndexWeighting()(sample_collection)`, and chaining with other transforms all
+work.
+
+A transform that does not multiply the samples by weights is a subtype of
+[`AbstractTransform`](@ref) with a method of [`apply_transform!`](@ref) instead.
+When implementing `SampleBuilder.apply_transform!`, it must return a
+`SampleCollection`. The returned `SampleCollection` must have the same metadata
+as the one passed in, since the observation and its metadata come from the
+untransformed samples.
+
 ## Next steps
 
-Once you have a `SampleCollection`, you pass a covariance estimator, the
-`SampleCollection`, and the index of the sample to use as the observation to
-[`observation`](@ref ClimaCalibrate.ObservationRecipe.observation) to build the
-`EKP.Observation` used in the calibration. See
-[building observations](observation_recipe.md) for the available estimators.
+Once you have a `SampleCollection` or a `TransformedSampleCollection`, you pass
+a covariance estimator, the sample collection, and the index of the sample to
+use as the observation to [`observation`](@ref
+ClimaCalibrate.ObservationRecipe.observation) to build the `EKP.Observation`
+used in the calibration. See [building observations](observation_recipe.md) for
+the available estimators.

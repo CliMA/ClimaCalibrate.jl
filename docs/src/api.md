@@ -133,14 +133,43 @@ ClimaCalibrate.EKPUtils.residual
 
 ```@docs
 ClimaCalibrate.SampleBuilder
+ClimaCalibrate.SampleBuilder.AbstractSampleCollection
 ClimaCalibrateClimaAnalysisExt.SampleCollection
 ClimaCalibrate.SampleBuilder.build_samples
 ClimaCalibrate.SampleBuilder.build_samples_by_times
-ClimaCalibrate.SampleBuilder.num_samples
+ClimaCalibrate.SampleBuilder.num_samples(::ClimaCalibrateClimaAnalysisExt.SampleCollection)
 ClimaCalibrate.SampleBuilder.reconstruct_col
 ClimaCalibrate.SampleBuilder.get_samples
 ClimaCalibrate.SampleBuilder.get_metadata
 ClimaCalibrate.SampleBuilder.var_indices
+ClimaCalibrate.SampleBuilder.base(::ClimaCalibrateClimaAnalysisExt.SampleCollection)
+```
+
+### Transforms
+
+```@docs
+ClimaCalibrate.SampleBuilder.TransformedSampleCollection
+ClimaCalibrate.SampleBuilder.base(::ClimaCalibrate.SampleBuilder.TransformedSampleCollection)
+ClimaCalibrate.SampleBuilder.num_samples(::ClimaCalibrate.SampleBuilder.TransformedSampleCollection)
+ClimaCalibrate.SampleBuilder.AbstractTransform
+ClimaCalibrate.SampleBuilder.AbstractTransform(::ClimaCalibrate.SampleBuilder.AbstractSampleCollection)
+ClimaCalibrate.SampleBuilder.apply_transform
+ClimaCalibrate.SampleBuilder.apply_transform!
+ClimaCalibrate.SampleBuilder.transform_sequence
+ClimaCalibrate.SampleBuilder.AbstractWeighting
+ClimaCalibrate.SampleBuilder.compute_weights
+ClimaCalibrate.SampleBuilder.apply_transform!(::ClimaCalibrateClimaAnalysisExt.SampleCollection, ::ClimaCalibrate.SampleBuilder.AbstractWeighting)
+ClimaCalibrate.SampleBuilder.LatitudeWeighting
+ClimaCalibrate.SampleBuilder.LatitudeWeighting()
+ClimaCalibrate.SampleBuilder.LatitudeWeighting(::Union{AbstractVector, AbstractSet, Tuple})
+ClimaCalibrate.SampleBuilder.compute_weights(::ClimaCalibrate.SampleBuilder.LatitudeWeighting, ::ClimaCalibrateClimaAnalysisExt.SampleCollection)
+ClimaCalibrate.SampleBuilder.PerVariableWeighting
+ClimaCalibrate.SampleBuilder.PerVariableWeighting(::AbstractVector{<:Real})
+ClimaCalibrate.SampleBuilder.PerVariableWeighting(::AbstractDict{<:Any, <:Real})
+ClimaCalibrate.SampleBuilder.compute_weights(::ClimaCalibrate.SampleBuilder.PerVariableWeighting{<:AbstractVector}, ::ClimaCalibrateClimaAnalysisExt.SampleCollection)
+ClimaCalibrate.SampleBuilder.compute_weights(::ClimaCalibrate.SampleBuilder.PerVariableWeighting{<:AbstractDict}, ::ClimaCalibrateClimaAnalysisExt.SampleCollection)
+ClimaCalibrate.SampleBuilder.PerCollectionWeighting
+ClimaCalibrate.SampleBuilder.compute_weights(::ClimaCalibrate.SampleBuilder.PerCollectionWeighting, ::ClimaCalibrateClimaAnalysisExt.SampleCollection)
 ```
 
 ## Observation Recipe Interface

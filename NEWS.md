@@ -3,6 +3,32 @@ ClimaCalibrate.jl Release Notes
 
 main
 -------
+- Add transforms, which weight the samples used to estimate the covariance
+  matrix without changing the observation
+  [#381](https://github.com/CliMA/ClimaCalibrate.jl/pull/381).
+  - `sample_collection |> transform` returns a `TransformedSampleCollection`.
+    Passing it to the `observation` function weights only the covariance matrix.
+  - The built-in transforms are `LatitudeWeighting`, `PerVariableWeighting`, and
+    `PerCollectionWeighting`. A custom transform subtypes `AbstractTransform`
+    and implements `apply_transform!`.
+  - `SVDplusDCovariance` and `SeasonalDiagonalCovariance` apply the transforms,
+    but `SeasonalDiagonalCovariance` throws an error for a `LatitudeWeighting`.
+    `ScalarCovariance` ignores the transforms with a warning.
+  - A custom covariance estimator can now receive a
+    `TransformedSampleCollection`. Call `SampleBuilder.apply_transform` or
+    `SampleBuilder.base` on it to get a `SampleCollection`.
+- The `use_latitude_weights` and `min_cosd_lat` keyword arguments of
+  `SVDplusDCovariance` are deprecated in favour of the new `latitude_weighting`
+  keyword argument. Replace `use_latitude_weights = true` with
+  `latitude_weighting = SampleBuilder.LatitudeWeighting()`, and
+  `use_latitude_weights = true, min_cosd_lat = x` with
+  `latitude_weighting = SampleBuilder.LatitudeWeighting(min_cosd_lat = x)`
+  [#381](https://github.com/CliMA/ClimaCalibrate.jl/pull/381).
+- With latitude weighting, `SVDplusDCovariance` now skips the variables without
+  a latitude dimension instead of throwing an error. It still throws an error if
+  no variable has one. `ScalarCovariance` and `SeasonalDiagonalCovariance` still
+  throw an error for any variable without a latitude dimension
+  [#381](https://github.com/CliMA/ClimaCalibrate.jl/pull/381).
 
 v0.6.0
 -------
