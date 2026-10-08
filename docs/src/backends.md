@@ -64,6 +64,35 @@ If your forward model requires parallelization across multiple cores or GPUs,
 choose one of the HPC cluster backends. These allow you to allocate more
 resources to each forward model using Slurm or PBS.
 
+## Worker registry
+
+[`add_workers`](@ref) records every worker in the worker registry, written to a
+TOML file after every reconcile pass and at exit. Each `add_workers` call is a
+launch group with a desired worker count, and each worker has one row holding
+its scheduler job id, Distributed id, output file, and state. The states are
+`starting` (submitted, queued, or connected and loading code), `ready` (in the
+pool), `busy` (running a member), and `ended`.
+
+The file is `.climacalibrate/workers-<pid>.toml` in the working directory
+and stays after the run. Use `Backend.Workers.set_registry_path!(path)`
+before `add_workers` to put it elsewhere. Inspect a live session with
+`Backend.Workers.worker_rows`, or the file with `TOML.parsefile`.
+
+During a calibration the dispatch loop reconciles the registry with the
+scheduler: it asks `squeue` or `qstat` about live jobs, ends workers that are
+not ready within `startup_timeout` seconds of submission (12 hours by default),
+and launches replacements for any group below its desired count, up to that
+group's `max_relaunches`. The only other way to grow the pool mid-run is to call
+`add_workers` again. A worker that dies while running a member still counts as a
+failed member and its replacement picks up later members. A worker that fails to
+load its code is stopped and replaced. Once two workers of a group fail to load
+their code and none has succeeded, the group launches no more workers, since
+the setup code is likely broken.
+
+When the driver exits, an `atexit` hook cancels every job the session
+submitted by id and ends the live rows with
+`exit_reason = "cancel_worker_jobs"`.
+
 ## Job status
 
 An `HPCBackend` reports an ensemble member's job as one of four

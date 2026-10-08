@@ -14,6 +14,7 @@ module Calibration
 import ClimaCalibrate
 import ..ClimaCalibrate: Backend, AbstractModelInterface
 import ClimaCalibrate.Backend: HPCBackend, WorkerBackend, JuliaBackend
+import ClimaCalibrate.Backend: Workers
 
 # Needed for interfacing with WorkerBackend
 import Distributed
@@ -511,11 +512,15 @@ function run_iteration(
     # asynchronous calibration does not hang forever if no workers ever start
     t_last_available = time()
     @sync while !isempty(work_to_do)
+        # Record what the scheduler says about the workers, and replace any that
+        # exited or never started
+        Workers.reconcile_workers!()
         worker = take_live_worker!(worker_pool)
-        if worker !== nothing
+        if !isnothing(worker)
             t_last_available = time()
             run_fwd_model = pop!(work_to_do)
             Base.Threads.atomic_add!(inflight, 1)
+            Workers.mark_worker_busy!(worker)
             @async try
                 run_fwd_model(worker)
             catch e
@@ -530,21 +535,27 @@ function run_iteration(
                 # pool through the `:deregister` hook. Returning it would queue
                 # a dead id, and `take!` on a pool holding nothing else throws
                 # rather than waiting for the workers still joining
-                worker in Distributed.procs() && push!(worker_pool, worker)
+                if worker in Distributed.procs()
+                    push!(worker_pool, worker)
+                    Workers.mark_worker_ready!(worker)
+                else
+                    Workers.mark_worker_exited!(worker)
+                end
             end
         else
             # No workers in the pool. With asynchronous submission this is
             # expected early on. Only error if the pool stays empty with no
-            # workers initializing, none running, and no progress for longer
-            # than the backend's `empty_pool_timeout`. Reset the timer while
-            # models are running or workers are initializing, since those will
-            # replenish the pool.
-            if inflight[] > 0 || Backend.n_initializing_workers() > 0
+            # workers initializing or running, and no progress for longer than
+            # the backend's `empty_pool_timeout`. Reset the timer while models
+            # are running or connected workers load code, since those will
+            # replenish the pool. Queued jobs do not reset it.
+            on_the_way = Workers.n_initializing_workers()
+            if inflight[] > 0 || on_the_way > 0
                 t_last_available = time()
             end
             t_empty = time() - t_last_available
             if inflight[] == 0 &&
-               Backend.n_initializing_workers() == 0 &&
+               on_the_way == 0 &&
                t_empty > backend.empty_pool_timeout
                 error(
                     "No workers available for $(round(Int, t_empty))s \
