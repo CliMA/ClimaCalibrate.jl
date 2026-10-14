@@ -64,11 +64,11 @@ ClimaCalibrate.add_workers
 ClimaCalibrate.@worker_setup
 ClimaCalibrate.calibration_worker_pool
 ClimaCalibrate.cancel_worker_jobs
+ClimaCalibrate.worker_rows
 ClimaCalibrate.Backend.Workers
 ClimaCalibrate.Backend.Workers.WorkerState
+ClimaCalibrate.Backend.Workers.WorkerRecord
 ClimaCalibrate.Backend.Workers.worker_registry
-ClimaCalibrate.Backend.Workers.set_registry_path!
-ClimaCalibrate.Backend.Workers.worker_rows
 ClimaCalibrate.set_worker_logger
 ClimaCalibrate.set_worker_loggers
 ClimaCalibrate.map_remotecall_fetch

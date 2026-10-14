@@ -5,8 +5,10 @@
 #   sets a worker's pid on `:register` and records its exit on `:deregister`.
 #   The pool sets `READY` once code is loaded and `BUSY` while a member runs.
 # - Poll: `reconcile_workers!` checks what the driver must ask about. It ends
-#   workers whose job finished or left the queue, whose process vanished
-#   without a deregister, or that stayed starting too long. It launches
+#   workers whose job finished or left the queue, whose process exited
+#   without reaching our `:deregister` hook, or that stayed starting too long.
+#   A local worker is the usual case of the second: `LocalManager` does not
+#   call our `Distributed.manage`, so its exit is only seen here. It launches
 #   replacements for groups below their desired count. It runs on every pass
 #   of the `WorkerBackend` dispatch loop and every iteration of the launch poll.
 #
@@ -117,7 +119,7 @@ end
 # pass does not see the same deficit.
 function _fill_deficits!(reg::WorkerRegistry, submit)
     for g in group_rows(reg)
-        owned(g) || continue
+        torn_down(g) && continue
         live = length(worker_rows(reg; states = LIVE_STATES, group_id = g.id))
         deficit = g.desired - live
         deficit > 0 || continue
@@ -147,12 +149,11 @@ Bring the registry in line with the cluster and the groups' desired counts:
 2. End workers whose connected process is gone.
 3. End workers still starting after their group's startup timeout.
 4. Launch replacements for each group short of its desired count, within its
-   relaunch budget. Groups from another session's registry file have no
-   launcher and are left alone.
+   relaunch budget. Groups torn down by `cancel_worker_jobs` are left alone.
 
-Runs at most every `RECONCILE_INTERVAL` seconds, and
-writes the registry file afterwards. No-op while another call is in progress
-or when the registry has no launch groups. Errors are logged, not thrown.
+Runs at most every `RECONCILE_INTERVAL` seconds, counting passes that throw.
+No-op while another call is in progress or when the registry has no launch
+groups. Errors are logged, not thrown.
 
 Keyword arguments exist for testing: `now`, `alive_pids`, and
 `submit(group_id, n)`.
@@ -172,7 +173,6 @@ function reconcile_workers!(
         _end_disconnected_workers!(reg, alive_pids, now)
         _apply_startup_timeouts!(reg, now)
         _fill_deficits!(reg, submit)
-        write_registry_file(reg)
     catch e
         @error "Reconciling the worker registry failed" exception =
             (e, catch_backtrace()) maxlog = 5

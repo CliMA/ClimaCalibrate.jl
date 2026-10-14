@@ -66,20 +66,28 @@ resources to each forward model using Slurm or PBS.
 
 ## Worker registry
 
-[`add_workers`](@ref) records every worker in the worker registry, written to a
-TOML file after every reconcile pass and at exit. Each `add_workers` call is a
-launch group with a desired worker count, and each worker has one row holding
-its scheduler job id, Distributed id, output file, and state. The states are
-`starting` (submitted, queued, or connected and loading code), `ready` (in the
-pool), `busy` (running a member), and `ended`.
+For a [`WorkerBackend`](@ref), the driver keeps a record of every worker
+launched with [`add_workers`](@ref): its scheduler job id, Distributed id,
+output file, and [`WorkerState`](@ref ClimaCalibrate.Backend.Workers.WorkerState).
+Use it to see which workers are queued, idle, or running a member, why a worker
+ended, and where its log is, without querying the scheduler. List the workers
+in the driver with [`worker_rows`](@ref):
 
-The file is `.climacalibrate/workers-<pid>.toml` in the working directory
-and stays after the run. Use `Backend.Workers.set_registry_path!(path)`
-before `add_workers` to put it elsewhere. Inspect a live session with
-`Backend.Workers.worker_rows`, or the file with `TOML.parsefile`.
+```julia-repl
+julia> worker_rows()
+3-element Vector{ClimaCalibrate.Backend.Workers.WorkerRecord}:
+ Worker 1 in group 1: busy, job 4182734, pid 2, output /scratch/logs/worker-1.out
+ Worker 2 in group 1: ready, job 4182735, pid 3, output /scratch/logs/worker-2.out
+ Worker 3 in group 1: ended (scheduler reported FAILED), job 4182736, output /scratch/logs/worker-3.out
+```
 
-During a calibration the dispatch loop reconciles the registry with the
-scheduler: it asks `squeue` or `qstat` about live jobs, ends workers that are
+Pass `states` to filter them, e.g.
+`worker_rows(; states = (ClimaCalibrate.Backend.Workers.ENDED,))` for the
+workers that have ended. The registry lives in the driver's memory only.
+
+Each `add_workers` call is a launch group with a desired worker count.
+Every few seconds during a calibration, the driver checks the registry against
+the scheduler: it asks `squeue` or `qstat` about live jobs, ends workers that are
 not ready within `startup_timeout` seconds of submission (12 hours by default),
 and launches replacements for any group below its desired count, up to that
 group's `max_relaunches`. The only other way to grow the pool mid-run is to call

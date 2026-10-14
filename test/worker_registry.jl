@@ -1,6 +1,5 @@
 using Test
 using Distributed
-import TOML
 import ClimaCalibrate
 import ClimaCalibrate.Backend
 import ClimaCalibrate.Backend.Workers
@@ -21,7 +20,7 @@ import ClimaCalibrate.Backend.Workers:
     ENDED
 
 # Every test builds its own registry so the fakes below are the only writers.
-open_registry() = WorkerRegistry(joinpath(mktempdir(), "workers.toml"))
+open_registry() = WorkerRegistry()
 
 # Stands in for a scheduler. `states(ids)` answers `query_scheduler_states`,
 # where `nothing` is a failed query. Queries and cancellations are recorded.
@@ -73,7 +72,6 @@ reconcile(reg; now, alive = Int[], submit = (g, n) -> nothing) =
         desired = 2,
         max_relaunches = 3,
         startup_timeout = 60.0,
-        now = t0,
     )
     id = insert_worker!(reg; group_id = gid, now = t0)
     @test worker_row(reg, id).state == STARTING
@@ -86,6 +84,8 @@ reconcile(reg; now, alive = Int[], submit = (g, n) -> nothing) =
     @test row.state == ENDED
     @test row.ended_at == t0 + 2
     @test row.exit_reason == "done"
+    set_job_id!(reg, id, 123)
+    @test sprint(show, row) == "Worker $id in group $gid: ended (done), job 123"
     # A worker that never made the pool ends with no ready_at
     never = insert_worker!(reg; group_id = gid, now = t0)
     @test set_state!(reg, never, ENDED; reason = "lost")
@@ -100,20 +100,6 @@ reconcile(reg; now, alive = Int[], submit = (g, n) -> nothing) =
     @test length(worker_rows(reg; states = (ENDED,))) == 2
     @test isempty(worker_rows(reg; states = (READY,)))
     @test length(worker_rows(reg; group_id = gid)) == 2
-
-    # The file holds the same records, without the in-memory launcher
-    Workers.write_registry_file(reg)
-    file = TOML.parsefile(reg.path)
-    @test length(file["groups"]) == 1
-    @test file["groups"][1]["cluster"] == "slurm"
-    @test !haskey(file["groups"][1], "launcher")
-    @test length(file["workers"]) == 2
-    @test file["workers"][1]["state"] == "ended"
-    @test file["workers"][1]["exit_reason"] == "done"
-    @test !haskey(file["workers"][2], "ready_at")
-
-    # The path is fixed once the registry has groups
-    @test_throws ErrorException Workers.set_registry_path!("other.toml", reg)
 end
 
 @testset "cancel_worker_jobs" begin
@@ -130,7 +116,7 @@ end
     set_job_id!(reg, b, "shared")
     set_job_id!(reg, c, "shared")
     set_state!(reg, c, READY)
-    # A group without a launcher is not this session's to cancel
+    # A group without a launcher, as after an earlier teardown, is skipped
     foreign = insert_group!(
         reg;
         cluster = :slurm,
@@ -149,7 +135,7 @@ end
         @test worker_row(reg, id).exit_reason == "cancel_worker_jobs"
     end
     @test worker_row(reg, f).state == STARTING
-    @test !Workers.owned(group_row(reg, gid))
+    @test Workers.torn_down(group_row(reg, gid))
 end
 
 @testset "Reconcile: scheduler states" begin
@@ -342,8 +328,7 @@ end
         empty_pool_timeout = 300,
     )
     output_dir = mktempdir()
-    registry_path = joinpath(mktempdir(), "workers.toml")
-    reg = Workers.set_registry_path!(registry_path)
+    reg = Workers.worker_registry()
 
     ids = fetch(
         ClimaCalibrate.add_workers(
@@ -354,7 +339,6 @@ end
             startup_timeout = 300,
         ),
     )
-    @test Workers.worker_registry() === reg
     try
         @test length(ids) == 1
         @test wait_for_rows(reg, READY, 1) == 1
@@ -393,13 +377,12 @@ end
         @test group_row(reg, g.id).relaunches_used == 1
         @test length(worker_rows(reg)) == 2
 
-        # Teardown ends live rows, forgets the launchers, and keeps the file
+        # Teardown ends live rows and forgets the launchers
         ClimaCalibrate.cancel_worker_jobs()
         @test worker_row(reg, fresh.id).state == ENDED
         @test worker_row(reg, fresh.id).exit_reason == "cancel_worker_jobs"
         @test isnothing(group_row(reg, g.id).launcher)
         @test isempty(worker_rows(reg; states = Workers.LIVE_STATES))
-        @test isfile(registry_path)
     finally
         rmprocs(workers())
     end

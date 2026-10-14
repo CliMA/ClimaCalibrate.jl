@@ -6,7 +6,7 @@ Distributed.jl workers for the
 on a scheduler or locally ([`add_workers`](@ref), [`SlurmManager`](@ref),
 [`PBSManager`](@ref)), loading code on them ([`@worker_setup`](@ref)), the pool
 they join ([`calibration_worker_pool`](@ref)), and the worker registry that
-tracks and relaunches them ([`worker_registry`](@ref)).
+tracks and relaunches them ([`worker_rows`](@ref)).
 """
 module Workers
 
@@ -35,7 +35,6 @@ include("worker_registry.jl")
 include("worker_reconcile.jl")
 
 function __init__()
-    WORKER_REGISTRY.path = default_registry_path()
     get!(ENV, "JULIA_WORKER_TIMEOUT", worker_timeout())
     return nothing
 end
@@ -50,6 +49,7 @@ export add_workers,
     get_manager,
     map_remotecall_fetch,
     foreach_remotecall_wait,
+    worker_rows,
     @worker_setup
 
 # Set the time limit for the Julia worker to be contacted by the main process, default = "60.0s"
@@ -584,8 +584,7 @@ releases the workers directly.
 """
 function cancel_worker_jobs(; reg::WorkerRegistry = WORKER_REGISTRY)
     for g in group_rows(reg)
-        # Not this session's group, so not its jobs to cancel
-        owned(g) || continue
+        torn_down(g) && continue
         rows = worker_rows(reg; group_id = g.id)
         manager = scheduler_manager(g)
         if !isnothing(manager)
@@ -598,7 +597,6 @@ function cancel_worker_jobs(; reg::WorkerRegistry = WORKER_REGISTRY)
         # Without a launcher nothing is relaunched on the next reconcile pass
         g.launcher = nothing
     end
-    write_registry_file(reg)
     return nothing
 end
 
@@ -1258,8 +1256,7 @@ has started and loaded its code, so a calibration can begin with an empty pool
 and pick up workers as they join.
 
 The call is recorded as a launch group in the worker registry (see
-[`worker_registry`](@ref), written to a TOML file under `.climacalibrate/`
-in the working directory) with `nworkers` as its desired count. While a
+[`worker_rows`](@ref)) with `nworkers` as its desired count. While a
 calibration runs, a worker that exits, fails, or is not ready within
 `startup_timeout` seconds is replaced, up to `max_relaunches` replacements for
 the group. To add workers later, call `add_workers` again.

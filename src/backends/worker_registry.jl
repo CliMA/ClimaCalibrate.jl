@@ -1,24 +1,25 @@
-import TOML
-
 # Worker registry
 #
-# In-memory table of workers and launch groups, written to TOML after every
-# reconcile pass and at exit. Each worker row links a Distributed pid to its
-# scheduler job and tracks its state. A launch group is one `add_workers` call,
-# or a direct `addprocs(SlurmManager(n))`. This file only stores and updates
-# rows. `worker_reconcile.jl` syncs them with the scheduler and Distributed.
+# In-memory table of workers and launch groups. Each worker row links a
+# Distributed pid to its scheduler job and tracks its state. A launch group is
+# one `add_workers` call, or a direct `addprocs(SlurmManager(n))`. This file
+# only stores and updates rows. `worker_reconcile.jl` syncs them with the
+# scheduler and Distributed.
 
 """
     WorkerState
 
-State of a worker, written to the registry file as its lowercase name:
+State of a worker, stored in its [`WorkerRecord`](@ref):
 
 - `STARTING`: submitted, queued, running, or connected and loading code. A
-  worker with a `pid` has connected.
-- `READY`: in the worker pool, idle
-- `BUSY`: checked out of the pool, running a member
-- `ENDED`: terminal, never left. `exit_reason` says why, and a missing
-  `ready_at` means the worker never made it into the pool.
+  worker whose record has a `pid` has connected.
+- `READY`: in the worker pool, idle.
+- `BUSY`: checked out of the pool, running a member.
+- `ENDED`: stopped. The record's `exit_reason` says why, and its `ready_at` is
+  `nothing` if the worker never joined the pool.
+
+A worker moves from `STARTING` to `READY`, back and forth between `READY` and
+`BUSY`, and from any state to `ENDED`, which it never leaves.
 """
 @enum WorkerState begin
     STARTING
@@ -48,138 +49,103 @@ const DEFAULT_STARTUP_TIMEOUT = 12 * 3600.0
 # after `qsub`, then start anyway and burn a relaunch.
 const UNKNOWN_JOB_GRACE = 60.0
 
-# An `add_workers` call. `launcher` is the tuple `(; manager, kwargs)`,
-# specifying a worker launch, with `manager = nothing` for local workers. It is
-# `nothing` for a group this session cannot launch. It is not written to the
-# file.
+# One `add_workers` call, or a direct `addprocs(SlurmManager(n))`
 Base.@kwdef mutable struct LaunchGroup
-    id::Int
-    cluster::Symbol
+    # Position in the registry's `groups`
+    const id::Int
+    # Where the workers run, e.g. `:slurm`, `:pbs`, or `:local`
+    const cluster::Symbol
+    # Workers the group keeps live. `rmprocs` of a worker lowers it.
     desired::Int
+    # Replacements the group may launch, not counting its first workers
     max_relaunches::Int
+    # Replacements launched so far
     relaunches_used::Int = 0
-    startup_timeout::Float64
+    # Seconds after a worker is requested that it may stay `STARTING`
+    const startup_timeout::Float64
+    # Config `launch_rows!` needs to start more workers: `(; manager, kwargs,
+    # resources_for)`, with `manager = nothing` for local workers.
     launcher::Any = nothing
 end
 
-# Whether this session may launch workers for `g` and cancel its jobs
-owned(g::LaunchGroup) = !isnothing(g.launcher)
-# The cluster manager of an owned scheduler group, else `nothing`
-scheduler_manager(g::LaunchGroup) = owned(g) ? g.launcher.manager : nothing
+# Whether `cancel_worker_jobs` has stopped the group, or it never had a launcher
+torn_down(g::LaunchGroup) = isnothing(g.launcher)
+# The cluster manager of a scheduler group not torn down, else `nothing`
+scheduler_manager(g::LaunchGroup) = torn_down(g) ? nothing : g.launcher.manager
 
-# One worker. `job_id` is the scheduler's, `pid` is Distributed's
+"""
+    WorkerRecord
+
+One worker in the worker registry, as returned by [`worker_rows`](@ref). Times
+are Unix timestamps in seconds, from `time()`, and are `nothing` until the
+event happens.
+
+# Fields
+- `id`: position in the registry
+- `group_id`: launch group, one per [`add_workers`](@ref) call
+- `state`: the worker's [`WorkerState`](@ref)
+- `job_id`: scheduler job id, `nothing` for a local worker or before submission
+- `pid`: Distributed worker id, `nothing` until the worker connects
+- `output_file`: where the job writes the worker's startup output, `nothing`
+  for a local worker
+- `exit_reason`: why the worker ended, `nothing` while it is live
+- `requested_at`: when the worker was requested
+- `submitted_at`: when its job was submitted
+- `ready_at`: when it first joined the pool
+- `ended_at`: when it ended
+"""
 Base.@kwdef mutable struct WorkerRecord
-    id::Int
-    group_id::Int
+    const id::Int
+    const group_id::Int
     state::WorkerState = STARTING
     job_id::Union{Nothing, String} = nothing
     pid::Union{Nothing, Int} = nothing
     output_file::Union{Nothing, String} = nothing
     exit_reason::Union{Nothing, String} = nothing
-    requested_at::Float64
+    const requested_at::Float64
     submitted_at::Union{Nothing, Float64} = nothing
     ready_at::Union{Nothing, Float64} = nothing
     ended_at::Union{Nothing, Float64} = nothing
 end
 
-# The registry holds the session's groups and workers, and the file they are
-# written to. Ids are positions in the vectors and nothing is ever removed.
-# `lock` guards the vectors and `set_state!`; single-field writes to a record
-# happen unlocked. No lock here is held while taking `POOL_LOCK`, running a
-# scheduler command, or calling `addprocs`. Mutable for the two timestamps
-# `reconcile_workers!` updates to rate limit itself.
+# One line per worker, e.g. `Worker 3 in group 1: ended (disconnected), job 123,
+# pid 4, output /path/to/log`. Fields that are `nothing` are left out.
+function Base.show(io::IO, w::WorkerRecord)
+    print(io, "Worker ", w.id, " in group ", w.group_id, ": ")
+    print(io, lowercase(string(w.state)))
+    isnothing(w.exit_reason) || print(io, " (", w.exit_reason, ")")
+    isnothing(w.job_id) || print(io, ", job ", w.job_id)
+    isnothing(w.pid) || print(io, ", pid ", w.pid)
+    isnothing(w.output_file) || print(io, ", output ", w.output_file)
+    return nothing
+end
+
+# The session's groups and workers. Ids are positions in the vectors and
+# nothing is ever removed. `lock` guards the vectors and `set_state!`;
+# single-field writes to a record happen unlocked. No lock here is held while
+# taking `POOL_LOCK`, running a scheduler command, or calling `addprocs`.
 mutable struct WorkerRegistry
-    path::String
-    lock::ReentrantLock
-    groups::Vector{LaunchGroup}
-    workers::Vector{WorkerRecord}
+    const lock::ReentrantLock
+    const groups::Vector{LaunchGroup}
+    const workers::Vector{WorkerRecord}
+    # `time()` of the last scheduler query and the last `reconcile_workers!`
+    # pass, used to space them out
     last_scheduler_poll::Float64
     last_reconcile::Float64
 end
 
-WorkerRegistry(path) = WorkerRegistry(
-    path,
-    ReentrantLock(),
-    LaunchGroup[],
-    WorkerRecord[],
-    -Inf,
-    -Inf,
-)
+WorkerRegistry() =
+    WorkerRegistry(ReentrantLock(), LaunchGroup[], WorkerRecord[], -Inf, -Inf)
 
-# The process's registry, empty until `add_workers` runs. Its path is set in
-# the module's `__init__`, since it depends on the working directory and pid
-const WORKER_REGISTRY = WorkerRegistry("")
-
-# `.climacalibrate/workers-<driver pid>.toml` under the working directory
-default_registry_path() =
-    joinpath(pwd(), ".climacalibrate", "workers-$(getpid()).toml")
-
-"""
-    set_registry_path!(path)
-
-Write the session's worker registry to `path` instead of
-`.climacalibrate/workers-<pid>.toml` in the working directory. Call it before
-`add_workers`; the path cannot change once the registry has launch groups.
-"""
-function set_registry_path!(path, reg = WORKER_REGISTRY)
-    isempty(reg.groups) || error(
-        "The worker registry already has launch groups; its path cannot change",
-    )
-    reg.path = abspath(path)
-    return reg
-end
+# The process's registry, empty until `add_workers` runs
+const WORKER_REGISTRY = WorkerRegistry()
 
 """
     worker_registry()
 
-The session's worker registry. Read it with [`worker_rows`](@ref), or read the
-TOML file at its `path` after the run.
+The session's worker registry. List its workers with [`worker_rows`](@ref).
 """
 worker_registry() = WORKER_REGISTRY
-
-# ----------------------------------------------------------------------------
-# Persistence
-# ----------------------------------------------------------------------------
-
-# A record as a TOML table: fields that are `nothing` are left out, enums and
-# symbols become their lowercase names, and `launcher` is not written
-function record_to_dict(record)
-    table = Dict{String, Any}()
-    for name in fieldnames(typeof(record))
-        name == :launcher && continue
-        value = getfield(record, name)
-        isnothing(value) && continue
-        value isa WorkerState && (value = lowercase(string(value)))
-        value isa Symbol && (value = string(value))
-        table[string(name)] = value
-    end
-    return table
-end
-
-# Write the groups and workers to `reg.path` through a temporary file, so a
-# reader never sees a partial file. A failed write is logged.
-function write_registry_file(reg::WorkerRegistry)
-    tables = lock(reg.lock) do
-        Dict(
-            "groups" => map(record_to_dict, reg.groups),
-            "workers" => map(record_to_dict, reg.workers),
-        )
-    end
-    try
-        mkpath(dirname(reg.path))
-        tmp, io = mktemp(dirname(reg.path); cleanup = false)
-        try
-            TOML.print(io, tables; sorted = true)
-        finally
-            close(io)
-        end
-        mv(tmp, reg.path; force = true)
-    catch e
-        @warn "Could not write the worker registry to $(reg.path)" exception = e maxlog =
-            1
-    end
-    return nothing
-end
 
 # ----------------------------------------------------------------------------
 # Queries
@@ -206,7 +172,9 @@ function worker_rows(
 end
 
 # One worker by id.
-worker_row(reg::WorkerRegistry, id) = lock(() -> reg.workers[id], reg.lock)
+worker_row(reg::WorkerRegistry, id) = lock(reg.lock) do
+    reg.workers[id]
+end
 
 # One worker by Distributed id, or `nothing`.
 worker_row_by_pid(reg::WorkerRegistry, pid) = lock(reg.lock) do
@@ -214,20 +182,22 @@ worker_row_by_pid(reg::WorkerRegistry, pid) = lock(reg.lock) do
     isnothing(i) ? nothing : reg.workers[i]
 end
 
-# All launch groups, oldest first, in a new vector.
+# All launch groups, oldest first. A copy, so callers can iterate it without
+# the lock while other tasks add groups.
 group_rows(reg::WorkerRegistry) = lock(reg.lock) do
     copy(reg.groups)
 end
 
 # One launch group by id.
-group_row(reg::WorkerRegistry, id) = lock(() -> reg.groups[id], reg.lock)
+group_row(reg::WorkerRegistry, id) = lock(reg.lock) do
+    reg.groups[id]
+end
 
 # ----------------------------------------------------------------------------
 # Writes
 # ----------------------------------------------------------------------------
 
-# Add a launch group and return its id. `launcher` is `(; manager, kwargs)`, or
-# `nothing` for a group this session cannot launch for.
+# Add a launch group and return its id. See `LaunchGroup` for `launcher`.
 function insert_group!(
     reg::WorkerRegistry;
     cluster,
@@ -235,7 +205,6 @@ function insert_group!(
     max_relaunches,
     startup_timeout,
     launcher = nothing,
-    now = time(),
 )
     lock(reg.lock) do
         id = length(reg.groups) + 1
@@ -264,8 +233,10 @@ function insert_worker!(reg::WorkerRegistry; group_id, now = time())
 end
 
 # Charge `n` launches to the group's relaunch budget.
-add_relaunches_used!(reg, group_id, n) =
-    lock(() -> (reg.groups[group_id].relaunches_used += n; nothing), reg.lock)
+add_relaunches_used!(reg, group_id, n) = lock(reg.lock) do
+    reg.groups[group_id].relaunches_used += n
+    nothing
+end
 
 function set_job_id!(reg, id, job_id; now = time())
     w = worker_row(reg, id)
