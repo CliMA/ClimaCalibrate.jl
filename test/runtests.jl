@@ -27,6 +27,7 @@ testsuite = Dict(
     "Workers per node" => @include("workers_per_node.jl"),
     "Worker pool" => @include("worker_pool.jl"),
     "Sampler" => @include("sample_builder.jl"),
+    "Transform" => @include("transform.jl"),
     "Diagonal term" => @include("diagonal_term.jl"),
     "Observation recipe" => @include("observation_recipe.jl"),
     "Ensemble builder" => @include("ensemble_builder.jl"),

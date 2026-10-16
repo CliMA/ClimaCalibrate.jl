@@ -38,8 +38,8 @@ include("diagonal_term.jl")
 """
     AbstractCovarianceEstimator
 
-An object that estimates the noise covariance matrix from the samples in a
-`SampleCollection`.
+An object that estimates the noise covariance matrix from the samples in an
+`AbstractSampleCollection`.
 
 `AbstractCovarianceEstimator` have to provide one function,
 `ObservationRecipe.covariance`.
@@ -56,6 +56,10 @@ ObservationRecipe.covariance(
 and return a noise covariance matrix. The `SampleCollection` carries the matrix
 of flattened samples and their metadata. The covariance matrix does not depend
 on which sample is chosen as the observation.
+
+`sample_collection` may be a `TransformedSampleCollection`. Call
+`SampleBuilder.apply_transform` on it to get the transformed samples, or
+`SampleBuilder.base` to get the untransformed samples.
 
 Subtypes:
 - [`ScalarCovariance`](@ref): a multiple of the identity.
@@ -96,6 +100,8 @@ end
 Create a `ScalarCovariance` which specifies how the covariance matrix should be
 formed. When used with `ObservationRecipe.observation` or
 `ObservationRecipe.covariance`, return a `Diagonal` matrix.
+
+If the sample collection is a `TransformedSampleCollection`, an error is thrown.
 
 # Keyword Arguments
 
@@ -172,6 +178,10 @@ should be formed. When used with `ObservationRecipe.observation` or
 The samples used to compute the covariance matrix come from the
 `SampleCollection`, where each sample is one year of seasonal statistics. `NaN`s
 are ignored when computing the seasonal variance.
+
+If the sample collection is a `TransformedSampleCollection`, the transforms are
+applied before the variances are computed. An error is thrown if the transforms
+include a `LatitudeWeighting`.
 
 # Keyword Arguments
 
@@ -256,23 +266,11 @@ covariance plus a diagonal term.
 """
 struct SVDplusDCovariance{
     D <: AbstractDiagonalTerm,
-    FT <: AbstractFloat,
     R <: Union{Integer, Nothing},
 } <: AbstractCovarianceEstimator
     """A diagonal term that describes the diagonal matrix added to the low rank
     approximation of the covariance matrix"""
     diagonal::D
-
-    """Whether to apply latitude weighting"""
-    use_latitude_weights::Bool
-
-    """Compute the diagonal term from the latitude weighted samples when
-    latitude weights are used"""
-    use_weighted_samples_for_diagonal::Bool
-
-    """The smallest `cosd(lat)` used in the latitude weight, which caps the
-    weight at `1 / min_cosd_lat`"""
-    min_cosd_lat::FT
 
     """Rank of the singular value decomposition, or `nothing` to infer it from
     the data"""
@@ -283,9 +281,6 @@ end
     SVDplusDCovariance(;
         model_error_scale = 0.0,
         regularization = 0.0,
-        use_latitude_weights = false,
-        use_weighted_samples_for_diagonal = true,
-        min_cosd_lat = 0.1,
         rank = nothing
     )
 
@@ -319,32 +314,24 @@ The samples used to compute the covariance matrix come from the
   `regularization * I` is added to the covariance matrix. See
   [`QuantileRegularization`](@ref) for another option for regularization.
 
-- `use_latitude_weights`: If `true`, then latitude weighting is applied to the
-  covariance matrix. Latitude weighting is multiplying the columns of the matrix
-  of samples by `1 / sqrt(max(cosd(lat), 0.1))`. See the keyword argument
-  `min_cosd_lat` for more information.
-
-- `use_weighted_samples_for_diagonal`: If `true` and `use_latitude_weights` is `true`,
-  then the diagonal term is computed from the latitude weighted samples.
-  Otherwise, the diagonal term is computed from the samples without latitude
-  weighting. This has no effect when `use_latitude_weights` is `false`.
-
-- `min_cosd_lat`: Control the minimum latitude weight when
-  `use_latitude_weights` is `true`. The weight is
-  `1 / max(cosd(lat), min_cosd_lat)`, so this is the largest weight any point
-  can be given, `1 / min_cosd_lat`. Without it the weight grows without bound
-  toward the poles, where `cosd(lat)` reaches zero, and the diagonal entries
-  span so many orders of magnitude that the covariance is badly conditioned.
-
 - `rank`: Rank of the singular value decomposition (SVD). If `nothing` is passed
   in, then the rank is automatically inferred from the data.
+
+!!! note "Latitude weighting"
+    To apply latitude weighting, pipe the sample collection into a
+    [`LatitudeWeighting`](@ref ClimaCalibrate.SampleBuilder.LatitudeWeighting)
+    before passing it to `observation`. Both the SVD and the diagonal term are
+    computed from the weighted samples.
+
+    ```julia
+    covar_estimator = SVDplusDCovariance(model_error_scale = 0.05)
+    weighted_collection = sample_collection |> SampleBuilder.LatitudeWeighting()
+    obs = observation(covar_estimator, weighted_collection, 1)
+    ```
 """
 function SVDplusDCovariance(;
     model_error_scale = 0.0,
     regularization = 0.0,
-    use_latitude_weights = false,
-    use_weighted_samples_for_diagonal = true,
-    min_cosd_lat = 0.1,
     rank = nothing,
 )
     model_error_scale < zero(model_error_scale) &&
@@ -356,9 +343,6 @@ function SVDplusDCovariance(;
 
     return SVDplusDCovariance(
         _diagonal_term(model_error_scale, regularization);
-        use_latitude_weights,
-        use_weighted_samples_for_diagonal,
-        min_cosd_lat,
         rank,
     )
 end
@@ -366,9 +350,6 @@ end
 """
     SVDplusDCovariance(
         diagonal::AbstractDiagonalTerm;
-        use_latitude_weights = false,
-        use_weighted_samples_for_diagonal = true,
-        min_cosd_lat = 0.1,
         rank = nothing,
     )
 
@@ -384,49 +365,27 @@ constructor is the same as passing
 
 # Keyword Arguments
 
-- `use_latitude_weights`: If `true`, then latitude weighting is applied to the
-  covariance matrix. Latitude weighting is multiplying the columns of the matrix
-  of samples by `1 / sqrt(max(cosd(lat), 0.1))`. See the keyword argument
-  `min_cosd_lat` for more information.
-
-- `use_weighted_samples_for_diagonal`: If `true` and `use_latitude_weights` is `true`,
-  then the diagonal term is computed from the latitude weighted samples.
-  Otherwise, the diagonal term is computed from the samples without latitude
-  weighting. This has no effect when `use_latitude_weights` is `false`.
-
-- `min_cosd_lat`: Control the minimum latitude weight when
-  `use_latitude_weights` is `true`. The weight is
-  `1 / max(cosd(lat), min_cosd_lat)`, so this is the largest weight any point
-  can be given, `1 / min_cosd_lat`. Without it the weight grows without bound
-  toward the poles, where `cosd(lat)` reaches zero, and the diagonal entries
-  span so many orders of magnitude that the covariance is badly conditioned.
-
 - `rank`: Rank of the singular value decomposition (SVD). If `nothing` is passed
   in, then the rank is automatically inferred from the data.
+
+!!! note "Latitude weighting"
+    To apply latitude weighting, pipe the sample collection into a
+    [`LatitudeWeighting`](@ref ClimaCalibrate.SampleBuilder.LatitudeWeighting)
+    before passing it to `observation`. Both the SVD and the diagonal term are
+    computed from the weighted samples.
+
+    ```julia
+    covar_estimator = SVDplusDCovariance(ModelErrorScaleDiagonal(0.05))
+    weighted_collection = sample_collection |> SampleBuilder.LatitudeWeighting()
+    obs = observation(covar_estimator, weighted_collection, 1)
+    ```
 """
-function SVDplusDCovariance(
-    diagonal::AbstractDiagonalTerm;
-    use_latitude_weights = false,
-    use_weighted_samples_for_diagonal = true,
-    min_cosd_lat = 0.1,
-    rank = nothing,
-)
-    if use_latitude_weights && min_cosd_lat <= zero(min_cosd_lat)
-        error(
-            "The value for min_cosd_lat ($min_cosd_lat) should be greater than zero",
-        )
-    end
+function SVDplusDCovariance(diagonal::AbstractDiagonalTerm; rank = nothing)
     isnothing(rank) ||
         rank >= 0 ||
         error("Rank ($rank) should be nothing or non-negative")
 
-    return SVDplusDCovariance(
-        diagonal,
-        use_latitude_weights,
-        use_weighted_samples_for_diagonal,
-        min_cosd_lat,
-        rank,
-    )
+    return SVDplusDCovariance(diagonal, rank)
 end
 
 """
