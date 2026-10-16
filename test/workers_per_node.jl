@@ -14,6 +14,8 @@ import ClimaCalibrate.Backend.Workers:
     allocation_resource_kwargs,
     parse_pbs_worker_params,
     parse_slurm_worker_params,
+    read_worker_address,
+    worker_config,
     worker_cookie,
     PBSManager,
     SlurmManager
@@ -57,6 +59,22 @@ end
     @test isnothing(_parse_sbatch_output("sbatch: error"))
     @test _parse_qsub_output("987.desched1") == "987.desched1"
     @test isnothing(_parse_qsub_output(""))
+end
+
+@testset "worker address parsing" begin
+    file = tempname()
+    @test isnothing(read_worker_address(file))
+    for (line, host) in (
+        "julia_worker:9015#169.254.3.1" => "169.254.3.1",
+        "julia_worker:9015#fe80::1" => "fe80::1",
+        "julia_worker:9015#node12.cluster" => "node12.cluster",
+    )
+        write(file, "module load output\n$line\n")
+        config = worker_config(read_worker_address(file), 7)
+        @test config.port == 9015
+        @test config.host == host
+        @test config.userdata == 7
+    end
 end
 
 @testset "scheduler output parsing" begin

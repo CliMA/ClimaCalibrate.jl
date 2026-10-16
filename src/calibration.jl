@@ -536,8 +536,10 @@ function run_iteration(
                 # a dead id, and `take!` on a pool holding nothing else throws
                 # rather than waiting for the workers still joining
                 if worker in Distributed.procs()
-                    push!(worker_pool, worker)
+                    # `READY` before it is pooled, so a quick re-take's `BUSY`
+                    # is not overwritten
                     Workers.mark_worker_ready!(worker)
+                    push!(worker_pool, worker)
                 else
                     Workers.mark_worker_exited!(worker)
                 end

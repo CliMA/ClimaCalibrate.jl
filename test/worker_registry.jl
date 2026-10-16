@@ -102,6 +102,28 @@ reconcile(reg; now, alive = Int[], submit = (g, n) -> nothing) =
     @test length(worker_rows(reg; group_id = gid)) == 2
 end
 
+@testset "Moves outside ALLOWED_MOVES are refused" begin
+    reg = open_registry()
+    gid = insert_group!(
+        reg;
+        cluster = :slurm,
+        desired = 1,
+        max_relaunches = 0,
+        startup_timeout = 60.0,
+    )
+    id = insert_worker!(reg; group_id = gid)
+    @test !set_state!(reg, id, BUSY)
+    @test set_state!(reg, id, READY)
+    @test !set_state!(reg, id, READY)
+    @test !set_state!(reg, id, STARTING)
+    @test set_state!(reg, id, BUSY)
+    @test !set_state!(reg, id, BUSY)
+    @test worker_row(reg, id).state == BUSY
+    # `from` narrows the allowed moves
+    @test !set_state!(reg, id, ENDED; from = (STARTING,))
+    @test worker_row(reg, id).state == BUSY
+end
+
 @testset "cancel_worker_jobs" begin
     reg = open_registry()
     m = FakeManager()

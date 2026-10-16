@@ -19,7 +19,8 @@ State of a worker, stored in its [`WorkerRecord`](@ref):
   `nothing` if the worker never joined the pool.
 
 A worker moves from `STARTING` to `READY`, back and forth between `READY` and
-`BUSY`, and from any state to `ENDED`, which it never leaves.
+`BUSY`, and from any state to `ENDED`, which it never leaves. Other moves are
+refused.
 """
 @enum WorkerState begin
     STARTING
@@ -28,6 +29,14 @@ A worker moves from `STARTING` to `READY`, back and forth between `READY` and
     ENDED
 end
 const LIVE_STATES = (STARTING, READY, BUSY)
+
+# The states `set_state!` may move a worker to from each state
+const ALLOWED_MOVES = Dict{WorkerState, Tuple{Vararg{WorkerState}}}(
+    STARTING => (READY, ENDED),
+    READY => (BUSY, ENDED),
+    BUSY => (READY, ENDED),
+    ENDED => (),
+)
 
 # Seconds between full `reconcile_workers!` passes. The dispatch loop calls it
 # on every pass, which can be several times a second.
@@ -248,20 +257,22 @@ set_pid!(reg, id, pid) = (worker_row(reg, id).pid = pid; nothing)
 set_output_file!(reg, id, path) =
     (worker_row(reg, id).output_file = string(path); nothing)
 
-# Move worker `id` to state `to`. Return `false` without writing when the
-# worker is not in one of the states `from`. Ending a worker records
-# `reason` in `exit_reason`, and `ready_at` is the first time it became `READY`.
+# Move worker `id` to state `to`. Return `false` without writing when the move
+# is not in `ALLOWED_MOVES`, or when `from` is given and the worker is not in
+# one of its states. Ending a worker records `reason` in `exit_reason`, and
+# `ready_at` is the first time it became `READY`.
 function set_state!(
     reg::WorkerRegistry,
     id,
     to::WorkerState;
-    from = LIVE_STATES,
+    from = nothing,
     reason = nothing,
     now = time(),
 )
     lock(reg.lock) do
         w = reg.workers[id]
-        w.state in from || return false
+        to in ALLOWED_MOVES[w.state] || return false
+        isnothing(from) || w.state in from || return false
         w.state = to
         to == READY && isnothing(w.ready_at) && (w.ready_at = now)
         if to == ENDED

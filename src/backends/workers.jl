@@ -374,6 +374,10 @@ end
 # further down, next to the submission code they share.
 # ----------------------------------------------------------------------------
 
+# Managers that submit workers as scheduler jobs. Their workers carry their
+# registry row id in `config.userdata`.
+abstract type SchedulerManager <: ClusterManager end
+
 """
     SlurmManager(ntasks = 1)
 
@@ -391,7 +395,7 @@ To run a calibration, call `calibrate(WorkerBackend(), ...)`.
 
 To run functions on a worker, call `remotecall(func, worker_id, args...)`.
 """
-struct SlurmManager <: ClusterManager
+struct SlurmManager <: SchedulerManager
     ntasks::Integer
 
     SlurmManager(ntasks = 1) = new(ntasks)
@@ -414,13 +418,9 @@ To run a calibration, call `calibrate(WorkerBackend(), ...)`
 
 To run functions on a worker, call `remotecall(func, worker_id, args...)`
 """
-struct PBSManager <: ClusterManager
+struct PBSManager <: SchedulerManager
     ntasks::Integer
 end
-
-# Managers that submit workers as scheduler jobs. Their workers carry their
-# registry row id in `config.userdata`.
-const SchedulerManager = Union{SlurmManager, PBSManager}
 
 # Name of the scheduler a manager submits to, as stored in the worker registry.
 cluster_name(::SlurmManager) = :slurm
@@ -884,8 +884,9 @@ function propagate_env_vars!(env)
     end
 end
 
-# This regex will match the worker's socket, ex: julia_worker:9015#169.254.3.1
-const JULIA_WORKER_REGEX = r"([\w]+):([\d]+)#(\d{1,3}.\d{1,3}.\d{1,3}.\d{1,3})"
+# Matches the address line a worker prints, capturing the port and host, e.g.
+# `julia_worker:9015#169.254.3.1`. The host may be IPv4, IPv6, or a hostname.
+const JULIA_WORKER_REGEX = r"julia_worker:(\d+)#(\S+)"
 
 # The address line a worker printed to `file`, or `nothing`
 function read_worker_address(file)
@@ -949,8 +950,8 @@ end
 # `userdata` carries the registry row id to the `:register` hook.
 function worker_config(worker_launch_details, row_id)
     config = WorkerConfig()
-    config.port = parse(Int, worker_launch_details[2])
-    config.host = strip(worker_launch_details[3])
+    config.port = parse(Int, worker_launch_details[1])
+    config.host = String(worker_launch_details[2])
     config.userdata = row_id
     return config
 end
