@@ -27,6 +27,7 @@ makedocs(
         ClimaCalibrate,
         ClimaCalibrate.EKPUtils,
         ClimaCalibrate.Backend,
+        ClimaCalibrate.Backend.Workers,
         ClimaCalibrate.Calibration,
         ClimaCalibrate.SampleBuilder,
         ClimaCalibrate.ObservationRecipe,

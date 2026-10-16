@@ -16,6 +16,9 @@ SurfaceFluxes = "49b00bb7-8bd4-4f2b-b78c-51cd0450215f"
 TOML = "fa267f1f-6049-4f14-aa54-33bafae1ed76"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
+[sources]
+ClimaCalibrate = {path = ".."}
+
 [compat]
 CairoMakie = "0.15"
 ClimaAnalysis = "0.5.23"
@@ -26,7 +29,6 @@ JLD2 = "0.4, 0.5, 0.6"
 Literate = "2"
 Makie = "0.24"
 Statistics = "1"
-# Matches the experiment the figures come from
 SurfaceFluxes = "1.2"
 TOML = "1"
 julia = "1.10"
