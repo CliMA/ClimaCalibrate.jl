@@ -52,6 +52,16 @@ const SLURM_INHERITED_VARS = (
 )
 
 """
+    scheduler_env(x)
+
+Environment for the scheduler's own commands (`sbatch`, `squeue`, `qsub`,
+`qstat`): a copy of `ENV` with the variables removed that would otherwise leak
+into or break them. `x` is an HPC backend or a cluster manager; the methods are
+defined with the cluster managers in `Workers`.
+"""
+function scheduler_env end
+
+"""
     submit_job(backend::SlurmBackend, job_script::String)
 
 Submit a `job` that runs `job_script` with `backend`.

@@ -26,7 +26,7 @@ end
         pool = ClimaCalibrate.calibration_worker_pool()
         wait_for_pool(pool, ids)
         @test issubset(ids, pool.workers)
-        @test ClimaCalibrate.Backend.n_initializing_workers() == 0
+        @test ClimaCalibrate.Backend.Workers.n_initializing_workers() == 0
 
         # `isdefined` rather than a closure: this test runs in a module of its
         # own, which a worker cannot deserialize
@@ -37,9 +37,9 @@ end
 
         # A pooled worker is claimed by neither path a second time. Replaying
         # the setup expressions would redefine `WORKER_POOL_PROBE`
-        @test !ClimaCalibrate.Backend._claim_worker(first(ids))
+        @test !ClimaCalibrate.Backend.Workers._claim_worker(first(ids))
         ClimaCalibrate.calibration_worker_pool()
-        @test ClimaCalibrate.Backend.n_initializing_workers() == 0
+        @test ClimaCalibrate.Backend.Workers.n_initializing_workers() == 0
     finally
         rmprocs(ids)
     end

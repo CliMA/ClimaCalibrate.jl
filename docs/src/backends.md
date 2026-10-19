@@ -64,6 +64,43 @@ If your forward model requires parallelization across multiple cores or GPUs,
 choose one of the HPC cluster backends. These allow you to allocate more
 resources to each forward model using Slurm or PBS.
 
+## Worker registry
+
+For a [`WorkerBackend`](@ref), the driver keeps a record of every worker
+launched with [`add_workers`](@ref): its scheduler job id, Distributed id,
+output file, and [`WorkerState`](@ref ClimaCalibrate.Backend.Workers.WorkerState).
+Use it to see which workers are queued, idle, or running a member, why a worker
+ended, and where its log is, without querying the scheduler. List the workers
+in the driver with [`worker_rows`](@ref):
+
+```julia-repl
+julia> worker_rows()
+3-element Vector{ClimaCalibrate.Backend.Workers.WorkerRecord}:
+ Worker 1 in group 1: busy, job 4182734, pid 2, output /scratch/logs/worker-1.out
+ Worker 2 in group 1: ready, job 4182735, pid 3, output /scratch/logs/worker-2.out
+ Worker 3 in group 1: ended (scheduler reported FAILED), job 4182736, output /scratch/logs/worker-3.out
+```
+
+Pass `states` to filter them, e.g.
+`worker_rows(; states = (ClimaCalibrate.Backend.Workers.ENDED,))` for the
+workers that have ended. The registry lives in the driver's memory only.
+
+Each `add_workers` call is a launch group with a desired worker count.
+Every few seconds during a calibration, the driver checks the registry against
+the scheduler: it asks `squeue` or `qstat` about live jobs, ends workers that are
+not ready within `startup_timeout` seconds of submission (12 hours by default),
+and launches replacements for any group below its desired count, up to that
+group's `max_relaunches`. The only other way to grow the pool mid-run is to call
+`add_workers` again. A worker that dies while running a member still counts as a
+failed member and its replacement picks up later members. A worker that fails to
+load its code is stopped and replaced. Once two workers of a group fail to load
+their code and none has succeeded, the group launches no more workers, since
+the setup code is likely broken.
+
+When the driver exits, an `atexit` hook cancels every job the session
+submitted by id and ends the live rows with
+`exit_reason = "cancel_worker_jobs"`.
+
 ## Job status
 
 An `HPCBackend` reports an ensemble member's job as one of four

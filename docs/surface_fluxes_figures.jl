@@ -5,6 +5,9 @@
 # This runs in `Main` rather than in an `@example` block: `utils.jl` sets its
 # definitions up with `@everywhere`, which evaluates them in `Main`, while
 # Documenter runs each block in a module of its own.
+#
+# The SurfaceFluxes compat in `docs/Project.toml` matches the one in
+# `experiments/surface_fluxes_perfect_model/Project.toml`.
 
 import ClimaCalibrate
 import EnsembleKalmanProcesses as EKP

@@ -16,6 +16,7 @@ cancellation ([`submit_job`](@ref), [`cancel_job`](@ref)), and job status
 module Backend
 
 import Distributed
+import Reexport: @reexport
 
 export HPCBackend,
     SlurmBackend,
@@ -664,5 +665,7 @@ end
 include("backends/slurm.jl")
 include("backends/pbs.jl")
 include("backends/workers.jl")
+@reexport using .Workers
+import .Workers: default_worker_pool
 
 end
