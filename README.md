@@ -19,8 +19,8 @@ ClimaCalibrate.jl runs the calibration loop around your forward model: it launch
 [docs-dev-img]: https://img.shields.io/badge/docs-dev-blue.svg
 [docs-dev-url]: https://CliMA.github.io/ClimaCalibrate.jl/dev/
 
-[version-img]: https://juliahub.com/docs/General/ClimaCalibrate/stable/version.svg
-[version-url]: https://juliahub.com/ui/Packages/General/ClimaCalibrate
+[version-img]: https://img.shields.io/github/v/release/CliMA/ClimaCalibrate.jl
+[version-url]: https://github.com/CliMA/ClimaCalibrate.jl/releases
 
 [license-img]: https://img.shields.io/badge/license-Apache%202.0-blue.svg
 [license-url]: https://github.com/CliMA/ClimaCalibrate.jl/blob/main/LICENSE
