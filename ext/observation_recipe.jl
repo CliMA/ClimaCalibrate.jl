@@ -23,20 +23,14 @@ function ObservationRecipe.covariance(
     sample_collection::AbstractSampleCollection,
 )
     sample_collection isa TransformedSampleCollection && error(
-        "ScalarCovariance does not support transforms since the values of the samples are not used",
+        "ScalarCovariance does not support transforms since the values of the samples are not used. For latitude weighting, use the keyword argument `latitude_weighting` instead",
     )
-    diag_cov = compute_diagonal(
-        ScalarDiagonal(covar_estimator.scalar),
-        sample_collection,
-    )
-    if covar_estimator.use_latitude_weights
-        _check_lats_across_samples(get_metadata(sample_collection))
-        diag_cov.diag .*= _flat_lat_weights(
-            _metadata_of_first_sample(sample_collection),
-            min_cosd_lat = covar_estimator.min_cosd_lat,
-        )
+    diag_term = ScalarDiagonal(covar_estimator.scalar)
+    (; latitude_weighting) = covar_estimator
+    if !isnothing(latitude_weighting)
+        diag_term = diag_term .* latitude_weighting
     end
-    return diag_cov
+    return compute_diagonal(diag_term, sample_collection)
 end
 
 """
@@ -56,7 +50,7 @@ variance.
 
 If `sample_collection` is a `TransformedSampleCollection`, the transforms are
 applied before the variances are computed. A `LatitudeWeighting` transform is
-not supported; use `use_latitude_weights` instead.
+not supported; use `latitude_weighting` instead.
 """
 function ObservationRecipe.covariance(
     covar_estimator::SeasonalDiagonalCovariance,
@@ -64,7 +58,7 @@ function ObservationRecipe.covariance(
 )
     any(t -> t isa LatitudeWeighting, transform_sequence(sample_collection)) &&
         error(
-            "Using the LatitudeWeighting transform is not supported by SeasonalDiagonalCovariance. Use the keyword argument `use_latitude_weights` instead",
+            "Using the LatitudeWeighting transform is not supported by SeasonalDiagonalCovariance. Use the keyword argument `latitude_weighting` instead",
         )
     sample_collection = apply_transform(sample_collection)
     samples = get_samples(sample_collection)
@@ -77,21 +71,15 @@ function ObservationRecipe.covariance(
     _check_metadata_represent_seasons(get_metadata(sample_collection))
 
     # Variance of each season across the samples (years)
-    diag_cov = compute_diagonal(
+    diag_term =
         VarianceDiagonal() .+
         ModelErrorScaleDiagonal(covar_estimator.model_error_scale) .+
-        ScalarDiagonal(covar_estimator.regularization),
-        sample_collection,
-    )
-
-    # Add latitude weights
-    if covar_estimator.use_latitude_weights
-        _check_lats_across_samples(get_metadata(sample_collection))
-        diag_cov.diag .*= _flat_lat_weights(
-            _metadata_of_first_sample(sample_collection),
-            min_cosd_lat = covar_estimator.min_cosd_lat,
-        )
+        ScalarDiagonal(covar_estimator.regularization)
+    (; latitude_weighting) = covar_estimator
+    if !isnothing(latitude_weighting)
+        diag_term = diag_term .* latitude_weighting
     end
+    diag_cov = compute_diagonal(diag_term, sample_collection)
     _check_diagonal(diag_cov.diag, _metadata_of_first_sample(sample_collection))
     return diag_cov
 end

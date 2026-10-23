@@ -237,9 +237,10 @@ end
         sample_collection::SampleCollection,
     )
 
-Return the latitude weights of `sample_collection` according to `transform`,
-with one weight per entry of a sample. The entries of the variables that are not
-weighted have a weight of one.
+Return the square roots of the latitude weights
+`1 / max(cosd(lat), min_cosd_lat)` of `sample_collection` according to
+`transform`, with one weight per entry of a sample. The entries of the variables
+that are not weighted have a weight of one.
 
 An error is thrown if
 - no variable is weighted, either because none of the variables have a latitude
@@ -250,6 +251,23 @@ An error is thrown if
 - the latitude dimension of a weighted variable is not in degrees.
 """
 function SampleBuilder.compute_weights(
+    transform::LatitudeWeighting,
+    sample_collection::SampleCollection,
+)
+    return sqrt.(_lat_weights(transform, sample_collection))
+end
+
+"""
+    _lat_weights(
+        transform::LatitudeWeighting,
+        sample_collection::SampleCollection,
+    )
+
+Return the latitude weights `1 / max(cosd(lat), min_cosd_lat)` of
+`sample_collection` according to `transform`, with one weight per entry of a
+sample. The entries of the variables that are not weighted have a weight of one.
+"""
+function _lat_weights(
     transform::LatitudeWeighting,
     sample_collection::SampleCollection,
 )
@@ -265,8 +283,7 @@ function SampleBuilder.compute_weights(
         var_indices(sample_collection),
         mask,
     ) do md, rows, weighted
-        weighted ? sqrt.(_flat_lat_weights(md; min_cosd_lat)) :
-        ones(FT, length(rows))
+        weighted ? _flat_lat_weights(md; min_cosd_lat) : ones(FT, length(rows))
     end
     return reduce(vcat, var_weights)
 end

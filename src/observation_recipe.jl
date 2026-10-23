@@ -33,6 +33,8 @@ export ScalarCovariance,
     reconstruct_vars,
     reconstruct_residual
 
+import ..SampleBuilder: LatitudeWeighting
+
 include("diagonal_term.jl")
 
 """
@@ -72,29 +74,25 @@ abstract type AbstractCovarianceEstimator end
 """
     ScalarCovariance <: AbstractCovarianceEstimator
 
-Covariance estimator contain the necessary information to construct the scalar
-covariance matrix.
-
-`FT1` and `FT2` are the element types of `scalar` and `min_cosd_lat`.
+Covariance estimator that contains the necessary information to construct the
+scalar covariance matrix.
 """
-struct ScalarCovariance{FT1 <: AbstractFloat, FT2 <: AbstractFloat} <:
-       AbstractCovarianceEstimator
+struct ScalarCovariance{
+    FT <: AbstractFloat,
+    L <: Union{Nothing, LatitudeWeightDiagonal},
+} <: AbstractCovarianceEstimator
     """Scalar to multiply the identity matrix by"""
-    scalar::FT1
+    scalar::FT
 
-    """Whether to apply latitude weighting"""
-    use_latitude_weights::Bool
-
-    """The smallest `cosd(lat)` used in the latitude weight, which caps the
-    weight at `1 / min_cosd_lat`"""
-    min_cosd_lat::FT2
+    """The latitude weighting applied to the diagonal of the covariance matrix,
+    or `nothing` for no latitude weighting"""
+    latitude_weighting::L
 end
 
 """
     ScalarCovariance(;
         scalar = 1.0,
-        use_latitude_weights = false,
-        min_cosd_lat = 0.1,
+        latitude_weighting = nothing,
     )
 
 Create a `ScalarCovariance` which specifies how the covariance matrix should be
@@ -107,46 +105,35 @@ If the sample collection is a `TransformedSampleCollection`, an error is thrown.
 
 - `scalar`: Scalar value to multiply the identity matrix by.
 
-- `use_latitude_weights`: If `true`, then latitude weighting is applied to the
-  covariance matrix. Latitude weighting is multiplying the values along the
-  diagonal of the covariance matrix by `(1 / max(cosd(lat), min_cosd_lat))`. See
-  the keyword argument `min_cosd_lat` for more information.
-
-- `min_cosd_lat`: Control the minimum latitude weight when
-  `use_latitude_weights` is `true`. The weight is
-  `1 / max(cosd(lat), min_cosd_lat)`, so this is the largest weight any point
-  can be given, `1 / min_cosd_lat`. Without it the weight grows without bound
-  toward the poles, where `cosd(lat)` reaches zero, and the diagonal entries
-  span so many orders of magnitude that the covariance is badly conditioned.
+- `latitude_weighting`: A [`LatitudeWeightDiagonal`](@ref) that describes the
+  latitude weighting applied to the covariance matrix, or `nothing` for no
+  latitude weighting. Latitude weighting multiplies the diagonal entries of the
+  weighted variables by `1 / max(cosd(lat), min_cosd_lat)` and leaves the other
+  entries unchanged, where `min_cosd_lat` is the keyword argument of
+  `LatitudeWeightDiagonal` that caps the weight toward the poles.
 """
 function ScalarCovariance(;
     scalar = 1.0,
-    use_latitude_weights = false,
-    min_cosd_lat = 0.1,
+    latitude_weighting::Union{Nothing, LatitudeWeightDiagonal} = nothing,
 )
     if scalar <= zero(scalar)
         error("The value for scalar ($scalar) should be positive")
     end
-    if use_latitude_weights && min_cosd_lat <= zero(min_cosd_lat)
-        error(
-            "The value for min_cosd_lat ($min_cosd_lat) should be greater than zero",
-        )
-    end
 
-    return ScalarCovariance(scalar, use_latitude_weights, min_cosd_lat)
+    return ScalarCovariance(scalar, latitude_weighting)
 end
 
 """
     SeasonalDiagonalCovariance <: AbstractCovarianceEstimator
 
-Covariance estimator that contain the necessary information to construct a
+Covariance estimator that contains the necessary information to construct a
 diagonal matrix whose diagonal is the per-season variance across the samples of
 a `SampleCollection`.
 """
 struct SeasonalDiagonalCovariance{
     FT1 <: AbstractFloat,
     FT2 <: AbstractFloat,
-    FT3 <: AbstractFloat,
+    L <: Union{Nothing, LatitudeWeightDiagonal},
 } <: AbstractCovarianceEstimator
     """A model error scale term added to the diagonal of the covariance
     matrix"""
@@ -155,20 +142,16 @@ struct SeasonalDiagonalCovariance{
     """A regularization term added to the diagonal of the covariance matrix"""
     regularization::FT2
 
-    """Whether to apply latitude weighting"""
-    use_latitude_weights::Bool
-
-    """The smallest `cosd(lat)` used in the latitude weight, which caps the
-    weight at `1 / min_cosd_lat`"""
-    min_cosd_lat::FT3
+    """The latitude weighting applied to the diagonal of the covariance matrix,
+    or `nothing` for no latitude weighting"""
+    latitude_weighting::L
 end
 
 """
     SeasonalDiagonalCovariance(;
         model_error_scale = 0.0,
         regularization = 0.0,
-        use_latitude_weights = false,
-        min_cosd_lat = 0.1,
+        latitude_weighting = nothing,
     )
 
 Create a `SeasonalDiagonalCovariance` which specifies how the covariance matrix
@@ -191,43 +174,31 @@ include a `LatitudeWeighting`.
   season (DJF, MAM, JJA, SON).
 
 - `regularization`: A diagonal matrix of the form `regularization * I` is added
-  to the covariance matrix. It is added *before* latitude weighting, so with
-  `use_latitude_weights = true` the effective regularization varies with
+  to the covariance matrix. It is added *before* latitude weighting, so when
+  `latitude_weighting` is given, the effective regularization varies with
   latitude, unlike [`SVDplusDCovariance`](@ref), which adds it afterwards.
 
-- `use_latitude_weights`: If `true`, then latitude weighting is applied to the
-  covariance matrix. Latitude weighting is multiplying the values along the
-  diagonal of the covariance matrix by `(1 / max(cosd(lat), min_cosd_lat))`. See
-  the keyword argument `min_cosd_lat` for more information.
-
-- `min_cosd_lat`: Control the minimum latitude weight when
-  `use_latitude_weights` is `true`. The weight is
-  `1 / max(cosd(lat), min_cosd_lat)`, so this is the largest weight any point
-  can be given, `1 / min_cosd_lat`. Without it the weight grows without bound
-  toward the poles, where `cosd(lat)` reaches zero, and the diagonal entries
-  span so many orders of magnitude that the covariance is badly conditioned.
+- `latitude_weighting`: A [`LatitudeWeightDiagonal`](@ref) that describes the
+  latitude weighting applied to the covariance matrix, or `nothing` for no
+  latitude weighting. Latitude weighting multiplies the diagonal entries of the
+  weighted variables by `1 / max(cosd(lat), min_cosd_lat)` and leaves the other
+  entries unchanged, where `min_cosd_lat` is the keyword argument of
+  `LatitudeWeightDiagonal` that caps the weight toward the poles.
 """
 function SeasonalDiagonalCovariance(;
     model_error_scale = 0.0,
     regularization = 0.0,
-    use_latitude_weights = false,
-    min_cosd_lat = 0.1,
+    latitude_weighting::Union{Nothing, LatitudeWeightDiagonal} = nothing,
 )
     model_error_scale < zero(model_error_scale) &&
         error("Model_error_scale ($model_error_scale) should not be negative")
     regularization < zero(regularization) &&
         error("Regularization ($regularization) should not be negative")
-    if use_latitude_weights && min_cosd_lat <= zero(min_cosd_lat)
-        error(
-            "The value for min_cosd_lat ($min_cosd_lat) should be greater than zero",
-        )
-    end
 
     return SeasonalDiagonalCovariance(
         model_error_scale,
         regularization,
-        use_latitude_weights,
-        min_cosd_lat,
+        latitude_weighting,
     )
 end
 
