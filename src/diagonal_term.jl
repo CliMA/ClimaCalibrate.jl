@@ -240,3 +240,22 @@ end
 
 Broadcast.broadcasted(::DiagonalTermStyle, f, args...) =
     BroadcastedDiagonal(f, args)
+
+"""
+    _contains_term(x, T::Type)
+
+Return `true` if `x` or any value nested in it is a `T`, and `false` otherwise.
+"""
+function _contains_term(x, ::Type{T}) where {T}
+    return x isa T || any(child -> _contains_term(child, T), _subterms(x))
+end
+
+"""
+    _subterms(x)
+
+Return a tuple of the values directly nested in the expression `x`.
+"""
+_subterms(_) = ()
+_subterms(bc::Broadcast.Broadcasted) = bc.args
+_subterms(diagonal_term::QuantileDiagonal) = (diagonal_term.diag_term,)
+_subterms(diagonal_term::BroadcastedDiagonal) = diagonal_term.args
