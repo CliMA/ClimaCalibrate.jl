@@ -640,6 +640,58 @@ end
     )
 end
 
+@testset "Nested diagonal terms" begin
+    mes_term = ModelErrorScaleDiagonal(0.05)
+    lat_term = LatitudeWeightDiagonal()
+    mat = Diagonal([1.0, 2.0])
+    fused = mes_term .* (mat .+ mat)
+
+    # Only the direct children are returned
+    @test ObservationRecipe._subterms(mes_term) == ()
+    @test ObservationRecipe._subterms(QuantileDiagonal(0.5, mes_term)) ==
+          (mes_term,)
+    inner = mes_term .+ lat_term
+    @test ObservationRecipe._subterms(2.0 .* inner) == (2.0, inner)
+    @test ObservationRecipe._subterms(mes_term .* mat) == (mes_term, mat)
+    @test ObservationRecipe._subterms(2.0) == ()
+    @test ObservationRecipe._subterms(mat) == ()
+    @test ObservationRecipe._subterms(fused)[2] isa Broadcast.Broadcasted
+    @test ObservationRecipe._subterms(ObservationRecipe._subterms(fused)[2]) ==
+          (mat, mat)
+
+    # Test _contains_term on a variety of expressions
+    for term in (
+        lat_term,
+        mes_term .* lat_term,
+        2.0 .* (mes_term .+ lat_term),
+        QuantileDiagonal(0.5, lat_term),
+        mes_term .+ QuantileDiagonal(0.5, mes_term .* lat_term),
+    )
+        @test ObservationRecipe._contains_term(term, LatitudeWeightDiagonal)
+    end
+    for term in (
+        2.0,
+        mat,
+        mes_term,
+        2.0 .* (mes_term .+ ScalarDiagonal(1.0)) .* mat,
+        QuantileDiagonal(0.5, mes_term),
+    )
+        @test !ObservationRecipe._contains_term(term, LatitudeWeightDiagonal)
+    end
+    for term in (mat, 2.0 .* (mes_term .* mat), fused)
+        @test ObservationRecipe._contains_term(term, Diagonal)
+    end
+    @test ObservationRecipe._contains_term(2.0 .* mes_term, Float64)
+    @test !ObservationRecipe._contains_term(mes_term, Diagonal)
+
+    # The type can be an AbstractDiagonalTerm or BroadcastedDiagonal
+    @test ObservationRecipe._contains_term(mes_term, AbstractDiagonalTerm)
+    @test ObservationRecipe._contains_term(
+        QuantileDiagonal(0.5, mes_term .+ lat_term),
+        BroadcastedDiagonal,
+    )
+end
+
 @testset "Custom diagonal term" begin
     # The largest squared value of each variable's block, and a term that
     # returns the wrong size.

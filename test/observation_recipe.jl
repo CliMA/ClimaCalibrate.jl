@@ -124,12 +124,16 @@ end
         regularization = -2.0,
     )
 
-    # Negative values for regularization and model_error_scale
+    # Negative values for regularization, model_error_scale, and rank
     @test_throws ErrorException ObservationRecipe.SVDplusDCovariance(
         regularization = -2.0,
     )
     @test_throws ErrorException ObservationRecipe.SVDplusDCovariance(
         model_error_scale = -2.0,
+    )
+    @test_throws "should be nothing or non-negative" ObservationRecipe.SVDplusDCovariance(
+        ObservationRecipe.ScalarDiagonal(1e-3);
+        rank = -1,
     )
 end
 
@@ -884,6 +888,21 @@ end
     @test_throws MethodError ObservationRecipe.SVDplusDCovariance(
         diagonal = diag_term,
     )
+
+    # A LatitudeWeightDiagonal anywhere in the diagonal term is not supported
+    lat_term = ObservationRecipe.LatitudeWeightDiagonal()
+    for term in (
+        lat_term,
+        ObservationRecipe.ModelErrorScaleDiagonal(0.05) .* lat_term,
+        ObservationRecipe.QuantileDiagonal(
+            0.5,
+            ObservationRecipe.ScalarDiagonal(1.0) .* lat_term,
+        ),
+    )
+        @test_throws "does not support a LatitudeWeightDiagonal" ObservationRecipe.SVDplusDCovariance(
+            term,
+        )
+    end
 
     # A single variable with a time dimension and three samples, where each
     # sample is one year of seasonal averages

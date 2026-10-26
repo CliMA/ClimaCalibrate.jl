@@ -343,7 +343,9 @@ constructor is the same as passing
     To apply latitude weighting, pipe the sample collection into a
     [`LatitudeWeighting`](@ref ClimaCalibrate.SampleBuilder.LatitudeWeighting)
     before passing it to `observation`. Both the SVD and the diagonal term are
-    computed from the weighted samples.
+    computed from the weighted samples. Passing a diagonal term that contains a
+    `LatitudeWeightDiagonal` throws an error, since it would weight the diagonal
+    term but not the SVD.
 
     ```julia
     covar_estimator = SVDplusDCovariance(ModelErrorScaleDiagonal(0.05))
@@ -352,6 +354,9 @@ constructor is the same as passing
     ```
 """
 function SVDplusDCovariance(diagonal::AbstractDiagonalTerm; rank = nothing)
+    _contains_term(diagonal, LatitudeWeightDiagonal) && error(
+        "SVDplusDCovariance does not support a LatitudeWeightDiagonal in its diagonal term. To apply latitude weighting, pipe the sample collection into a SampleBuilder.LatitudeWeighting instead",
+    )
     isnothing(rank) ||
         rank >= 0 ||
         error("Rank ($rank) should be nothing or non-negative")
