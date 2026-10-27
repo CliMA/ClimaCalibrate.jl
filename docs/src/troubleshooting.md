@@ -73,9 +73,8 @@ backend such as `import CairoMakie` for the plots.
 
 An observation entry that does not vary across the samples has zero variance,
 and one that is `NaN` in all samples gives a `NaN`. Both make the covariance
-singular. The error names the offending index and short name; add
-`regularization` or `model_error_scale` to the covariance estimator, or fix the
-preprocessing.
+singular. For a zero entry, add a model error scale or regularization term to
+the covariance estimator. For a `NaN` entry, fix the preprocessing.
 
 ## The calibration runs but does not converge
 

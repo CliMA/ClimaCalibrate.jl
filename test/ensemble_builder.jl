@@ -475,7 +475,7 @@ end
         one_to_n_data() |>
         initialize
 
-    covar_estimator = ObservationRecipe.SeasonalDiagonalCovariance()
+    covar_estimator = ObservationRecipe.ScalarCovariance()
 
     sample_date_ranges = [
         (Dates.DateTime(i, 12, 1), Dates.DateTime(i + 1, 9, 1)) for
@@ -659,7 +659,7 @@ end
         one_to_n_data() |>
         initialize
 
-    covar_estimator = ObservationRecipe.SeasonalDiagonalCovariance()
+    covar_estimator = ObservationRecipe.ScalarCovariance()
 
     sample_date_ranges = [
         (Dates.DateTime(i, 12, 1), Dates.DateTime(i + 1, 9, 1)) for
@@ -723,7 +723,7 @@ end
         add_attribs(start_date = "2007-12-1") |>
         one_to_n_data() |>
         initialize
-    covar_estimator = ObservationRecipe.SeasonalDiagonalCovariance()
+    covar_estimator = ObservationRecipe.ScalarCovariance()
     sample_date_ranges = [
         (Dates.DateTime(i, 12, 1), Dates.DateTime(i + 1, 9, 1)) for
         i in 2007:2008

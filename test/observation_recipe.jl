@@ -7,9 +7,8 @@ import ClimaCalibrate.SampleBuilder
 import EnsembleKalmanProcesses
 import OrderedCollections: OrderedDict
 import Statistics: mean
-import LinearAlgebra: Diagonal, I
+import LinearAlgebra: Diagonal
 import Statistics
-import NaNStatistics: nanvar, nanmean
 
 import EnsembleKalmanProcesses as EKP
 using EnsembleKalmanProcesses.ParameterDistributions
@@ -114,14 +113,6 @@ end
     # Zero value for scalar
     @test_throws ErrorException ObservationRecipe.ScalarCovariance(;
         scalar = 0.0,
-    )
-
-    # Negative values for model_error_scale and regularization
-    @test_throws ErrorException ObservationRecipe.SeasonalDiagonalCovariance(
-        model_error_scale = -2.0,
-    )
-    @test_throws ErrorException ObservationRecipe.SeasonalDiagonalCovariance(
-        regularization = -2.0,
     )
 
     # Negative values for regularization, model_error_scale, and rank
@@ -383,12 +374,6 @@ end
         (
             ObservationRecipe.SVDplusDCovariance(),
             sample_collection |> SampleBuilder.LatitudeWeighting(),
-        ),
-        (
-            ObservationRecipe.SeasonalDiagonalCovariance(
-                latitude_weighting = ObservationRecipe.LatitudeWeightDiagonal(),
-            ),
-            sample_collection,
         ),
     )
         @test_throws r"latitudes of sample 2" ObservationRecipe.covariance(
@@ -1034,309 +1019,6 @@ end
     end
 end
 
-@testset "Seasonal diagonal covariance" begin
-    time = ClimaAnalysis.Utils.date_to_time.(
-        Dates.DateTime(2007, 12),
-        [Dates.DateTime(2007, 12) + Dates.Month(3 * i) for i in 0:11],
-    )
-    data = [1.0, 2.0, 3.0, 5.0, 8.0, 13.0, 21.0, 34.0, 55.0, 89.0, 144.0, 233.0]
-    DJF = [data[i] for i in 1:4:length(data)]
-    MAM = [data[i] for i in 2:4:length(data)]
-    JJA = [data[i] for i in 3:4:length(data)]
-    SON = [data[i] for i in 4:4:length(data)]
-    var =
-        TemplateVar() |>
-        add_dim("time", time, units = "s") |>
-        add_attribs(
-            short_name = "hi",
-            long_name = "hello",
-            start_date = "2007-12-1",
-            blah = "blah2",
-        ) |>
-        add_data(data = data) |>
-        initialize
-
-    # Each sample is one year of seasonal statistics; the variance is across the
-    # years (columns) of the sample collection
-    sample_date_ranges = [
-        (Dates.DateTime(i, 12, 1), Dates.DateTime(i + 1, 9, 1)) for
-        i in 2007:2009
-    ]
-    sample_collection = SampleBuilder.build_samples_by_times(
-        [var],
-        sample_date_ranges;
-        FT = Float64,
-    )
-
-    # No regularization and model scale
-    covar_estimator = ObservationRecipe.SeasonalDiagonalCovariance()
-    seasonal_covariance =
-        ObservationRecipe.covariance(covar_estimator, sample_collection)
-    @test seasonal_covariance ≈
-          Diagonal([nanvar(season) for season in (DJF, MAM, JJA, SON)])
-
-    # Include regularization
-    regularization = 2.0
-    covar_estimator = ObservationRecipe.SeasonalDiagonalCovariance(
-        regularization = regularization,
-    )
-    seasonal_covariance =
-        ObservationRecipe.covariance(covar_estimator, sample_collection)
-    @test seasonal_covariance ≈
-          Diagonal([nanvar(season) for season in (DJF, MAM, JJA, SON)]) + 2 * I
-
-    # Include model scale
-    model_error_scale = 3.0
-    covar_estimator = ObservationRecipe.SeasonalDiagonalCovariance(
-        model_error_scale = model_error_scale,
-    )
-    seasonal_covariance =
-        ObservationRecipe.covariance(covar_estimator, sample_collection)
-    @test seasonal_covariance ≈
-          Diagonal([nanvar(season) for season in (DJF, MAM, JJA, SON)]) + Diagonal(
-        (
-            model_error_scale .*
-            [nanmean(season) for season in (DJF, MAM, JJA, SON)]
-        ) .^ 2,
-    )
-
-    # Enable lat weights, but use default settings for everything else
-    lats = [-90.0, -85.0, -20.0, 0.0, 20.0, 85.0, 90.0]
-    time1 = ClimaAnalysis.Utils.date_to_time.(
-        Dates.DateTime(2007, 12),
-        [Dates.DateTime(2007, 12) + Dates.Year(i) for i in 0:1],
-    )
-    data = ones(Float64, 2, 7)
-    data[2, :] .*= 2
-    lat_var =
-        TemplateVar() |>
-        add_dim("time", time1, units = "s") |>
-        add_dim("latitude", lats, units = "deg") |>
-        add_attribs(
-            short_name = "hi",
-            long_name = "hello",
-            start_date = "2007-12-1",
-            blah = "blah2",
-        ) |>
-        add_data(data = data) |>
-        initialize
-    # One DJF sample per year
-    time_ranges = [
-        (Dates.DateTime(i, 12, 1), Dates.DateTime(i, 12, 1)) for i in 2007:2008
-    ]
-    covar_estimator = ObservationRecipe.SeasonalDiagonalCovariance(
-        latitude_weighting = ObservationRecipe.LatitudeWeightDiagonal(),
-    )
-    lat_sample_collection = SampleBuilder.build_samples_by_times(
-        [lat_var],
-        time_ranges;
-        FT = Float64,
-    )
-    seasonal_covariance =
-        ObservationRecipe.covariance(covar_estimator, lat_sample_collection)
-    sliced_var = ClimaAnalysis.slice(lat_var, time = 0.0)
-    @test seasonal_covariance ==
-          (1 / 2) *
-          Diagonal(ClimaAnalysis.flatten(ext._lat_weights_var(sliced_var)).data)
-
-    # The model error scale and the regularization are added before weighting.
-    # The samples are all ones and all twos, so the variance is 0.5 and the mean
-    # is 1.5
-    weighted_estimator = ObservationRecipe.SeasonalDiagonalCovariance(
-        model_error_scale = 0.1,
-        regularization = 1e-3,
-        latitude_weighting = ObservationRecipe.LatitudeWeightDiagonal(
-            min_cosd_lat = 0.2,
-        ),
-    )
-    lat_weights = ClimaAnalysis.flatten(
-        ext._lat_weights_var(sliced_var, min_cosd_lat = 0.2),
-    ).data
-    @test ObservationRecipe.covariance(
-        weighted_estimator,
-        lat_sample_collection,
-    ) ≈ Diagonal((0.5 + (0.1 * 1.5)^2 + 1e-3) .* lat_weights)
-
-    # Lat weight with NaN in data (NaN positions consistent across years)
-    data = lat_var.data
-    data[:, 3] .= NaN
-    data[:, 4] .= NaN
-    lat_var = ClimaAnalysis.remake(lat_var, data = data)
-    lat_sample_collection = SampleBuilder.build_samples_by_times(
-        [lat_var],
-        time_ranges;
-        FT = Float64,
-    )
-    seasonal_covariance =
-        ObservationRecipe.covariance(covar_estimator, lat_sample_collection)
-    sliced_var = ClimaAnalysis.slice(lat_var, time = 0.0)
-    @test seasonal_covariance ==
-          (1 / 2) *
-          Diagonal(ClimaAnalysis.flatten(ext._lat_weights_var(sliced_var)).data)
-
-    # Transforms are applied
-    covar_estimator = ObservationRecipe.SeasonalDiagonalCovariance(
-        model_error_scale = 0.05,
-        regularization = 1e-6,
-    )
-    transformed_collection =
-        sample_collection |> SampleBuilder.PerCollectionWeighting(2.0)
-    @test ObservationRecipe.covariance(
-        covar_estimator,
-        transformed_collection,
-    ) == ObservationRecipe.covariance(
-        covar_estimator,
-        SampleBuilder.apply_transform(transformed_collection),
-    )
-
-    # Check float type
-    covar_estimator = ObservationRecipe.SeasonalDiagonalCovariance()
-    sample_collection32 = SampleBuilder.build_samples_by_times(
-        [var],
-        sample_date_ranges;
-        FT = Float32,
-    )
-    seasonal_covariance =
-        ObservationRecipe.covariance(covar_estimator, sample_collection32)
-    @test eltype(seasonal_covariance) == Float32
-
-    # Warn when the samples cover fewer than four seasons
-    partial_year_date_ranges = [
-        (Dates.DateTime(i, 12, 1), Dates.DateTime(i + 1, 3, 1)) for
-        i in 2007:2008
-    ]
-    partial_year_collection = SampleBuilder.build_samples_by_times(
-        [var],
-        partial_year_date_ranges;
-        FT = Float64,
-    )
-    @test_logs (:warn, r"covers 2 season\(s\) \(DJF, MAM\)") ObservationRecipe.covariance(
-        covar_estimator,
-        partial_year_collection,
-    )
-
-    # Error handling
-    # Fewer than two samples
-    one_sample_collection =
-        SampleBuilder.build_samples_by_times([var], [first(sample_date_ranges)])
-    @test_throws ErrorException ObservationRecipe.covariance(
-        covar_estimator,
-        one_sample_collection,
-    )
-
-    # The LatitudeWeighting transform is not supported
-    @test_throws r"not supported by SeasonalDiagonalCovariance" ObservationRecipe.covariance(
-        covar_estimator,
-        lat_sample_collection |>
-        SampleBuilder.LatitudeWeighting() |>
-        SampleBuilder.PerCollectionWeighting(2.0),
-    )
-
-    seasonal_time = ClimaAnalysis.Utils.date_to_time.(
-        Dates.DateTime(2006, 12),
-        [Dates.DateTime(2006, 12) + Dates.Month(3 * i) for i in 0:20],
-    )
-    seasonal_var =
-        TemplateVar() |>
-        add_dim("time", seasonal_time, units = "s") |>
-        add_attribs(short_name = "hi", start_date = "2006-12-1") |>
-        one_to_n_data() |>
-        initialize
-
-    # Every variable must have a time dimension
-    no_time_var =
-        TemplateVar() |>
-        add_dim("latitude", [-90.0, 0.0, 90.0], units = "deg") |>
-        add_attribs(short_name = "hi") |>
-        one_to_n_data() |>
-        initialize
-    no_time_sample_collection =
-        SampleBuilder.build_samples(reshape([no_time_var, no_time_var], 1, :))
-    @test_throws ErrorException ObservationRecipe.covariance(
-        covar_estimator,
-        no_time_sample_collection,
-    )
-
-    # Multiple time points map to the same season and year (monthly data, so
-    # each window has both December and January of the same DJF)
-    monthly_time = ClimaAnalysis.Utils.date_to_time.(
-        Dates.DateTime(2007, 12),
-        [Dates.DateTime(2007, 12) + Dates.Month(i) for i in 0:14],
-    )
-    monthly_var =
-        TemplateVar() |>
-        add_dim("time", monthly_time, units = "s") |>
-        add_attribs(short_name = "hi", start_date = "2007-12-1") |>
-        one_to_n_data() |>
-        initialize
-    duplicate_season_collection = SampleBuilder.build_samples_by_times(
-        [monthly_var],
-        [
-            (Dates.DateTime(2007, 12), Dates.DateTime(2008, 1)),
-            (Dates.DateTime(2008, 12), Dates.DateTime(2009, 1)),
-        ],
-    )
-    @test_throws ErrorException ObservationRecipe.covariance(
-        covar_estimator,
-        duplicate_season_collection,
-    )
-
-    # More than four season and year combinations for a single variable (each
-    # window spans five seasons)
-    five_season_collection = SampleBuilder.build_samples_by_times(
-        [seasonal_var],
-        [
-            (Dates.DateTime(2006, 12), Dates.DateTime(2007, 12)),
-            (Dates.DateTime(2007, 12), Dates.DateTime(2008, 12)),
-        ],
-    )
-    @test_throws ErrorException ObservationRecipe.covariance(
-        covar_estimator,
-        five_season_collection,
-    )
-
-    # Seasons do not come from the same year (SON of one year and DJF of the
-    # next year, which find_season_and_year assigns to different years)
-    multiple_year_collection = SampleBuilder.build_samples_by_times(
-        [seasonal_var],
-        [
-            (Dates.DateTime(2007, 9), Dates.DateTime(2007, 12)),
-            (Dates.DateTime(2008, 9), Dates.DateTime(2008, 12)),
-        ],
-    )
-    @test_throws ErrorException ObservationRecipe.covariance(
-        covar_estimator,
-        multiple_year_collection,
-    )
-
-    # Order of seasons differs across samples (one column is [DJF, MAM] and the
-    # other is [MAM, JJA])
-    misaligned_season_collection = SampleBuilder.build_samples_by_times(
-        [seasonal_var],
-        [
-            (Dates.DateTime(2007, 12), Dates.DateTime(2008, 3)),
-            (Dates.DateTime(2008, 3), Dates.DateTime(2008, 6)),
-        ],
-    )
-    @test_throws ErrorException ObservationRecipe.covariance(
-        covar_estimator,
-        misaligned_season_collection,
-    )
-
-    # Check that entries of zero in the diagonal of the covariance are caught
-    constant_var = deepcopy(var)
-    constant_var.data .= 1.0
-    constant_samples = SampleBuilder.build_samples_by_times(
-        [constant_var],
-        sample_date_ranges;
-        FT = Float64,
-    )
-    @test_throws r"short name hi" ObservationRecipe.covariance(
-        ObservationRecipe.SeasonalDiagonalCovariance(),
-        constant_samples,
-    )
-end
-
 @testset "Observation" begin
     lat = [-90.0, -30.0, 30.0, 90.0]
     lon = [-60.0, -30.0, 0.0, 30.0, 60.0]
@@ -1620,7 +1302,7 @@ end
         one_to_n_data() |>
         initialize
 
-    covar_estimator = ObservationRecipe.SeasonalDiagonalCovariance()
+    covar_estimator = ObservationRecipe.ScalarCovariance()
     sample_date_ranges = [
         (Dates.DateTime(i, 12, 1), Dates.DateTime(i + 1, 9, 1)) for
         i in 2007:2018
@@ -1863,7 +1545,7 @@ end
         one_to_n_data() |>
         initialize
 
-    covar_estimator = ObservationRecipe.SeasonalDiagonalCovariance()
+    covar_estimator = ObservationRecipe.ScalarCovariance()
     sample_date_ranges = [
         (Dates.DateTime(i, 12, 1), Dates.DateTime(i + 1, 9, 1)) for
         i in 2007:2010
@@ -2056,8 +1738,7 @@ end
         initialize
 
     covar_estimator = ObservationRecipe.ScalarCovariance()
-    # Each sample spans two years (8 seasons); two samples are enough for a
-    # variance
+    # Each sample spans two years (8 seasons)
     sample_date_ranges = [
         (Dates.DateTime(2007, 12), Dates.DateTime(2009, 9)),
         (Dates.DateTime(2009, 12), Dates.DateTime(2011, 9)),

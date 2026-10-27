@@ -1,8 +1,7 @@
 import ClimaCalibrate
 import ClimaCalibrate.ObservationRecipe
 import ClimaCalibrate.ObservationRecipe: AbstractCovarianceEstimator
-import ClimaCalibrate.ObservationRecipe:
-    ScalarCovariance, SeasonalDiagonalCovariance, SVDplusDCovariance
+import ClimaCalibrate.ObservationRecipe: ScalarCovariance, SVDplusDCovariance
 import ClimaCalibrate.ObservationRecipe: QuantileRegularization
 
 include("diagonal_term.jl")
@@ -31,57 +30,6 @@ function ObservationRecipe.covariance(
         diag_term = diag_term .* latitude_weighting
     end
     return compute_diagonal(diag_term, sample_collection)
-end
-
-"""
-    covariance(
-        covar_estimator::SeasonalDiagonalCovariance,
-        sample_collection::AbstractSampleCollection,
-    )
-
-Compute the diagonal covariance matrix of seasonal quantities from the samples
-in `sample_collection`.
-
-The diagonal entries are the per-entry variance across the samples of
-`sample_collection`. This is the variance of each season across years with
-`NaN`s ignored. Each sample must represent the same sequence of seasons with one
-time slice per season. At least two samples (years) are required to estimate a
-variance.
-
-If `sample_collection` is a `TransformedSampleCollection`, the transforms are
-applied before the variances are computed. A `LatitudeWeighting` transform is
-not supported; use `latitude_weighting` instead.
-"""
-function ObservationRecipe.covariance(
-    covar_estimator::SeasonalDiagonalCovariance,
-    sample_collection::AbstractSampleCollection,
-)
-    any(t -> t isa LatitudeWeighting, transform_sequence(sample_collection)) &&
-        error(
-            "Using the LatitudeWeighting transform is not supported by SeasonalDiagonalCovariance. Use the keyword argument `latitude_weighting` instead",
-        )
-    sample_collection = apply_transform(sample_collection)
-    samples = get_samples(sample_collection)
-    n_samples = size(samples, 2)
-    n_samples >= 2 || error(
-        "SeasonalDiagonalCovariance needs at least 2 samples to estimate the covariance matrix; got $n_samples",
-    )
-
-    # The samples must represent seasons that line up across all samples
-    _check_metadata_represent_seasons(get_metadata(sample_collection))
-
-    # Variance of each season across the samples (years)
-    diag_term =
-        VarianceDiagonal() .+
-        ModelErrorScaleDiagonal(covar_estimator.model_error_scale) .+
-        ScalarDiagonal(covar_estimator.regularization)
-    (; latitude_weighting) = covar_estimator
-    if !isnothing(latitude_weighting)
-        diag_term = diag_term .* latitude_weighting
-    end
-    diag_cov = compute_diagonal(diag_term, sample_collection)
-    _check_diagonal(diag_cov.diag, _metadata_of_first_sample(sample_collection))
-    return diag_cov
 end
 
 """
@@ -121,27 +69,6 @@ function _describe_bad_diagonal(diag, all_metadata)
 end
 
 """
-    _check_diagonal(diag_cov, all_metadata)
-
-Error if any diagonal entry of a covariance matrix is zero, negative, or `NaN`.
-
-A zero variance means an entry does not vary across the samples at all (a
-constant field, or a single distinct value); a `NaN` means all samples were
-`NaN` there. Both usually come from a preprocessing mistake. When they do not,
-`regularization` or `model_error_scale` fixes them.
-"""
-function _check_diagonal(diag_cov, all_metadata)
-    description = _describe_bad_diagonal(diag_cov, all_metadata)
-    isnothing(description) && return nothing
-    error(
-        "The estimated covariance has $description. A zero variance means that \
-        entry does not vary across the samples, and a NaN means all samples \
-        were NaN there. Check the preprocessing, or add `regularization` or \
-        `model_error_scale` to the covariance estimator.",
-    )
-end
-
-"""
     _metadata_of_first_sample(sample_collection)
 
 Return the metadata of the first sample of `sample_collection` as a vector of
@@ -170,68 +97,6 @@ function _check_lats_across_samples(metadata_mat)
                 "The latitudes of sample $i are not the same as the latitudes of the first sample ($first_lats) for the variable with the short name $(ClimaAnalysis.short_name(metadata))",
             )
         end
-    end
-    return nothing
-end
-
-"""
-    _check_metadata_represent_seasons(metadata_mat)
-
-Validate that the samples with metadata in `metadata_mat` represent seasons.
-
-In all rows of the matrix of metadata, each metadata must represent a single
-year of seasonal data (e.g. (2009 DJF, 2010 MAM, 2010 JJA, and 2010 SON)). All
-rows must have the same ordering of seasons, but the year can differ between the
-samples.
-
-Note that the years between the samples can be the same, since the samples can
-be generated from a simulation by varying the parameters or initial condition,
-but keeping the rest the same.
-"""
-function _check_metadata_represent_seasons(metadata_mat)
-    for metadata_row in eachrow(metadata_mat)
-        all(ClimaAnalysis.has_time.(metadata_row)) || error(
-            "SeasonalDiagonalCovariance require all variables to have a time dimension",
-        )
-
-        date_vecs = ClimaAnalysis.dates.(metadata_row)
-        seasons_found = nothing
-        not_full_year_of_season = false
-        for date_vec in date_vecs
-            season_and_year_vec =
-                ClimaAnalysis.Utils.find_season_and_year.(date_vec)
-            allunique(season_and_year_vec) || error(
-                "Multiple time points correspond to the same season and year",
-            )
-
-            length(season_and_year_vec) > 4 && error(
-                "There are more than 4 combinations of season and year identified for a single variable",
-            )
-
-            # A window shorter than a year covers fewer than four seasons.
-            # That is allowed, since calibrating against DJF and JJA alone is a
-            # valid choice, but the variance is then estimated for those
-            # seasons only
-            length(season_and_year_vec) < 4 && (not_full_year_of_season = true)
-
-            # The limitation of this is that we specify what constitutes a year
-            # worth of seasons
-            allequal(last.(season_and_year_vec)) ||
-                error("The seasons do not come from the same year")
-            isnothing(seasons_found) &&
-                (seasons_found = first.(season_and_year_vec))
-
-            seasons_found == first.(season_and_year_vec) || error(
-                "Order of seasons for a variable across different samples are not the same",
-            )
-        end
-
-        not_full_year_of_season && @warn(
-            "Each sample covers $(length(seasons_found)) season(s) \
-             ($(join(seasons_found, ", "))) rather than a full year. The \
-             covariance is estimated for those seasons only.",
-        )
-
     end
     return nothing
 end
@@ -396,7 +261,7 @@ following year.
 This function is useful for finding the sample dates of samples consisting of
 all four seasons in a single year. For example, one can pass these date ranges
 to `SampleBuilder.build_samples_by_times` to build the samples for a
-`SVDplusDCovariance` or `SeasonalDiagonalCovariance`.
+`SVDplusDCovariance`.
 
 !!! note "All four seasons in a year is not guaranteed"
     This function does not check whether the start and end dates of each sample

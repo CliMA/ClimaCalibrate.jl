@@ -27,11 +27,10 @@ main
   diagonal term is always computed from the weighted samples, which was the
   default [#381](https://github.com/CliMA/ClimaCalibrate.jl/pull/381).
 - The `use_latitude_weights` and `min_cosd_lat` keyword arguments of
-  `ScalarCovariance` and `SeasonalDiagonalCovariance` are replaced by the
-  `latitude_weighting` keyword argument, which takes a `LatitudeWeightDiagonal`
-  or `nothing`. Variables without a latitude dimension are left unweighted
-  instead of throwing an error
-  [#XXX](https://github.com/CliMA/ClimaCalibrate.jl/pull/XXX).
+  `ScalarCovariance` are replaced by the `latitude_weighting` keyword argument,
+  which takes a `LatitudeWeightDiagonal` or `nothing`. Variables without a
+  latitude dimension are left unweighted instead of throwing an error
+  [#386](https://github.com/CliMA/ClimaCalibrate.jl/pull/386).
 
 ### Observation pipeline
 
@@ -43,9 +42,8 @@ main
   - The transforms are `LatitudeWeighting`, `PerVariableWeighting`, and
     `PerCollectionWeighting`. They are `AbstractWeighting`s, which multiply the
     samples by positive weights.
-  - `SVDplusDCovariance` and `SeasonalDiagonalCovariance` apply the transforms,
-    but `SeasonalDiagonalCovariance` throws an error for a `LatitudeWeighting`.
-    `ScalarCovariance` throws an error for any transform.
+  - `SVDplusDCovariance` applies the transforms. `ScalarCovariance` throws an
+    error for any transform.
   - A custom covariance estimator can now receive a
     `TransformedSampleCollection`. Call `SampleBuilder.apply_transform` or
     `SampleBuilder.base` on it to get a `SampleCollection`.
@@ -56,7 +54,7 @@ main
 - Add the `LatitudeWeightDiagonal` diagonal term, whose entries are the latitude
   weights. Multiply another diagonal term by it to latitude weight that term,
   as in `ScalarDiagonal(1e-6) .* LatitudeWeightDiagonal()`
-  [#XXX](https://github.com/CliMA/ClimaCalibrate.jl/pull/XXX).
+  [#386](https://github.com/CliMA/ClimaCalibrate.jl/pull/386).
 
 v0.6.0
 -------
