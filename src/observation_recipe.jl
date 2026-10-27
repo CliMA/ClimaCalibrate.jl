@@ -4,10 +4,9 @@
 Estimate a noise covariance from a `SampleCollection` and build an
 `EKP.Observation` from it.
 
-Three estimators are available: [`ScalarCovariance`](@ref) for a multiple of the
-identity, [`SeasonalDiagonalCovariance`](@ref) for the per-season variance
-across years, and [`SVDplusDCovariance`](@ref) for a low-rank sample
-covariance plus a diagonal term. All of them take samples built by
+Two estimators are available: [`ScalarCovariance`](@ref) for a multiple of the
+identity and [`SVDplusDCovariance`](@ref) for a low-rank sample covariance plus
+a diagonal term. Both take samples built by
 [`ClimaCalibrate.SampleBuilder`](@ref).
 
 Also reconstructs the flattened vectors back into `OutputVar`s
@@ -19,7 +18,6 @@ Requires ClimaAnalysis to be loaded.
 module ObservationRecipe
 
 export ScalarCovariance,
-    SeasonalDiagonalCovariance,
     SVDplusDCovariance,
     QuantileRegularization,
     covariance,
@@ -65,7 +63,6 @@ on which sample is chosen as the observation.
 
 Subtypes:
 - [`ScalarCovariance`](@ref): a multiple of the identity.
-- [`SeasonalDiagonalCovariance`](@ref): the per-season variance across samples.
 - [`SVDplusDCovariance`](@ref): a low-rank sample covariance plus a diagonal
   term.
 """
@@ -121,85 +118,6 @@ function ScalarCovariance(;
     end
 
     return ScalarCovariance(scalar, latitude_weighting)
-end
-
-"""
-    SeasonalDiagonalCovariance <: AbstractCovarianceEstimator
-
-Covariance estimator that contains the necessary information to construct a
-diagonal matrix whose diagonal is the per-season variance across the samples of
-a `SampleCollection`.
-"""
-struct SeasonalDiagonalCovariance{
-    FT1 <: AbstractFloat,
-    FT2 <: AbstractFloat,
-    L <: Union{Nothing, LatitudeWeightDiagonal},
-} <: AbstractCovarianceEstimator
-    """A model error scale term added to the diagonal of the covariance
-    matrix"""
-    model_error_scale::FT1
-
-    """A regularization term added to the diagonal of the covariance matrix"""
-    regularization::FT2
-
-    """The latitude weighting applied to the diagonal of the covariance matrix,
-    or `nothing` for no latitude weighting"""
-    latitude_weighting::L
-end
-
-"""
-    SeasonalDiagonalCovariance(;
-        model_error_scale = 0.0,
-        regularization = 0.0,
-        latitude_weighting = nothing,
-    )
-
-Create a `SeasonalDiagonalCovariance` which specifies how the covariance matrix
-should be formed. When used with `ObservationRecipe.observation` or
-`ObservationRecipe.covariance`, return a `Diagonal` matrix.
-
-The samples used to compute the covariance matrix come from the
-`SampleCollection`, where each sample is one year of seasonal statistics. `NaN`s
-are ignored when computing the seasonal variance.
-
-If the sample collection is a `TransformedSampleCollection`, the transforms are
-applied before the variances are computed. An error is thrown if the transforms
-include a `LatitudeWeighting`.
-
-# Keyword Arguments
-
-- `model_error_scale`: Noise from the model error added to the covariance
-  matrix. This is `(model_error_scale * seasonal_mean).^2`, where
-  `seasonal_mean` is the seasonal mean for each of the quantity for each of the
-  season (DJF, MAM, JJA, SON).
-
-- `regularization`: A diagonal matrix of the form `regularization * I` is added
-  to the covariance matrix. It is added *before* latitude weighting, so when
-  `latitude_weighting` is given, the effective regularization varies with
-  latitude, unlike [`SVDplusDCovariance`](@ref), which adds it afterwards.
-
-- `latitude_weighting`: A [`LatitudeWeightDiagonal`](@ref) that describes the
-  latitude weighting applied to the covariance matrix, or `nothing` for no
-  latitude weighting. Latitude weighting multiplies the diagonal entries of the
-  weighted variables by `1 / max(cosd(lat), min_cosd_lat)` and leaves the other
-  entries unchanged, where `min_cosd_lat` is the keyword argument of
-  `LatitudeWeightDiagonal` that caps the weight toward the poles.
-"""
-function SeasonalDiagonalCovariance(;
-    model_error_scale = 0.0,
-    regularization = 0.0,
-    latitude_weighting::Union{Nothing, LatitudeWeightDiagonal} = nothing,
-)
-    model_error_scale < zero(model_error_scale) &&
-        error("Model_error_scale ($model_error_scale) should not be negative")
-    regularization < zero(regularization) &&
-        error("Regularization ($regularization) should not be negative")
-
-    return SeasonalDiagonalCovariance(
-        model_error_scale,
-        regularization,
-        latitude_weighting,
-    )
 end
 
 """

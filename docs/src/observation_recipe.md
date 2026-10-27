@@ -35,27 +35,22 @@ All functions assume that any data preprocessing is done with `ClimaAnalysis`.
 
 ### Covariance Estimators
 
-There are currently three covariance estimators, [`ScalarCovariance`](@ref),
-[`SeasonalDiagonalCovariance`](@ref), and [`SVDplusDCovariance`](@ref), which
-are subtypes of [`AbstractCovarianceEstimator`](@ref). Each estimates the noise
-covariance matrix from the matrix of samples in a `SampleCollection`.
-`ScalarCovariance` approximates the observation noise covariance as a scalar
-diagonal matrix. `SeasonalDiagonalCovariance` approximates the observation noise
-covariance as a diagonal of variances across all the seasons for each
-observation, neglecting correlations between points. `SVDplusDCovariance`
-additionally approximates the correlations between points from, often limited,
-time series observations. Because `SeasonalDiagonalCovariance` and
-`SVDplusDCovariance` estimate variances and correlations across samples, they
-require at least two samples (columns), whereas `ScalarCovariance` works with a
-single sample.
+There are currently two covariance estimators, [`ScalarCovariance`](@ref) and
+[`SVDplusDCovariance`](@ref), which are subtypes of
+[`AbstractCovarianceEstimator`](@ref). Each estimates the noise covariance
+matrix from the matrix of samples in a `SampleCollection`. `ScalarCovariance`
+approximates the observation noise covariance as a scalar diagonal matrix.
+`SVDplusDCovariance` approximates the variances and the correlations between
+points from, often limited, time series observations. Because it estimates them
+across samples, it requires at least two samples (columns), whereas
+`ScalarCovariance` works with a single sample.
 
 ### Necessary data preprocessing
 
 In most cases, the `OutputVar`s represent **time series data of summary
 statistics**. For example, to compute seasonal averages of a `OutputVar`, one
 can use `ClimaAnalysis.average_season_across_time`, which will produce a
-`OutputVar` that can be used with either `SeasonalDiagonalCovariance` or
-`SVDplusDCovariance`.
+`OutputVar` that can be used with `SVDplusDCovariance`.
 
 ```julia
 import ClimaAnalysis
@@ -139,10 +134,7 @@ happens to the transforms depends on the estimator.
 
 1. `ScalarCovariance` throws an error for any transform, since the values of
    the samples are not used.
-2. `SeasonalDiagonalCovariance` applies the transforms before computing the
-   variances, but throws an error for a `LatitudeWeighting`. Instead, pass a
-   `LatitudeWeightDiagonal` as its `latitude_weighting` keyword argument.
-3. `SVDplusDCovariance` applies the transforms before computing the SVD and the
+2. `SVDplusDCovariance` applies the transforms before computing the SVD and the
    diagonal term.
 
 Putting it together, here is an example of using transforms to weight the
@@ -273,8 +265,6 @@ number of rows of the sample matrix and must not contain `NaN` or `Inf`.
     Each sample can span a different time range, which is exactly what
     `build_samples_by_times` produces. If your estimator depends on the times or
     the dates of the samples, read them from all columns rather than from one.
-    `SeasonalDiagonalCovariance` does this, for example, to check that all
-    sample covers the same sequence of seasons.
 
     Second, the dimensions passed to the `ignore_dims` of `build_samples` are
     not checked either, so their values can differ across the columns as well.
@@ -532,14 +522,14 @@ measurement error. You can add a fixed percentage inflation of the noise due to
 the model error to the covariance matrix with the `model_error_scale` keyword
 argument. Additionally, to prevent very small variance along the diagonal of the
 covariance matrix, you can add a regularization with the `regularization`
-keyword argument. For `SVDplusDCovariance`, the `regularization` keyword
-argument can also be a [`QuantileRegularization`](@ref), which sets the
+keyword argument. The `regularization` keyword argument can also be a
+[`QuantileRegularization`](@ref), which sets the
 regularization from a quantile of the model error scale instead of a fixed
 value.
 
-Both are accepted by `SeasonalDiagonalCovariance` and `SVDplusDCovariance`.
-[`ScalarCovariance`](@ref) takes neither: its diagonal is the `scalar` you give
-it, so there is nothing to inflate.
+Only `SVDplusDCovariance` accepts them. [`ScalarCovariance`](@ref) takes
+neither: its diagonal is the `scalar` you give it, so there is nothing to
+inflate.
 
 !!! note "SVDplusDCovariance needs one of them"
     `SVDplusDCovariance` builds a covariance of the form `SVD + D`, where `D` is
@@ -574,22 +564,21 @@ weighted_collection = sample_collection |> SampleBuilder.LatitudeWeighting()
 obs = ObservationRecipe.observation(covar_estimator, weighted_collection, 1)
 ```
 
-For `ScalarCovariance` and `SeasonalDiagonalCovariance`, pass a
+For `ScalarCovariance`, pass a
 [`LatitudeWeightDiagonal`](@ref
 ClimaCalibrate.ObservationRecipe.LatitudeWeightDiagonal) as the
 `latitude_weighting` keyword argument instead.
 
 ```julia
-covar_estimator = ObservationRecipe.SeasonalDiagonalCovariance(
-    model_error_scale = 0.05,
+covar_estimator = ObservationRecipe.ScalarCovariance(
     latitude_weighting = ObservationRecipe.LatitudeWeightDiagonal(),
 )
 obs = ObservationRecipe.observation(covar_estimator, sample_collection, 1)
 ```
 
-This multiplies the whole diagonal by the weight, including `scalar` or
-`regularization`. The variables without a latitude dimension are not weighted,
-and `ObservationRecipe.LatitudeWeightDiagonal(["pr"])` weights only `pr`.
+This multiplies the whole diagonal by the weight, including `scalar`. The
+variables without a latitude dimension are not weighted, and
+`ObservationRecipe.LatitudeWeightDiagonal(["pr"])` weights only `pr`.
 
 **Q: How do I make a variable count more or less in the calibration?**
 
