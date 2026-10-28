@@ -15,6 +15,9 @@ main
   exported names (`add_workers`, `SlurmManager`, `@worker_setup`, ...) are
   unchanged; unexported helpers such as `GLOBAL_WORKER_POOL` are now under
   `Backend.Workers`.
+- Add `Report.CalibrationReport`, which logs the state of a calibration.
+  For more information, see the "Report" section in the documentation
+  [#389](https://github.com/CliMA/ClimaCalibrate.jl/pull/389).
 
 ### Breaking
 

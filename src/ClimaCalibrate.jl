@@ -46,6 +46,7 @@ include("checkers.jl")
 include("svd_analysis.jl")
 
 include("visualization.jl")
+include("report.jl")
 
 export SampleBuilder, ObservationRecipe, EnsembleBuilder, Checker, Visualization
 

@@ -267,3 +267,18 @@ ClimaCalibrate.Visualization.plot_obs!
 ClimaCalibrate.Visualization.plot_residual
 ClimaCalibrate.Visualization.plot_residual!
 ```
+
+## Report Interface
+
+```@docs
+ClimaCalibrate.Report
+ClimaCalibrate.Report.CalibrationReport
+ClimaCalibrate.Report.AbstractReporter
+ClimaCalibrate.Report.WalltimeReporter
+ClimaCalibrate.Report.TimestepReporter
+ClimaCalibrate.Report.ErrorReporter
+ClimaCalibrate.Report.ParameterReporter
+ClimaCalibrate.Report.EnsembleReporter
+ClimaCalibrate.Report.report
+ClimaCalibrate.Report.title
+```
