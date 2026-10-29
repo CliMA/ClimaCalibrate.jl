@@ -206,6 +206,7 @@ ClimaCalibrate.ObservationRecipe.ScalarDiagonal(::AbstractFloat)
 ClimaCalibrate.ObservationRecipe.ModelErrorScaleDiagonal
 ClimaCalibrate.ObservationRecipe.ModelErrorScaleDiagonal(::AbstractFloat)
 ClimaCalibrate.ObservationRecipe.VarianceDiagonal
+ClimaCalibrate.ObservationRecipe.ResidualVarianceDiagonal
 ClimaCalibrate.ObservationRecipe.QuantileDiagonal
 ClimaCalibrate.ObservationRecipe.QuantileDiagonal(::AbstractFloat, ::ClimaCalibrate.ObservationRecipe.AbstractDiagonalTerm)
 ClimaCalibrate.ObservationRecipe.LatitudeWeightDiagonal
