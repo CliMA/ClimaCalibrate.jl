@@ -1,6 +1,7 @@
 export ScalarDiagonal,
     ModelErrorScaleDiagonal,
     VarianceDiagonal,
+    ResidualVarianceDiagonal,
     QuantileDiagonal,
     LatitudeWeightDiagonal,
     BroadcastedDiagonal,
@@ -126,6 +127,19 @@ VarianceDiagonal()
 struct VarianceDiagonal <: AbstractDiagonalTerm end
 
 """
+    ResidualVarianceDiagonal <: AbstractDiagonalTerm
+
+TODO
+"""
+struct ResidualVarianceDiagonal <: AbstractDiagonalTerm
+    rank::Int
+    function ResidualVarianceDiagonal(rank::Integer)
+        rank >= 0 || error("Rank ($rank) should be non-negative")
+        return new(rank)
+    end
+end
+
+"""
     QuantileDiagonal <: AbstractDiagonalTerm
 
 A diagonal term whose entries are constant for each variable, where the constant
@@ -242,13 +256,17 @@ Broadcast.broadcasted(::DiagonalTermStyle, f, args...) =
     BroadcastedDiagonal(f, args)
 
 """
+    _contains_term(x, pred)
     _contains_term(x, T::Type)
 
-Return `true` if `x` or any value nested in it is a `T`, and `false` otherwise.
+Return `true` if `pred` is `true` for `x` or any value nested in it (or, given a
+type `T`, if any of them is a `T`), and `false` otherwise.
 """
-function _contains_term(x, ::Type{T}) where {T}
-    return x isa T || any(child -> _contains_term(child, T), _subterms(x))
+function _contains_term(x, pred)
+    return pred(x) || any(child -> _contains_term(child, pred), _subterms(x))
 end
+
+_contains_term(x, ::Type{T}) where {T} = _contains_term(x, term -> term isa T)
 
 """
     _subterms(x)

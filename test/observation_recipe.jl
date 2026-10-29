@@ -904,6 +904,31 @@ end
         )
     end
 
+    # Every ResidualVarianceDiagonal in the diagonal term must have the same
+    # rank as the SVD
+    residual_term = ObservationRecipe.ResidualVarianceDiagonal(2)
+    for term in (
+        residual_term,
+        residual_term .+ ObservationRecipe.ScalarDiagonal(3.0),
+        ObservationRecipe.QuantileDiagonal(
+            0.5,
+            residual_term .+ ObservationRecipe.ScalarDiagonal(1e-3),
+        ),
+    )
+        @test ObservationRecipe.SVDplusDCovariance(term; rank = 2).diagonal ==
+              term
+        for rank in (nothing, 1, 3)
+            @test_throws "must match the rank" ObservationRecipe.SVDplusDCovariance(
+                term;
+                rank,
+            )
+        end
+    end
+    @test_throws "must match the rank" ObservationRecipe.SVDplusDCovariance(
+        residual_term .+ ObservationRecipe.ResidualVarianceDiagonal(1);
+        rank = 2,
+    )
+
     # A single variable with a time dimension and three samples, where each
     # sample is one year of seasonal averages
     time = ClimaAnalysis.Utils.date_to_time.(

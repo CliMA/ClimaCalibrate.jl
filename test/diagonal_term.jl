@@ -8,13 +8,14 @@ import ClimaCalibrate.ObservationRecipe:
     ScalarDiagonal,
     ModelErrorScaleDiagonal,
     VarianceDiagonal,
+    ResidualVarianceDiagonal,
     QuantileDiagonal,
     LatitudeWeightDiagonal,
     BroadcastedDiagonal,
     compute_diagonal
 import ClimaCalibrate.SampleBuilder
 import EnsembleKalmanProcesses as EKP
-import LinearAlgebra: Diagonal
+import LinearAlgebra: Diagonal, diag
 
 import ClimaAnalysis.Template:
     TemplateVar,
@@ -216,6 +217,74 @@ end
     # SampleCollection with NaN in it but this may not be true in future.
     SampleBuilder.get_samples(sample_collection)[1, 1] = NaN
     @test compute_diagonal(VarianceDiagonal(), sample_collection)[1, 1] == 0.5
+end
+
+@testset "ResidualVarianceDiagonal" begin
+    term = ResidualVarianceDiagonal(1)
+    @test term isa AbstractDiagonalTerm
+    @test term.rank == 1
+
+    # Any integer is accepted and zero is allowed
+    @test ResidualVarianceDiagonal(Int32(2)).rank === 2
+    @test ResidualVarianceDiagonal(0).rank == 0
+
+    # Cannot pass negative ranks
+    @test_throws "should be non-negative" ResidualVarianceDiagonal(-1)
+
+    function make_var(data)
+        var =
+            TemplateVar() |>
+            add_dim("time", collect(1.0:length(data)), units = "s") |>
+            add_attribs(short_name = "pr", start_date = "2008-1-1") |>
+            one_to_n_data(collected = true) |>
+            initialize
+        var.data .= data
+        return var
+    end
+
+    # A single variable with a flattened length of 11 and five samples, where
+    # sample j is sin.(j .* (1:11))
+    vars_matrix = reshape([make_var(sin.(j .* (1:11))) for j in 1:5], 1, 5)
+    sample_collection = SampleBuilder.build_samples(vars_matrix)
+    samples = SampleBuilder.get_samples(sample_collection)
+    variances = compute_diagonal(VarianceDiagonal(), sample_collection)
+
+    # The residual variances plus the diagonal of the truncated SVD of the same
+    # rank are the variances. Five samples have at most four modes, so a rank of
+    # ten is truncated to four
+    for rank in (0, 1, 2, 4, 10)
+        residual =
+            compute_diagonal(ResidualVarianceDiagonal(rank), sample_collection)
+        (; U, S) = EKP.tsvd_cov_from_samples(samples, rank)
+        @test residual + Diagonal(diag(U * Diagonal(S) * U')) ≈ variances
+        @test all(>=(0), residual.diag)
+    end
+
+    # The term can be broadcast with other diagonal terms
+    residual = compute_diagonal(ResidualVarianceDiagonal(3), sample_collection)
+    @test compute_diagonal(
+        ResidualVarianceDiagonal(3) .+ ScalarDiagonal(1.0),
+        sample_collection,
+    ) ≈ Diagonal(residual.diag .+ 1.0)
+
+    # The eltype of the diagonal matches the eltype of the samples
+    sample_collection64 = SampleBuilder.build_samples(vars_matrix; FT = Float64)
+    for rank in (0, 1)
+        @test compute_diagonal(
+            ResidualVarianceDiagonal(rank),
+            sample_collection,
+        ) isa Diagonal{Float32}
+        @test compute_diagonal(
+            ResidualVarianceDiagonal(rank),
+            sample_collection64,
+        ) isa Diagonal{Float64}
+    end
+
+    # Two or more samples are required
+    @test_throws "needs at least 2 samples" compute_diagonal(
+        ResidualVarianceDiagonal(1),
+        SampleBuilder.build_samples(vars_matrix[:, 1:1]),
+    )
 end
 
 @testset "QuantileDiagonal" begin

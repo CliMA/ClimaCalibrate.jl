@@ -360,6 +360,12 @@ function SVDplusDCovariance(diagonal::AbstractDiagonalTerm; rank = nothing)
     isnothing(rank) ||
         rank >= 0 ||
         error("Rank ($rank) should be nothing or non-negative")
+    _contains_term(
+        diagonal,
+        term -> term isa ResidualVarianceDiagonal && term.rank != rank,
+    ) && error(
+        "The rank of every ResidualVarianceDiagonal in the diagonal term must match the rank of SVDplusDCovariance ($rank), so that the diagonal subtracts the modes the SVD keeps",
+    )
 
     return SVDplusDCovariance(diagonal, rank)
 end
