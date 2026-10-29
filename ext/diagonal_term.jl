@@ -3,6 +3,7 @@ import ClimaCalibrate.ObservationRecipe:
     ScalarDiagonal,
     ModelErrorScaleDiagonal,
     VarianceDiagonal,
+    ResidualVarianceDiagonal,
     QuantileDiagonal,
     LatitudeWeightDiagonal,
     BroadcastedDiagonal,
@@ -85,6 +86,30 @@ function compute_diagonal(
     samples = get_samples(sample_collection)
     FT = eltype(samples)
     return Diagonal(convert(Vector{FT}, vec(nanvar(samples, dims = 2))))
+end
+
+function compute_diagonal(
+    diagonal_term::ResidualVarianceDiagonal,
+    sample_collection::SampleCollection,
+)
+    n_samples = num_samples(sample_collection)
+    n_samples >= 2 || error(
+        "ResidualVarianceDiagonal needs at least 2 samples, got $n_samples. \
+        Window the time series into more samples with \
+        `SampleBuilder.build_samples_by_times`.",
+    )
+    samples = get_samples(sample_collection)
+    FT = eltype(samples)
+    total = compute_diagonal(VarianceDiagonal(), sample_collection).diag
+    (; rank) = diagonal_term
+    iszero(rank) && return Diagonal(total)
+    # tsvd_cov_from_samples is the same truncated SVD that SVDplusDCovariance
+    # uses, so the modes subtracted here are the modes the low rank part keeps.
+    # The diagonal of the truncated covariance is sum_k U[:, k] .^ 2 * S[k]
+    low_rank = EKP.tsvd_cov_from_samples(samples, rank; quiet = true)
+    explained = vec((low_rank.U .^ 2) * low_rank.S)
+    # max only guards against round-off since the subtraction is exact in theory
+    return Diagonal(convert(Vector{FT}, max.(total .- explained, zero(FT))))
 end
 
 """
