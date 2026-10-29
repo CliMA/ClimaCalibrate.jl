@@ -7,7 +7,7 @@ import ClimaCalibrate.SampleBuilder
 import EnsembleKalmanProcesses
 import OrderedCollections: OrderedDict
 import Statistics: mean
-import LinearAlgebra: Diagonal
+import LinearAlgebra: Diagonal, diag
 import Statistics
 
 import EnsembleKalmanProcesses as EKP

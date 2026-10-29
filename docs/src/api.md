@@ -184,6 +184,8 @@ ClimaCalibrate.ObservationRecipe.ScalarCovariance
 ClimaCalibrate.ObservationRecipe.ScalarCovariance()
 ClimaCalibrate.ObservationRecipe.SVDplusDCovariance
 ClimaCalibrate.ObservationRecipe.SVDplusDCovariance(::ClimaCalibrate.ObservationRecipe.AbstractDiagonalTerm)
+ClimaCalibrate.ObservationRecipe.ToBeDecidedCovariance
+ClimaCalibrate.ObservationRecipe.ToBeDecidedCovariance()
 ClimaCalibrate.ObservationRecipe.covariance
 ClimaCalibrate.ObservationRecipe.observation
 ClimaCalibrate.ObservationRecipe.short_names

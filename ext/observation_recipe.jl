@@ -1,7 +1,8 @@
 import ClimaCalibrate
 import ClimaCalibrate.ObservationRecipe
 import ClimaCalibrate.ObservationRecipe: AbstractCovarianceEstimator
-import ClimaCalibrate.ObservationRecipe: ScalarCovariance, SVDplusDCovariance
+import ClimaCalibrate.ObservationRecipe:
+    ScalarCovariance, SVDplusDCovariance, ToBeDecidedCovariance
 
 include("diagonal_term.jl")
 
@@ -173,6 +174,28 @@ function _check_d_term(d_diag, all_metadata, n_samples)
            covariance. Use a diagonal term that is positive everywhere, such \
            as one that includes a positive `ScalarDiagonal`."
     return nothing
+end
+
+"""
+    covariance(
+        covar_estimator::ToBeDecidedCovariance,
+        sample_collection::AbstractSampleCollection,
+    )
+
+Compute the `EKP.SVDplusD` covariance matrix from the samples in
+`sample_collection`.
+
+If `sample_collection` is a `TransformedSampleCollection`, the transforms are
+applied before the SVD and the diagonal term are computed.
+"""
+function ObservationRecipe.covariance(
+    covar_estimator::ToBeDecidedCovariance,
+    sample_collection::AbstractSampleCollection,
+)
+    return ObservationRecipe.covariance(
+        covar_estimator.inner,
+        sample_collection,
+    )
 end
 
 """

@@ -129,7 +129,26 @@ struct VarianceDiagonal <: AbstractDiagonalTerm end
 """
     ResidualVarianceDiagonal <: AbstractDiagonalTerm
 
-TODO
+A diagonal term whose entries are the variance of each row of the sample matrix,
+taken across the samples, minus the diagonal of the truncated SVD of rank `rank`
+of the sample covariance matrix.
+
+# Example
+
+```julia
+rank = 2
+covar_estimator = SVDplusDCovariance(
+    ResidualVarianceDiagonal(rank);
+    rank,
+)
+```
+
+The diagonal of the covariance matrix built from `covar_estimator` in the
+example is the same as a diagonal of the matrix built from `VarianceDiagonal`.
+
+!!! note "SVDplusDCovariance"
+    This is intended to be used with `SVDplusDCovariance`. Do not build a
+    diagonal covariance matrix with this.
 """
 struct ResidualVarianceDiagonal <: AbstractDiagonalTerm
     rank::Int

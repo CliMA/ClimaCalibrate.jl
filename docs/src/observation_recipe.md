@@ -35,14 +35,17 @@ All functions assume that any data preprocessing is done with `ClimaAnalysis`.
 
 ### Covariance Estimators
 
-There are currently two covariance estimators, [`ScalarCovariance`](@ref) and
-[`SVDplusDCovariance`](@ref), which are subtypes of
-[`AbstractCovarianceEstimator`](@ref). Each estimates the noise covariance
-matrix from the matrix of samples in a `SampleCollection`. `ScalarCovariance`
-approximates the observation noise covariance as a scalar diagonal matrix.
-`SVDplusDCovariance` approximates the variances and the correlations between
-points from, often limited, time series observations. Because it estimates them
-across samples, it requires at least two samples (columns), whereas
+There are currently three covariance estimators, [`ScalarCovariance`](@ref),
+[`SVDplusDCovariance`](@ref), and [`ToBeDecidedCovariance`](@ref), which are
+subtypes of [`AbstractCovarianceEstimator`](@ref). Each estimates the noise
+covariance matrix from the matrix of samples in a `SampleCollection`.
+`ScalarCovariance` approximates the observation noise covariance as a scalar
+diagonal matrix. `SVDplusDCovariance` approximates the variances and the
+correlations between points from, often limited, time series observations.
+`ToBeDecidedCovariance` is a `SVDplusDCovariance` whose diagonal term is the
+variance that the low-rank part does not explain plus a model error term.
+Because `SVDplusDCovariance` and `ToBeDecidedCovariance` estimate them across
+samples, they require at least two samples (columns), whereas
 `ScalarCovariance` works with a single sample.
 
 ### Necessary data preprocessing
@@ -136,6 +139,8 @@ happens to the transforms depends on the estimator.
    the samples are not used.
 2. `SVDplusDCovariance` applies the transforms before computing the SVD and the
    diagonal term.
+3. `ToBeDecidedCovariance` applies the transforms in the same way as
+   `SVDplusDCovariance`.
 
 Putting it together, here is an example of using transforms to weight the
 covariance matrix.
@@ -377,6 +382,10 @@ The built-in diagonal terms are
   ClimaCalibrate.ObservationRecipe.VarianceDiagonal): the entries are the
   variance of each row of the sample matrix, taken across the samples and
   ignoring `NaN`s.
+- [`ResidualVarianceDiagonal`](@ref
+  ClimaCalibrate.ObservationRecipe.ResidualVarianceDiagonal): the entries are
+  the variance of each row of the sample matrix minus the diagonal of the
+  truncated SVD of the sample covariance matrix.
 - [`QuantileDiagonal`](@ref
   ClimaCalibrate.ObservationRecipe.QuantileDiagonal): the entries are constant
   for each variable, where the constant is a quantile of the entries that
