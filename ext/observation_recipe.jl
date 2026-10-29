@@ -2,7 +2,6 @@ import ClimaCalibrate
 import ClimaCalibrate.ObservationRecipe
 import ClimaCalibrate.ObservationRecipe: AbstractCovarianceEstimator
 import ClimaCalibrate.ObservationRecipe: ScalarCovariance, SVDplusDCovariance
-import ClimaCalibrate.ObservationRecipe: QuantileRegularization
 
 include("diagonal_term.jl")
 
@@ -158,12 +157,11 @@ end
 Warn if the D term of an `SVDplusD` covariance has entries that are zero or not
 finite while the SVD term is rank deficient, which leaves the sum singular.
 
-The sample covariance of `n` samples has rank at most `n - 1`, so with no more
-samples than observation entries the SVD term is singular on its own and the D
-term is what makes the sum invertible. For example, with
-`ModelErrorScaleDiagonal(x) .+ ScalarDiagonal(y)`, D is `(x * mean)^2 + y`, so
-it is zero wherever the sample mean is zero and `y` is zero, and zero everywhere
-when both are zero.
+The sample covariance of `n` samples has rank at most `n - 1`, so with no more samples than
+observation entries the SVD term is singular on its own and the D term is what makes the sum
+invertible. For example, with `ModelErrorScaleDiagonal(x) .+ ScalarDiagonal(y)`, D is `(x *
+mean)^2 + y`, so it is zero wherever the sample mean is zero and `y` is zero, and zero
+everywhere when both are zero.
 """
 function _check_d_term(d_diag, all_metadata, n_samples)
     n_samples <= length(d_diag) || return nothing
