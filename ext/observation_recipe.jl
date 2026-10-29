@@ -2,7 +2,10 @@ import ClimaCalibrate
 import ClimaCalibrate.ObservationRecipe
 import ClimaCalibrate.ObservationRecipe: AbstractCovarianceEstimator
 import ClimaCalibrate.ObservationRecipe:
-    ScalarCovariance, SeasonalDiagonalCovariance, SVDplusDCovariance
+    ScalarCovariance,
+    SeasonalDiagonalCovariance,
+    SVDplusDCovariance,
+    ToBeDecidedCovariance
 import ClimaCalibrate.ObservationRecipe: QuantileRegularization
 
 include("diagonal_term.jl")
@@ -312,6 +315,16 @@ function _check_d_term(d_diag, all_metadata, n_samples)
            `model_error_scale` alone leaves a zero wherever the sample mean is \
            zero."
     return nothing
+end
+
+function ObservationRecipe.covariance(
+    covar_estimator::ToBeDecidedCovariance,
+    sample_collection::AbstractSampleCollection,
+)
+    return ObservationRecipe.covariance(
+        covar_estimator.inner,
+        sample_collection,
+    )
 end
 
 """

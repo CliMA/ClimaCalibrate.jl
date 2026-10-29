@@ -21,6 +21,7 @@ module ObservationRecipe
 export ScalarCovariance,
     SeasonalDiagonalCovariance,
     SVDplusDCovariance,
+    ToBeDecidedCovariance,
     QuantileRegularization,
     covariance,
     observation,
@@ -388,6 +389,28 @@ function _diagonal_term(
     model_error_scale_term = ModelErrorScaleDiagonal(model_error_scale)
     return model_error_scale_term .+
            QuantileDiagonal(regularization.qtl, model_error_scale_term)
+end
+
+"""
+    ToBeDecidedCovariance <: AbstractCovarianceEstimator
+
+TODO
+"""
+struct ToBeDecidedCovariance{S <: SVDplusDCovariance} <:
+       AbstractCovarianceEstimator
+    inner::S
+end
+
+function ToBeDecidedCovariance(; beta, rank = 2, sigma2 = 1e-6)
+    sigma2 < zero(sigma2) && error("Sigma2 ($sigma2) should not be negative")
+    # The floor only replaces the squared mean where it is smaller, so the model
+    # error term does not vanish where the mean of the variable is zero
+    floor_term = sigma2 .* QuantileDiagonal(0.5, VarianceDiagonal())
+    diagonal =
+        ResidualVarianceDiagonal(rank) .+
+        ScalarDiagonal(float.(vcat(beta))) .*
+        max.(ModelErrorScaleDiagonal(1.0), floor_term)
+    return ToBeDecidedCovariance(SVDplusDCovariance(diagonal; rank))
 end
 
 function covariance end
