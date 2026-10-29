@@ -34,9 +34,10 @@ main
 - The keyword constructor of `SVDplusDCovariance` is removed. Pass a diagonal
   term instead. For example, replace
   `SVDplusDCovariance(model_error_scale = x, regularization = y)` with
-  `SVDplusDCovariance(ModelErrorScaleDiagonal(x) .+ ScalarDiagonal(y))`, and
-  replace `regularization = QuantileRegularization(q)` with
-  `QuantileDiagonal(q, ModelErrorScaleDiagonal(x))`
+  `SVDplusDCovariance(ModelErrorScaleDiagonal(x) .+ ScalarDiagonal(y))`.
+  `QuantileRegularization` is removed. Replace
+  `model_error_scale = x, regularization = QuantileRegularization(q)` with
+  `ModelErrorScaleDiagonal(x) .+ QuantileDiagonal(q, ModelErrorScaleDiagonal(x))`
   [#XXX](https://github.com/CliMA/ClimaCalibrate.jl/pull/XXX).
 
 ### Observation pipeline

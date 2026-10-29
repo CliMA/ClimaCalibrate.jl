@@ -19,7 +19,6 @@ module ObservationRecipe
 
 export ScalarCovariance,
     SVDplusDCovariance,
-    QuantileRegularization,
     covariance,
     observation,
     short_names,
@@ -118,33 +117,6 @@ function ScalarCovariance(;
     end
 
     return ScalarCovariance(scalar, latitude_weighting)
-end
-
-"""
-    QuantileRegularization
-
-Regularization using the quantile of the model error scale for each
-`OutputVar`.
-
-The same quantile is used for each `OutputVar` when making the observation.
-
-This is used for the `SVDplusDCovariance` matrix.
-
-# Examples
-
-In the example below, a regularization using the 0.05 quantile of the model
-error scale for each variable is initialized.
-
-```julia
-qtl_regularization = QuantileRegularization(0.05)
-```
-"""
-struct QuantileRegularization{FT <: AbstractFloat}
-    qtl::FT
-    function QuantileRegularization(qtl::AbstractFloat)
-        (qtl <= 0 || qtl > 1) && error("Quantile must be in (0, 1], got $qtl")
-        new{typeof(qtl)}(qtl)
-    end
 end
 
 """

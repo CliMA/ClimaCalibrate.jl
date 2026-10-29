@@ -687,14 +687,6 @@ end
 end
 
 @testset "Quantile regularization" begin
-    # Test constructor
-    q_reg = ObservationRecipe.QuantileRegularization(0.05)
-    @test q_reg.qtl == 0.05
-
-    @test_throws ErrorException ObservationRecipe.QuantileRegularization(0.0)
-    @test_throws ErrorException ObservationRecipe.QuantileRegularization(-0.05)
-    @test_throws ErrorException ObservationRecipe.QuantileRegularization(1.1)
-
     function compute_model_error_scale_vec(sample_collection, model_error_scale)
         return vec(
             model_error_scale .*
@@ -732,9 +724,10 @@ end
     ]
 
     model_error_scale = 0.05
+    qtl = 0.05
     mes_term = ObservationRecipe.ModelErrorScaleDiagonal(model_error_scale)
     covar_estimator_with_q_reg = ObservationRecipe.SVDplusDCovariance(
-        mes_term .+ ObservationRecipe.QuantileDiagonal(q_reg.qtl, mes_term),
+        mes_term .+ ObservationRecipe.QuantileDiagonal(qtl, mes_term),
     )
     covar_estimator_with_no_reg = ObservationRecipe.SVDplusDCovariance(mes_term)
 
@@ -759,8 +752,7 @@ end
 
     model_error_scale_vec =
         compute_model_error_scale_vec(sample_collection, model_error_scale)
-    five_percentile =
-        first(Statistics.quantile(model_error_scale_vec, [q_reg.qtl]))
+    five_percentile = first(Statistics.quantile(model_error_scale_vec, [qtl]))
 
     @test all(q_reg_of_model_error_scale_vec .≈ five_percentile)
 
@@ -813,7 +805,7 @@ end
             model_error_scale,
         )
         five_percentile =
-            first(Statistics.quantile(model_error_scale_vec, [q_reg.qtl]))
+            first(Statistics.quantile(model_error_scale_vec, [qtl]))
         n = length(model_error_scale_vec)
         @test all(
             q_reg_of_model_error_scale_vec[(i + 1):(i + n)] .≈ five_percentile,
@@ -857,7 +849,7 @@ end
     )
     covar_estimator_no_model_error_scale = ObservationRecipe.SVDplusDCovariance(
         ObservationRecipe.QuantileDiagonal(
-            q_reg.qtl,
+            qtl,
             ObservationRecipe.ModelErrorScaleDiagonal(0.0),
         ),
     )
