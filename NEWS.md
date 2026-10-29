@@ -31,6 +31,13 @@ main
   which takes a `LatitudeWeightDiagonal` or `nothing`. Variables without a
   latitude dimension are left unweighted instead of throwing an error
   [#386](https://github.com/CliMA/ClimaCalibrate.jl/pull/386).
+- The keyword constructor of `SVDplusDCovariance` is removed. Pass a diagonal
+  term instead. For example, replace
+  `SVDplusDCovariance(model_error_scale = x, regularization = y)` with
+  `SVDplusDCovariance(ModelErrorScaleDiagonal(x) .+ ScalarDiagonal(y))`, and
+  replace `regularization = QuantileRegularization(q)` with
+  `QuantileDiagonal(q, ModelErrorScaleDiagonal(x))`
+  [#XXX](https://github.com/CliMA/ClimaCalibrate.jl/pull/XXX).
 
 ### Observation pipeline
 

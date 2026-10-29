@@ -181,19 +181,19 @@ end
         i in 2007:2009
     ]
 
-    covar_estimator_with_q_reg = ObservationRecipe.SVDplusDCovariance(
-        regularization = 0.01,
-        model_error_scale = 0.05,
+    covar_estimator = ObservationRecipe.SVDplusDCovariance(
+        ObservationRecipe.ModelErrorScaleDiagonal(0.05) .+
+        ObservationRecipe.ScalarDiagonal(0.01),
     )
 
     obs_vec = [
         ObservationRecipe.observation(
-            covar_estimator_with_q_reg,
+            covar_estimator,
             CAL.SampleBuilder.build_samples_by_times([var], sample_date_ranges),
             1,
         ),
         ObservationRecipe.observation(
-            covar_estimator_with_q_reg,
+            covar_estimator,
             CAL.SampleBuilder.build_samples_by_times(
                 [no_lon_var],
                 sample_date_ranges,

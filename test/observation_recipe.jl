@@ -116,12 +116,6 @@ end
     )
 
     # Negative values for regularization, model_error_scale, and rank
-    @test_throws ErrorException ObservationRecipe.SVDplusDCovariance(
-        regularization = -2.0,
-    )
-    @test_throws ErrorException ObservationRecipe.SVDplusDCovariance(
-        model_error_scale = -2.0,
-    )
     @test_throws "should be nothing or non-negative" ObservationRecipe.SVDplusDCovariance(
         ObservationRecipe.ScalarDiagonal(1e-3);
         rank = -1,
@@ -372,7 +366,10 @@ end
             sample_collection,
         ),
         (
-            ObservationRecipe.SVDplusDCovariance(),
+            ObservationRecipe.SVDplusDCovariance(
+                ObservationRecipe.ModelErrorScaleDiagonal(0.05) .+
+                ObservationRecipe.ScalarDiagonal(0.01),
+            ),
             sample_collection |> SampleBuilder.LatitudeWeighting(),
         ),
     )
@@ -473,8 +470,7 @@ end
 
     # Test only regularization
     covar_estimator = ObservationRecipe.SVDplusDCovariance(
-        model_error_scale = 0.0,
-        regularization = 1e-3,
+        ObservationRecipe.ScalarDiagonal(1e-3),
     )
     svd_plus_d_covar =
         ObservationRecipe.covariance(covar_estimator, sample_collection)
@@ -483,8 +479,7 @@ end
 
     # Test only model error scale
     covar_estimator = ObservationRecipe.SVDplusDCovariance(
-        model_error_scale = 1.0,
-        regularization = 0.0,
+        ObservationRecipe.ModelErrorScaleDiagonal(1.0),
     )
     svd_plus_d_covar =
         ObservationRecipe.covariance(covar_estimator, sample_collection)
@@ -496,8 +491,8 @@ end
     model_error_scale = 2.0
     regularization = 1e-3
     covar_estimator = ObservationRecipe.SVDplusDCovariance(
-        model_error_scale = model_error_scale,
-        regularization = regularization,
+        ObservationRecipe.ModelErrorScaleDiagonal(model_error_scale) .+
+        ObservationRecipe.ScalarDiagonal(regularization),
     )
     svd_plus_d_covar =
         ObservationRecipe.covariance(covar_estimator, sample_collection)
@@ -510,7 +505,9 @@ end
     )
 
     # Test latitude weights
-    covar_estimator = ObservationRecipe.SVDplusDCovariance()
+    covar_estimator = ObservationRecipe.SVDplusDCovariance(
+        ObservationRecipe.ScalarDiagonal(0.0),
+    )
     svd_plus_d_covar_with_lat_weights = ObservationRecipe.covariance(
         covar_estimator,
         sample_collection |>
@@ -544,11 +541,15 @@ end
         FT = Float64,
     )
     lat_weighted_covar = ObservationRecipe.covariance(
-        ObservationRecipe.SVDplusDCovariance(model_error_scale = 0.05),
+        ObservationRecipe.SVDplusDCovariance(
+            ObservationRecipe.ModelErrorScaleDiagonal(0.05),
+        ),
         lat_and_lon_collection |> SampleBuilder.LatitudeWeighting(),
     )
     unweighted_covar = ObservationRecipe.covariance(
-        ObservationRecipe.SVDplusDCovariance(model_error_scale = 0.05),
+        ObservationRecipe.SVDplusDCovariance(
+            ObservationRecipe.ModelErrorScaleDiagonal(0.05),
+        ),
         lat_and_lon_collection,
     )
     # Weighting the samples by sqrt(w) scales the model error scale term by w
@@ -562,14 +563,20 @@ end
           unweighted_covar.diag_cov.diag[lon_rows]
 
     # Test rank
-    covar_estimator_rank0 = ObservationRecipe.SVDplusDCovariance(; rank = 0)
+    covar_estimator_rank0 = ObservationRecipe.SVDplusDCovariance(
+        ObservationRecipe.ScalarDiagonal(0.0);
+        rank = 0,
+    )
     svd_plus_d_covar_rank0 =
         ObservationRecipe.covariance(covar_estimator_rank0, sample_collection)
     # It is silly to use a rank of 0 for SVD, but it simplifies testing
     # There are no eigenvalues for a rank 0 SVD
     @test isempty(svd_plus_d_covar_rank0.svd_cov.S)
 
-    covar_estimator_rank10 = ObservationRecipe.SVDplusDCovariance(; rank = 10)
+    covar_estimator_rank10 = ObservationRecipe.SVDplusDCovariance(
+        ObservationRecipe.ScalarDiagonal(0.0);
+        rank = 10,
+    )
     # match_mode = :any because a covariance with no D term also warns that it
     # is rank deficient
     @test_logs (:warn, r"rank") match_mode = :any ObservationRecipe.covariance(
@@ -579,8 +586,8 @@ end
 
     # Test float type
     covar_estimator = ObservationRecipe.SVDplusDCovariance(
-        model_error_scale = 2.0f0,
-        regularization = 1.0f0,
+        ObservationRecipe.ModelErrorScaleDiagonal(2.0f0) .+
+        ObservationRecipe.ScalarDiagonal(1.0f0),
     )
     sample_collection32 = SampleBuilder.build_samples_by_times(
         [var],
@@ -599,8 +606,8 @@ end
     # regularization are given as Float64 literals (the diagonal part should not
     # silently widen to Float64)
     covar_estimator = ObservationRecipe.SVDplusDCovariance(
-        model_error_scale = 1.0,
-        regularization = 1e-3,
+        ObservationRecipe.ModelErrorScaleDiagonal(1.0) .+
+        ObservationRecipe.ScalarDiagonal(1e-3),
     )
     svd_plus_d_covar =
         ObservationRecipe.covariance(covar_estimator, sample_collection32)
@@ -610,8 +617,8 @@ end
     # Lazy and eager sample collections give the same covariance matrix, with
     # and without latitude weighting
     covar_estimator = ObservationRecipe.SVDplusDCovariance(
-        model_error_scale = 0.05,
-        regularization = 1e-6,
+        ObservationRecipe.ModelErrorScaleDiagonal(0.05) .+
+        ObservationRecipe.ScalarDiagonal(1e-6),
     )
     per_collection_weighting = SampleBuilder.PerCollectionWeighting(2.0)
     for transformed_collection in (
@@ -633,7 +640,10 @@ end
     end
 
     # Error handling: negative rank
-    @test_throws ErrorException ObservationRecipe.SVDplusDCovariance(rank = -1)
+    @test_throws ErrorException ObservationRecipe.SVDplusDCovariance(
+        ObservationRecipe.ScalarDiagonal(0.0);
+        rank = -1,
+    )
 
     # Two or more samples are required
     one_sample_collection = SampleBuilder.build_samples_by_times(
@@ -642,13 +652,17 @@ end
         FT = Float64,
     )
     @test_throws r"needs at least 2 samples" ObservationRecipe.covariance(
-        ObservationRecipe.SVDplusDCovariance(),
+        ObservationRecipe.SVDplusDCovariance(
+            ObservationRecipe.ScalarDiagonal(0.0),
+        ),
         one_sample_collection,
     )
 
     # Warn when diagonal part of SVDplusD is the zero matrix
     @test_logs (:warn, r"80 non-positive or NaN diagonal entries") ObservationRecipe.covariance(
-        ObservationRecipe.SVDplusDCovariance(),
+        ObservationRecipe.SVDplusDCovariance(
+            ObservationRecipe.ScalarDiagonal(0.0),
+        ),
         sample_collection,
     )
 
@@ -656,15 +670,17 @@ end
     single_zero_row_sample_collection = deepcopy(sample_collection)
     single_zero_row_sample_collection.samples[1, :] .= 0.0
     @test_logs (:warn, r"1 non-positive or NaN diagonal entries") ObservationRecipe.covariance(
-        ObservationRecipe.SVDplusDCovariance(model_error_scale = 0.05),
+        ObservationRecipe.SVDplusDCovariance(
+            ObservationRecipe.ModelErrorScaleDiagonal(0.05),
+        ),
         single_zero_row_sample_collection,
     )
 
     # Check no warning is shown when regularization is used
     @test_logs ObservationRecipe.covariance(
         ObservationRecipe.SVDplusDCovariance(
-            model_error_scale = 0.05,
-            regularization = 1e-8,
+            ObservationRecipe.ModelErrorScaleDiagonal(0.05) .+
+            ObservationRecipe.ScalarDiagonal(1e-8),
         ),
         single_zero_row_sample_collection,
     )
@@ -716,14 +732,11 @@ end
     ]
 
     model_error_scale = 0.05
-    covar_estimator_with_q_reg = ObservationRecipe.SVDplusDCovariance(;
-        regularization = q_reg,
-        model_error_scale,
+    mes_term = ObservationRecipe.ModelErrorScaleDiagonal(model_error_scale)
+    covar_estimator_with_q_reg = ObservationRecipe.SVDplusDCovariance(
+        mes_term .+ ObservationRecipe.QuantileDiagonal(q_reg.qtl, mes_term),
     )
-    covar_estimator_with_no_reg = ObservationRecipe.SVDplusDCovariance(;
-        regularization = 0.0,
-        model_error_scale,
-    )
+    covar_estimator_with_no_reg = ObservationRecipe.SVDplusDCovariance(mes_term)
 
     sample_collection = SampleBuilder.build_samples_by_times(
         [var],
@@ -817,8 +830,7 @@ end
     )
     covar = ObservationRecipe.covariance(
         ObservationRecipe.SVDplusDCovariance(
-            model_error_scale = 0.05,
-            regularization = ObservationRecipe.QuantileRegularization(0.05),
+            mes_term .+ ObservationRecipe.QuantileDiagonal(0.05, mes_term),
         ),
         scaled_sample_collection,
     )
@@ -844,8 +856,10 @@ end
         small_sample_collection,
     )
     covar_estimator_no_model_error_scale = ObservationRecipe.SVDplusDCovariance(
-        regularization = q_reg,
-        model_error_scale = 0.0,
+        ObservationRecipe.QuantileDiagonal(
+            q_reg.qtl,
+            ObservationRecipe.ModelErrorScaleDiagonal(0.0),
+        ),
     )
     @test_throws r"Zero found for the quantile" ObservationRecipe.covariance(
         covar_estimator_no_model_error_scale,
@@ -860,14 +874,6 @@ end
         ObservationRecipe.ScalarDiagonal(1e-3)
     covar_estimator = ObservationRecipe.SVDplusDCovariance(diag_term)
     @test covar_estimator.diagonal === diag_term
-
-    # model_error_scale and regularization lower to a diagonal term
-    covar_estimator_legacy = ObservationRecipe.SVDplusDCovariance(
-        model_error_scale = 0.05,
-        regularization = 1e-3,
-    )
-    @test covar_estimator_legacy.diagonal isa
-          ObservationRecipe.BroadcastedDiagonal
 
     # The diagonal term is positional, not a keyword argument
     @test_throws MethodError ObservationRecipe.SVDplusDCovariance(
@@ -916,14 +922,6 @@ end
         FT = Float64,
     )
 
-    # Passing the equivalent diagonal term gives the same diagonal matrix as
-    # model_error_scale and regularization
-    @test ObservationRecipe.covariance(covar_estimator, sample_collection).diag_cov ==
-          ObservationRecipe.covariance(
-        covar_estimator_legacy,
-        sample_collection,
-    ).diag_cov
-
     # A custom diagonal term
     @test ObservationRecipe.covariance(
         ObservationRecipe.SVDplusDCovariance(
@@ -954,22 +952,7 @@ end
     )
     mes_term = ObservationRecipe.ModelErrorScaleDiagonal(1.0)
 
-    # QuantileRegularization lowers to a QuantileDiagonal of the model error
-    # scale term
-    @test ObservationRecipe.covariance(
-        ObservationRecipe.SVDplusDCovariance(
-            model_error_scale = 1.0,
-            regularization = ObservationRecipe.QuantileRegularization(0.5),
-        ),
-        sample_collection,
-    ).diag_cov == ObservationRecipe.covariance(
-        ObservationRecipe.SVDplusDCovariance(
-            mes_term .+ ObservationRecipe.QuantileDiagonal(0.5, mes_term),
-        ),
-        sample_collection,
-    ).diag_cov
-
-    # A zero diagonal term warns like the keyword defaults do
+    # A zero diagonal term warns
     @test_logs (:warn, r"4 non-positive or NaN diagonal entries") ObservationRecipe.covariance(
         ObservationRecipe.SVDplusDCovariance(
             ObservationRecipe.ScalarDiagonal(0.0),
@@ -1055,8 +1038,8 @@ end
 
     # It doesn't matter which covariance estimator is being used
     covar_estimator = ObservationRecipe.SVDplusDCovariance(
-        model_error_scale = 1e-2,
-        regularization = 1e-3,
+        ObservationRecipe.ModelErrorScaleDiagonal(1e-2) .+
+        ObservationRecipe.ScalarDiagonal(1e-3),
     )
 
     start_date = Dates.DateTime(2007, 12)
