@@ -105,10 +105,10 @@ sample_collection =
         FT = Float32
     )
 
-# We choose SVDplusDCovariance.
+# We choose SVDplusDCovariance
 covar_estimator = ObservationRecipe.SVDplusDCovariance(
-    model_error_scale = Float32(0.05),
-    regularization = Float32(1e-6),
+    ObservationRecipe.ModelErrorScaleDiagonal(Float32(0.05)) .+
+    ObservationRecipe.ScalarDiagonal(Float32(1e-6)),
 )
 
 # Finally, we form the observation, using the first sample as the observation
@@ -150,8 +150,8 @@ transformed_collection =
     )
 
 covar_estimator = ObservationRecipe.SVDplusDCovariance(
-    model_error_scale = Float32(0.05),
-    regularization = Float32(1e-6),
+    ObservationRecipe.ModelErrorScaleDiagonal(Float32(0.05)) .+
+    ObservationRecipe.ScalarDiagonal(Float32(1e-6)),
 )
 
 obs = ObservationRecipe.observation(covar_estimator, transformed_collection, 1)
@@ -514,18 +514,20 @@ short name, the empty string will be used instead and a warning is emitted. You
 can override this by passing the `name` keyword argument to
 `ObservationRecipe.observation`.
 
-**Q: What is `regularization` and `model_error_scale` when making a covariance matrix?**
+**Q: What are the model error scale and regularization terms when making a covariance matrix?**
 
 **A:** The model error scale and regularization terms are used to inflate the
 diagonal of the observation covariance matrix to reflect estimates of
 measurement error. You can add a fixed percentage inflation of the noise due to
-the model error to the covariance matrix with the `model_error_scale` keyword
-argument. Additionally, to prevent very small variance along the diagonal of the
-covariance matrix, you can add a regularization with the `regularization`
-keyword argument. The `regularization` keyword argument can also be a
-[`QuantileRegularization`](@ref), which sets the
+the model error to the covariance matrix with a [`ModelErrorScaleDiagonal`](@ref
+ClimaCalibrate.ObservationRecipe.ModelErrorScaleDiagonal) term. Additionally, to
+prevent very small variance along the diagonal of the covariance matrix, you can
+add a regularization with a [`ScalarDiagonal`](@ref
+ClimaCalibrate.ObservationRecipe.ScalarDiagonal) term. The regularization can
+also be a [`QuantileDiagonal`](@ref
+ClimaCalibrate.ObservationRecipe.QuantileDiagonal), which sets the
 regularization from a quantile of the model error scale instead of a fixed
-value.
+value, as in `QuantileDiagonal(0.05, ModelErrorScaleDiagonal(0.05))`.
 
 Only `SVDplusDCovariance` accepts them. [`ScalarCovariance`](@ref) takes
 neither: its diagonal is the `scalar` you give it, so there is nothing to
@@ -533,11 +535,13 @@ inflate.
 
 !!! note "SVDplusDCovariance needs one of them"
     `SVDplusDCovariance` builds a covariance of the form `SVD + D`, where `D` is
-    `(model_error_scale * mean(samples))^2 + regularization`. Both default to
-    zero, which leaves `D` empty. The SVD term alone has rank at most one less
-    than the number of samples, so with fewer samples than observation entries,
-    which is the usual case, the covariance is singular and EKP cannot invert
-    it. Set at least one of them to a positive value.
+    the diagonal matrix built from the diagonal term, such as
+    `(model_error_scale * mean(samples))^2 + regularization` for
+    `ModelErrorScaleDiagonal(model_error_scale) .+ ScalarDiagonal(regularization)`.
+    The SVD term alone has rank at most one less than the number of samples, so
+    with fewer samples than observation entries, which is the usual case, the
+    covariance is singular and EKP cannot invert it unless `D` is positive. Use
+    a diagonal term with positive entries.
 
 **Q: How do I apply latitude weighting to the covariance matrix?**
 
@@ -557,8 +561,8 @@ ClimaCalibrate.SampleBuilder.LatitudeWeighting):
 
 ```julia
 covar_estimator = ObservationRecipe.SVDplusDCovariance(
-    model_error_scale = 0.05,
-    regularization = 1e-6,
+    ObservationRecipe.ModelErrorScaleDiagonal(0.05) .+
+    ObservationRecipe.ScalarDiagonal(1e-6),
 )
 weighted_collection = sample_collection |> SampleBuilder.LatitudeWeighting()
 obs = ObservationRecipe.observation(covar_estimator, weighted_collection, 1)

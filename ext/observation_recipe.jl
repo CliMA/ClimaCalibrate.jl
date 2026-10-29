@@ -160,10 +160,10 @@ finite while the SVD term is rank deficient, which leaves the sum singular.
 
 The sample covariance of `n` samples has rank at most `n - 1`, so with no more
 samples than observation entries the SVD term is singular on its own and the D
-term is what makes the sum invertible. With the keyword constructor, D is
-`(model_error_scale * mean)^2 + regularization`, so it is zero wherever the
-sample mean is zero and `regularization` is zero, and zero everywhere when both
-are zero.
+term is what makes the sum invertible. For example, with
+`ModelErrorScaleDiagonal(x) .+ ScalarDiagonal(y)`, D is `(x * mean)^2 + y`, so
+it is zero wherever the sample mean is zero and `y` is zero, and zero everywhere
+when both are zero.
 """
 function _check_d_term(d_diag, all_metadata, n_samples)
     n_samples <= length(d_diag) || return nothing
@@ -172,10 +172,8 @@ function _check_d_term(d_diag, all_metadata, n_samples)
     @warn "The D term of this SVDplusDCovariance has $description. With \
            $n_samples samples for $(length(d_diag)) observation entries the \
            SVD term is rank deficient, so EKP will not be able to invert the \
-           covariance. Set `model_error_scale` or `regularization` to a \
-           positive value, or use a diagonal term that is positive everywhere; \
-           `model_error_scale` alone leaves a zero wherever the sample mean is \
-           zero."
+           covariance. Use a diagonal term that is positive everywhere, such \
+           as one that includes a positive `ScalarDiagonal`."
     return nothing
 end
 

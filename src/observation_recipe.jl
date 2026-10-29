@@ -167,76 +167,6 @@ struct SVDplusDCovariance{
 end
 
 """
-    SVDplusDCovariance(;
-        model_error_scale = 0.0,
-        regularization = 0.0,
-        rank = nothing
-    )
-
-Create a `SVDplusDCovariance` which specifies how the covariance matrix should
-be formed. When used with `ObservationRecipe.observation` or
-`ObservationRecipe.covariance`, return a `EKP.SVDplusD` covariance matrix.
-
-The samples used to compute the covariance matrix come from the
-`SampleCollection`, where each sample is one column.
-
-!!! note "Recommended sample size"
-    When constructing the samples (e.g. with `build_samples_by_times`), it is
-    recommended that each sample contains data from a single year. For example,
-    if the samples are created from time series data of seasonal averages, then
-    each sample should contain all four seasons. Otherwise, the covariance matrix
-    may not make sense. For example, if each sample contains two years of
-    seasonally averaged data, then the sample mean is the seasonal mean of every
-    other season across the years stacked vertically. For a concrete example, if
-    the samples contain DJF for both 2010 and 2011. Then, the sample mean will be
-    the mean of DJF 2010, 2012, and so on, and the mean of DJF 2011, 2013, and so
-    on. As a result, if one were to use this covariance matrix with
-    `model_error_scale`, the covariance matrix will not make sense.
-
-# Keyword Arguments
-
-- `model_error_scale`: Noise from the model error added to the covariance
-  matrix. This is `(model_error_scale * mean(samples, dims = 2)).^2`, where
-  `mean(samples, dims = 2)` is the mean of the samples.
-
-- `regularization`: If a scalar is used, a diagonal matrix of the form
-  `regularization * I` is added to the covariance matrix. See
-  [`QuantileRegularization`](@ref) for another option for regularization.
-
-- `rank`: Rank of the singular value decomposition (SVD). If `nothing` is passed
-  in, then the rank is automatically inferred from the data.
-
-!!! note "Latitude weighting"
-    To apply latitude weighting, pipe the sample collection into a
-    [`LatitudeWeighting`](@ref ClimaCalibrate.SampleBuilder.LatitudeWeighting)
-    before passing it to `observation`. Both the SVD and the diagonal term are
-    computed from the weighted samples.
-
-    ```julia
-    covar_estimator = SVDplusDCovariance(model_error_scale = 0.05)
-    weighted_collection = sample_collection |> SampleBuilder.LatitudeWeighting()
-    obs = observation(covar_estimator, weighted_collection, 1)
-    ```
-"""
-function SVDplusDCovariance(;
-    model_error_scale = 0.0,
-    regularization = 0.0,
-    rank = nothing,
-)
-    model_error_scale < zero(model_error_scale) &&
-        error("Model_error_scale ($model_error_scale) should not be negative")
-    if regularization isa AbstractFloat
-        regularization < zero(regularization) &&
-            error("Regularization ($regularization) should not be negative")
-    end
-
-    return SVDplusDCovariance(
-        _diagonal_term(model_error_scale, regularization);
-        rank,
-    )
-end
-
-"""
     SVDplusDCovariance(
         diagonal::AbstractDiagonalTerm;
         rank = nothing,
@@ -245,12 +175,6 @@ end
 Create a `SVDplusDCovariance` whose diagonal matrix is described by the diagonal
 term `diagonal`. When used with `ObservationRecipe.observation` or
 `ObservationRecipe.covariance`, return a `EKP.SVDplusD` covariance matrix.
-
-Passing `model_error_scale = x` and `regularization = y` to the keyword
-constructor is the same as passing
-`diagonal = ModelErrorScaleDiagonal(x) .+ ScalarDiagonal(y)`. Passing
-`regularization = QuantileRegularization(q)` instead is the same as passing
-`diagonal = ModelErrorScaleDiagonal(x) .+ QuantileDiagonal(q, ModelErrorScaleDiagonal(x))`.
 
 # Keyword Arguments
 
@@ -280,26 +204,6 @@ function SVDplusDCovariance(diagonal::AbstractDiagonalTerm; rank = nothing)
         error("Rank ($rank) should be nothing or non-negative")
 
     return SVDplusDCovariance(diagonal, rank)
-end
-
-"""
-    _diagonal_term(model_error_scale, regularization)
-
-Construct the diagonal term specified by `model_error_scale` and
-`regularization`.
-"""
-function _diagonal_term(model_error_scale, regularization)
-    return ModelErrorScaleDiagonal(model_error_scale) .+
-           ScalarDiagonal(regularization)
-end
-
-function _diagonal_term(
-    model_error_scale,
-    regularization::QuantileRegularization,
-)
-    model_error_scale_term = ModelErrorScaleDiagonal(model_error_scale)
-    return model_error_scale_term .+
-           QuantileDiagonal(regularization.qtl, model_error_scale_term)
 end
 
 function covariance end
