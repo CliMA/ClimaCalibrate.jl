@@ -88,6 +88,18 @@ function compute_diagonal(
     return Diagonal(convert(Vector{FT}, vec(nanvar(samples, dims = 2))))
 end
 
+"""
+    compute_diagonal(
+        diagonal_term::ResidualVarianceDiagonal,
+        sample_collection::SampleCollection,
+    )
+
+Compute a diagonal matrix whose entries are the variance of each row of the
+sample matrix in `sample_collection` minus the diagonal of the truncated SVD of
+rank `rank` of the sample covariance matrix.
+
+An error is thrown if there are fewer than two samples.
+"""
 function compute_diagonal(
     diagonal_term::ResidualVarianceDiagonal,
     sample_collection::SampleCollection,
