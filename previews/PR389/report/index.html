@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Report · ClimaCalibrate.jl</title><meta name="title" content="Report · ClimaCalibrate.jl"/><meta property="og:title" content="Report · ClimaCalibrate.jl"/><meta property="twitter:title" content="Report · ClimaCalibrate.jl"/><meta name="description" content="Documentation for ClimaCalibrate.jl."/><meta property="og:description" content="Documentation for ClimaCalibrate.jl."/><meta property="twitter:description" content="Documentation for ClimaCalibrate.jl."/><script data-outdated-warner src="../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.63.2/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../search_index.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../">ClimaCalibrate.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../">Home</a></li><li><a class="tocitem" href="../concepts/">How a calibration works</a></li><li><a class="tocitem" href="../quickstart/">Getting Started</a></li><li><a class="tocitem" href="../literate_example/">Calibration Tutorial</a></li><li><a class="tocitem" href="../backends/">Backends</a></li><li><a class="tocitem" href="../submit_scripts/">Writing submission scripts</a></li><li><input class="collapse-toggle" id="menuitem-7" type="checkbox"/><label class="tocitem" for="menuitem-7"><span class="docs-label">Observations</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../observations/">Overview</a></li><li><a class="tocitem" href="../sample_builder/">Building samples</a></li><li><a class="tocitem" href="../observation_recipe/">Building observations</a></li><li><a class="tocitem" href="../ensemble_builder/">Building the G ensemble matrix</a></li></ul></li><li><a class="tocitem" href="../visualization/">Visualization</a></li><li class="is-active"><a class="tocitem" href>Report</a><ul class="internal"><li><a class="tocitem" href="#Example"><span>Example</span></a></li><li><a class="tocitem" href="#Implementing-your-own-AbstractReporter"><span>Implementing your own AbstractReporter</span></a></li></ul></li><li><a class="tocitem" href="../troubleshooting/">Troubleshooting</a></li><li><a class="tocitem" href="../howdoi/">How do I?</a></li><li><a class="tocitem" href="../api/">API</a></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li class="is-active"><a href>Report</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Report</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/CliMA/ClimaCalibrate.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/CliMA/ClimaCalibrate.jl/blob/main/docs/src/report.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Calibration-report"><a class="docs-heading-anchor" href="#Calibration-report">Calibration report</a><a id="Calibration-report-1"></a><a class="docs-heading-anchor-permalink" href="#Calibration-report" title="Permalink"></a></h1><p>ClimaCalibrate provides utilities for reporting the state of each iteration of a calibration. This is implemented with a <a href="../api/#ClimaCalibrate.Report.CalibrationReport"><code>CalibrationReport</code></a> which is built from <a href="../api/#ClimaCalibrate.Report.AbstractReporter"><code>AbstractReporter</code></a>s such as</p><ul><li><a href="../api/#ClimaCalibrate.Report.WalltimeReporter"><code>WalltimeReporter</code></a> for reporting the walltime information,</li><li><a href="../api/#ClimaCalibrate.Report.TimestepReporter"><code>TimestepReporter</code></a> for reporting the timesteps taken,</li><li><a href="../api/#ClimaCalibrate.Report.ErrorReporter"><code>ErrorReporter</code></a> for reporting the error metrics,</li><li><a href="../api/#ClimaCalibrate.Report.ParameterReporter"><code>ParameterReporter</code></a> for reporting the parameter trajectory,</li><li>and <a href="../api/#ClimaCalibrate.Report.EnsembleReporter"><code>EnsembleReporter</code></a> for reporting the state of the ensemble.</li></ul><h2 id="Example"><a class="docs-heading-anchor" href="#Example">Example</a><a id="Example-1"></a><a class="docs-heading-anchor-permalink" href="#Example" title="Permalink"></a></h2><p>You can build a <a href="../api/#ClimaCalibrate.Report.CalibrationReport"><code>CalibrationReport</code></a> by passing a tuple of <a href="../api/#ClimaCalibrate.Report.AbstractReporter"><code>AbstractReporter</code></a>s to the <code>reporters</code> keyword argument.</p><pre><code class="language-julia hljs">import ClimaCalibrate.Report as Report
+
+reporters = (
+    # Estimate the remaining walltime for a calibration of 10 iterations
+    Report.WalltimeReporter(10),
+    Report.TimestepReporter(),
+    Report.ErrorReporter(; error_metrics = [&quot;loss&quot;, &quot;unweighted_loss&quot;]),
+    Report.ParameterReporter(),
+    Report.EnsembleReporter(),
+)
+calibration_report = Report.CalibrationReport(; reporters)</code></pre><p>The output of the first two iterations of a calibration looks like:</p><pre class="documenter-example-output"><code class="nohighlight hljs ansi">┌ Info: Calibration report · iteration 1 · 2026-10-29T21:22:25
+│   Walltime
+│     iteration walltime:                  3 seconds
+│     total walltime:                      3 seconds
+│     walltime remaining for 9 iterations: 23 seconds (2026-10-29T21:22:47)
+│   Timestep
+│     current algorithm time: 0.0075
+│     current timestep size:  0.0075
+│     timestep history:       [0.0075]
+│   Error
+│     current loss:            46.2
+│     best loss:               46.2 (iteration 1)
+│     loss history:            [46.2]
+│     current unweighted_loss: 0.462
+│     best unweighted_loss:    0.462 (iteration 1)
+│     unweighted_loss history: [0.462]
+│   Parameter
+│     a:        1.2 (+15.2% from previous)
+│     a spread: 0.29 (-34.4% from previous)
+│     b:        2.12 (+7.0% from previous)
+│     b spread: 0.591 (-50.8% from previous)
+│   Ensemble
+└     successful members: 10 of 10
+┌ Info: Calibration report · iteration 2 · 2026-10-29T21:22:26
+│   Walltime
+│     iteration walltime:                  2 seconds
+│     total walltime:                      4 seconds
+│     walltime remaining for 8 iterations: 17 seconds (2026-10-29T21:22:43)
+│   Timestep
+│     current algorithm time: 0.0241
+│     current timestep size:  0.0166
+│     timestep history:       [0.0075, 0.0166]
+│   Error
+│     current loss:            24.1 (-47.8% from previous)
+│     best loss:               24.1 (iteration 2)
+│     loss history:            [46.2, 24.1]
+│     current unweighted_loss: 0.241 (-47.8% from previous)
+│     best unweighted_loss:    0.241 (iteration 2)
+│     unweighted_loss history: [0.462, 0.241]
+│   Parameter
+│     a:        1.33 (+11.0% from previous)
+│     a spread: 0.164 (-43.5% from previous)
+│     b:        2.3 (+8.6% from previous)
+│     b spread: 0.321 (-45.7% from previous)
+│   Ensemble
+└     successful members: 10 of 10</code></pre><h2 id="Implementing-your-own-AbstractReporter"><a class="docs-heading-anchor" href="#Implementing-your-own-AbstractReporter">Implementing your own AbstractReporter</a><a id="Implementing-your-own-AbstractReporter-1"></a><a class="docs-heading-anchor-permalink" href="#Implementing-your-own-AbstractReporter" title="Permalink"></a></h2><p>To write your own reporter, subtype <a href="../api/#ClimaCalibrate.Report.AbstractReporter"><code>AbstractReporter</code></a> and add a method to <a href="../api/#ClimaCalibrate.Report.report"><code>report</code></a>, and optionally to <a href="../api/#ClimaCalibrate.Report.title"><code>title</code></a>.</p><pre><code class="language-julia hljs">import EnsembleKalmanProcesses as EKP
+import EnsembleKalmanProcesses.ParameterDistributions as PD
+import ClimaCalibrate.Report as Report
+
+struct YourReporter &lt;: Report.AbstractReporter end
+
+function Report.report(
+    io::IO,
+    reporter::YourReporter,
+    ekp::EKP.EnsembleKalmanProcess,
+    prior::PD.ParameterDistribution,
+    output_dir,
+)
+    println(io, &quot;Your report&quot;)
+end
+
+# Optional to implement
+Report.title(reporter::YourReporter) = &quot;Your section title&quot;
+
+calibration_report = Report.CalibrationReport(;
+    reporters = (Report.ErrorReporter(), YourReporter()),
+)</code></pre><p>The sections of the report are in the same order as the reporters passed to <a href="../api/#ClimaCalibrate.Report.CalibrationReport"><code>CalibrationReport</code></a>.</p><h3 id="How-are-reports-generated?"><a class="docs-heading-anchor" href="#How-are-reports-generated?">How are reports generated?</a><a id="How-are-reports-generated?-1"></a><a class="docs-heading-anchor-permalink" href="#How-are-reports-generated?" title="Permalink"></a></h3><p>The arguments to <a href="../api/#ClimaCalibrate.Report.report"><code>report</code></a> are</p><ul><li><code>io</code>: Where to write the section. Write to <code>io</code> with <code>print</code> or <code>println</code> instead of logging with <code>@info</code> or printing to <code>stdout</code>, so that the section is part of the report.</li><li><code>ekp</code>: The <code>EnsembleKalmanProcess</code> after the update of the current iteration.</li><li><code>prior</code>: The <code>ParameterDistribution</code> of the calibration.</li><li><code>output_dir</code>: Directory to write logs or plots to.</li></ul><p><a href="../api/#ClimaCalibrate.Report.CalibrationReport"><code>CalibrationReport</code></a> prints the title of the section and indents the lines below it, so a reporter should not print its own title or indent its lines. Also, <a href="../api/#ClimaCalibrate.Report.report"><code>report</code></a> is called once per iteration, after <code>ekp</code> is updated with the forward model output of that iteration.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../visualization/">« Visualization</a><a class="docs-footer-nextpage" href="../troubleshooting/">Troubleshooting »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.19.0 on <span class="colophon-date" title="Thursday 29 October 2026 21:22">Thursday 29 October 2026</span>. Using Julia version 1.13.3.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
