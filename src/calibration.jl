@@ -12,7 +12,7 @@ what it reads to resume an interrupted run.
 module Calibration
 
 import ClimaCalibrate
-import ..ClimaCalibrate: Backend, AbstractModelInterface
+import ..ClimaCalibrate: Backend, AbstractModelInterface, Report
 import ClimaCalibrate.Backend: HPCBackend, WorkerBackend, JuliaBackend
 import ClimaCalibrate.Backend: Workers
 
@@ -32,7 +32,16 @@ include("ekp_interface.jl")
         interface::AbstractModelInterface,
         n_iterations,
         prior,
-        output_dir,
+        output_dir;
+        calibration_report = Report.CalibrationReport(;
+            reporters = (
+                Report.WalltimeReporter(n_iterations),
+                Report.TimestepReporter(),
+                Report.ErrorReporter(),
+                Report.ParameterReporter(),
+                Report.EnsembleReporter(),
+            ),
+        ),
     )
 
 Run a full calibration with `ekp` and `prior` for `n_iterations` on the given
@@ -47,6 +56,14 @@ selects. See [`JuliaBackend`](@ref), [`WorkerBackend`](@ref), and
 If `output_dir` already contains a calibration, it is resumed: completed
 iterations are skipped, as are ensemble members that recorded a completed
 forward model. Pass a fresh `output_dir` to start over.
+
+# Keyword Arguments
+- `calibration_report`: The [`Report.CalibrationReport`](@ref) to log after The
+  end of each iteration. Each reporter is given the `ekp`, `prior`, and
+  `output_dir`. No report is logged for an iteration where the scheduler
+  terminates the calibration. To turn off the report, pass
+  `Report.CalibrationReport(; reporters = ())`. See the [Calibration
+  report](@ref) documentation for more information.
 
 # Returns
 The `EnsembleKalmanProcess` at the end of the run.
@@ -71,7 +88,16 @@ function calibrate(
     interface::AbstractModelInterface,
     n_iterations,
     prior,
-    output_dir,
+    output_dir;
+    calibration_report = Report.CalibrationReport(;
+        reporters = (
+            Report.WalltimeReporter(n_iterations),
+            Report.TimestepReporter(),
+            Report.ErrorReporter(),
+            Report.ParameterReporter(),
+            Report.EnsembleReporter(),
+        ),
+    ),
 )
     output_dir = abspath(output_dir)
 
@@ -105,6 +131,7 @@ function calibrate(
             write_terminated(output_dir, iter)
             break
         end
+        Report.report(calibration_report, ekp, prior, output_dir)
     end
     return ekp
 end
