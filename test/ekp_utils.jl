@@ -1,6 +1,8 @@
 using Test
 
 import LinearAlgebra
+import Random
+import Statistics
 import ClimaCalibrate as CAL
 import EnsembleKalmanProcesses as EKP
 
@@ -166,4 +168,44 @@ end
     res_with_nan = CAL.residual(ekp; N = 1, ignore_nan = false)
     @test isnan(res_with_nan[1])
     @test res_with_nan[2:end] ≈ [2.25, 2.5, 3.5, 3.375, 4.125]
+end
+
+@testset "Constrained spread" begin
+    prior = EKP.combine_distributions([
+        EKP.constrained_gaussian("a", 1.0, 0.5, -Inf, Inf),
+        EKP.constrained_gaussian("b", 2.0, 1.0, 0, Inf),
+    ])
+    G(ϕ) = [ϕ[1] + ϕ[2], ϕ[1] - ϕ[2], 2ϕ[1]]
+    rng = Random.MersenneTwister(1234)
+    ekp = EKP.EnsembleKalmanProcess(
+        EKP.construct_initial_ensemble(rng, prior, 20),
+        G([1.5, 2.5]),
+        0.01 * LinearAlgebra.I(3),
+        EKP.Inversion();
+        rng,
+        scheduler = EKP.DataMisfitController(on_terminate = "continue"),
+    )
+    for _ in 1:2
+        ϕ = EKP.get_ϕ_final(prior, ekp)
+        EKP.update_ensemble!(ekp, reduce(hcat, G.(eachcol(ϕ))))
+    end
+    for iteration in 1:3
+        ϕ = EKP.get_ϕ(prior, ekp, iteration)
+        @test CAL.EKPUtils._constrained_spread(ekp, prior, iteration) ≈
+              Statistics.std.(eachrow(ϕ))
+    end
+
+    # The weighted spread of the initial sigma points is the standard deviation
+    # of the prior, unlike the sample standard deviation of the sigma points
+    uki_prior = EKP.constrained_gaussian("c", 1.0, 0.5, -Inf, Inf; repeats = 5)
+    uki = EKP.EnsembleKalmanProcess(
+        [1.0, 2.0],
+        0.01 * LinearAlgebra.I(2),
+        EKP.Unscented(uki_prior),
+    )
+    @test isapprox(
+        CAL.EKPUtils._constrained_spread(uki, uki_prior, 1),
+        fill(0.5, 5);
+        rtol = 1e-6,
+    )
 end

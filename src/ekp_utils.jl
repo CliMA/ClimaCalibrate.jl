@@ -15,6 +15,7 @@ module EKPUtils
 import LinearAlgebra
 import Statistics
 import EnsembleKalmanProcesses as EKP
+import EnsembleKalmanProcesses.ParameterDistributions as PD
 
 export minibatcher_over_samples,
     observation_series_from_samples,
@@ -231,5 +232,40 @@ _diag(A::AbstractMatrix) = LinearAlgebra.diag(A)
 # diag(U * Diagonal(S) * Vt)[i] is the sum of U[i, j] * S[j] * Vt[j, i] over j
 _diag(A::LinearAlgebra.SVD) = vec(sum(A.U .* transpose(A.S .* A.Vt), dims = 2))
 _diag(A::EKP.SVDplusD) = _diag(EKP.get_svd_cov(A)) .+ _diag(EKP.get_diag_cov(A))
+
+"""
+    _constrained_spread(
+        ekp::EKP.EnsembleKalmanProcess,
+        prior::PD.ParameterDistribution,
+        iteration,
+    )
+
+Return the spread of each constrained parameter over the ensemble at
+`iteration`, as a vector with one entry per parameter dimension.
+"""
+function _constrained_spread(
+    ekp::EKP.EnsembleKalmanProcess,
+    prior::PD.ParameterDistribution,
+    iteration,
+)
+    process = EKP.get_process(ekp)
+    if process isa Union{EKP.Unscented, EKP.TransformUnscented}
+        # The sigma points stored in `ekp` are inflated by the prediction step,
+        # so they are rebuilt from the stored mean and covariance instead
+        u = EKP.construct_sigma_ensemble(
+            process,
+            process.u_mean[iteration],
+            process.uu_cov[iteration],
+        )
+        ϕ = PD.transform_unconstrained_to_constrained(prior, u)
+        # `EKP.construct_cov` is not used since it adds to the diagonal
+        deviations = ϕ .- EKP.construct_mean(ekp, ϕ)
+        variances = deviations .^ 2 * process.cov_weights
+        # Negative quadrature weights can give a slightly negative variance
+        return sqrt.(max.(variances, 0))
+    end
+    ϕ = EKP.get_ϕ(prior, ekp, iteration)
+    return vec(Statistics.std(ϕ; dims = 2))
+end
 
 end
