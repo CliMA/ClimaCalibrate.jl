@@ -33,6 +33,7 @@ testsuite = Dict(
     "Observation recipe" => @include("observation_recipe.jl"),
     "Ensemble builder" => @include("ensemble_builder.jl"),
     "SVD analysis" => @include("svd_analysis.jl"),
+    "Report" => @include("report.jl"),
     "Visualization" => @include("visualization.jl"),
     "Aqua" => @include("aqua.jl"),
 )
