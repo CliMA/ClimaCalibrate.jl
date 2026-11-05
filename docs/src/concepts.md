@@ -33,7 +33,7 @@ EnsembleKalmanProcesses decides the calibration has converged:
    observation, weighted by the noise covariance, and proposes the next
    ensemble.
 6. **Analyze, optionally.** [`analyze_iteration`](@ref) runs last. The default
-   implementation logs the mean parameters and the covariance-weighted error.
+   implementation does nothing.
 
 ```
                   ┌─────────────────────────────────────────┐
