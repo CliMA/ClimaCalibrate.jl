@@ -36,6 +36,8 @@ include("ekp_utils.jl")
 include("backend.jl")
 @reexport using .Backend
 
+include("report.jl")
+
 include("calibration.jl")
 @reexport using .Calibration
 
