@@ -36,7 +36,7 @@ To use the `HPCBackend`, the subtypes must also implement:
 
 - `analyze_iteration(interface, ekp, g_ensemble, prior, output_dir, iteration)`
   which inspects results after each ensemble update. The default implementation
-  logs the mean constrained parameters and covariance-weighted error.
+  does nothing.
 - `postprocess_g_ensemble(interface, ekp, g_ensemble, prior, output_dir,
   iteration)` which transforms `g_ensemble` before the ensemble update. The
   default implementation returns `g_ensemble`.
@@ -165,8 +165,6 @@ function analyze_iteration(
     output_dir,
     iteration,
 )
-    @info "Mean constrained parameter(s): $(EKP.get_ϕ_mean_final(prior, ekp))"
-    @info "Covariance-weighted error: $(last(EKP.get_error(ekp)))"
     return nothing
 end
 
