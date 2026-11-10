@@ -56,19 +56,6 @@ ClimaCalibrate.Backend.job_timeout
 ClimaCalibrate.backend_type
 ```
 
-## Shared files
-
-How a [`SharedFilesBackend`](@ref) driver and its workers communicate.
-
-```@docs
-ClimaCalibrate.SharedFiles
-ClimaCalibrate.SharedFiles.AbstractSharedFiles
-ClimaCalibrate.SharedFiles.LocalFiles
-ClimaCalibrate.SharedFiles.create
-ClimaCalibrate.TaskBoard
-ClimaCalibrate.TaskBoard.MAX_ATTEMPTS
-```
-
 ## Worker Interface
 ```@docs
 ClimaCalibrate.SlurmManager

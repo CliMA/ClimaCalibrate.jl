@@ -1,49 +1,31 @@
 """
     ClimaCalibrate.SharedFiles
 
-Files the driver and the workers of a decoupled calibration can both see:
-tasks, claims, markers, and results.
-
-Entries are addressed by keys, relative paths joined with `/`. The collection
-behaves like a filesystem root: `read`, `write`, `rm`, `ispath`,
-`mtime`, and `touch` are extended for it, and [`create`](@ref) adds the one
-operation a filesystem lacks, a create-if-absent that exactly one of several
-concurrent callers wins.
-
-[`LocalFiles`](@ref) is a directory. A bucket implementation follows the same
-interface.
+Files a driver and its workers can both see, addressed by keys, relative paths
+joined with `/`. `read`, `write`, `rm`, `ispath`, `mtime`, and `touch` are
+extended for a collection, and [`create`](@ref) is a create-if-absent that
+exactly one of several concurrent callers wins. [`LocalFiles`](@ref) is a
+directory.
 """
 module SharedFiles
 
-export AbstractSharedFiles, LocalFiles, create
-
-"""
-    AbstractSharedFiles
-
-A keyed collection of files. Subtypes implement, for `f::AbstractSharedFiles`
-and a key `String`: `read(f, key)::String`, `write(f, key, data)`,
-`rm(f, key)`, `ispath(f, key)`, `mtime(f, key)`,
-`touch(f, key)`, and [`create`](@ref).
-"""
+"A keyed collection of files. See [`SharedFiles`](@ref) for the operations."
 abstract type AbstractSharedFiles end
 
 """
-    create(files, key)::Bool
+    create(files, key, data)::Bool
 
-Create an empty entry at `key`, returning `true` if this call created it and
-`false` if it already existed. Of any number of concurrent callers exactly one
-receives `true`.
-
-Parents are created as needed.
+Write `data` at `key` if nothing is there yet. Returns whether this call
+created the entry. Of any number of concurrent callers exactly one receives
+`true`.
 """
 function create end
 
 """
     LocalFiles(root)
 
-Shared files on a local or shared filesystem, rooted at `root`.
-[`create`](@ref) is `mkdir`, so the entry it makes is a directory. Writes are
-renamed into place.
+Shared files in the directory `root`. Writes are renamed into place and
+`create` opens with `O_EXCL`.
 """
 struct LocalFiles <: AbstractSharedFiles
     root::String
@@ -68,8 +50,7 @@ function Base.write(s::LocalFiles, key::AbstractString, data)
     return nothing
 end
 
-Base.rm(s::LocalFiles, key::AbstractString) =
-    rm(path(s, key); recursive = true, force = true)
+Base.rm(s::LocalFiles, key::AbstractString) = rm(path(s, key); force = true)
 
 Base.ispath(s::LocalFiles, key::AbstractString) = ispath(path(s, key))
 
@@ -77,14 +58,24 @@ Base.mtime(s::LocalFiles, key::AbstractString) = mtime(path(s, key))
 
 Base.touch(s::LocalFiles, key::AbstractString) = (touch(path(s, key)); nothing)
 
-function create(s::LocalFiles, key::AbstractString)
+const EXCLUSIVE =
+    Base.Filesystem.JL_O_WRONLY |
+    Base.Filesystem.JL_O_CREAT |
+    Base.Filesystem.JL_O_EXCL
+
+function create(s::LocalFiles, key::AbstractString, data)
     dest = path(s, key)
     mkpath(dirname(dest))
-    try
-        mkdir(dest)
+    file = try
+        Base.Filesystem.open(dest, EXCLUSIVE, 0o644)
     catch e
-        e isa Base.IOError && ispath(dest) && return false
+        e isa Base.IOError && e.code == Base.UV_EEXIST && return false
         rethrow()
+    end
+    try
+        write(file, data)
+    finally
+        close(file)
     end
     return true
 end

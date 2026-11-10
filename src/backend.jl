@@ -17,7 +17,6 @@ module Backend
 
 import Distributed
 import Reexport: @reexport
-import ..ClimaCalibrate
 
 export HPCBackend,
     SlurmBackend,

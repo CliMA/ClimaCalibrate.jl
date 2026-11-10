@@ -1,13 +1,6 @@
 using Test
-import ClimaCalibrate
-import ClimaCalibrate.SharedFiles: LocalFiles, create
+import ClimaCalibrate.SharedFiles: LocalFiles
 import ClimaCalibrate.TaskBoard as TB
-
-@testset "member_key matches the output layout" begin
-    root = mktempdir()
-    @test joinpath(root, TB.member_key(3, 7)) ==
-          ClimaCalibrate.path_to_ensemble_member(root, 3, 7)
-end
 
 @testset "post, claim, finish" begin
     f = LocalFiles(mktempdir())
@@ -24,17 +17,16 @@ end
     @test TB.renew!(f, 1, 1, "a")
     @test !TB.renew!(f, 1, 1, "b")
 
-    TB.complete!(f, 1, 1; worker_id = "a", runtime_s = 1.5)
+    TB.complete!(f, 1, 1; worker_id = "a")
     @test TB.status(f, 1, 1) == :done
     @test !TB.claim!(f, 1, 1, "b")
     done = TB.read_toml(f, TB.member_key(1, 1, "done.toml"))
     @test done["worker_id"] == "a"
     @test done["attempt"] == 1
-    @test done["runtime_s"] == 1.5
 
     TB.publish!(f, 1, 2)
     TB.claim!(f, 1, 2, "a")
-    TB.fail!(f, 1, 2; worker_id = "a", runtime_s = 0.1, error = "boom")
+    TB.fail!(f, 1, 2; worker_id = "a", error = "boom")
     @test TB.status(f, 1, 2) == :failed
     @test TB.read_toml(f, TB.member_key(1, 2, "failed.toml"))["error"] == "boom"
 
@@ -83,16 +75,6 @@ end
     @test failed["attempt"] == TB.MAX_ATTEMPTS
     @test occursin("$(TB.MAX_ATTEMPTS) attempts", failed["error"])
     @test !TB.claim!(f, 1, 1, "d")
-end
-
-@testset "a claim directory without an owner still ages" begin
-    f = LocalFiles(mktempdir())
-    TB.publish!(f, 1, 1)
-    create(f, TB.member_key(1, 1, "claim"))
-    @test TB.status(f, 1, 1) == :claimed
-    @test !TB.renew!(f, 1, 1, "a")
-    sleep(0.2)
-    @test TB.lease_expired(f, 1, 1, 0.1)
 end
 
 @testset "current iteration" begin

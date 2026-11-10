@@ -1,5 +1,4 @@
 using Test
-import ClimaCalibrate
 import ClimaCalibrate.SharedFiles: LocalFiles, create
 
 @testset "LocalFiles" begin
@@ -22,20 +21,18 @@ import ClimaCalibrate.SharedFiles: LocalFiles, create
         @test mtime(s, "a/b/c.txt") > t0
         rm(s, "a/b/c.txt")
         @test !ispath(s, "a/b/c.txt")
-        rm(s, "a")
-        @test !ispath(s, "a")
-        rm(s, "a")
+        rm(s, "a/b/c.txt")
     end
 
     @testset "create is exclusive" begin
-        @test create(s, "iteration_000/member_001/claim")
-        @test !create(s, "iteration_000/member_001/claim")
-        write(s, "iteration_000/member_001/claim/owner.toml", "")
-        @test ispath(s, "iteration_000/member_001/claim/owner.toml")
+        @test create(s, "x/claim.toml", "first")
+        @test !create(s, "x/claim.toml", "second")
+        @test read(s, "x/claim.toml") == "first"
 
         winners = Threads.Atomic{Int}(0)
-        @sync for _ in 1:64
-            Threads.@spawn create(s, "race") && Threads.atomic_add!(winners, 1)
+        @sync for i in 1:64
+            Threads.@spawn create(s, "race", "$i") &&
+                           Threads.atomic_add!(winners, 1)
         end
         @test winners[] == 1
     end

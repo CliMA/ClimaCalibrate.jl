@@ -20,7 +20,6 @@ function run_iteration(
     ensemble_size,
     output_dir,
 )
-    output_dir = abspath(output_dir)
     files = LocalFiles(output_dir)
     for member in 1:ensemble_size
         # A rerun of the iteration retries its failed members
@@ -31,10 +30,9 @@ function run_iteration(
     TaskBoard.set_current!(files, iter, ensemble_size; lease = backend.lease)
     @info "Posted iteration $iter, waiting for workers" files
 
-    counts = nothing
     unclaimed_since = time()
-    while true
-        groups = TaskBoard.summary(files, iter, ensemble_size)
+    groups = TaskBoard.summary(files, iter, ensemble_size)
+    while length(groups.done) + length(groups.failed) < ensemble_size
         for member in groups.claimed
             TaskBoard.lease_expired(files, iter, member, backend.lease) ||
                 continue
@@ -48,16 +46,10 @@ function run_iteration(
             error("no worker claimed a member of iteration $iter within \
                    $(backend.wait_timeout) s")
         end
-        new_counts = map(length, groups)
-        if new_counts != counts
-            counts = new_counts
-            @info "Iteration $iter" counts...
-        end
-        length(groups.done) + length(groups.failed) == ensemble_size && break
         sleep(backend.poll_interval)
+        groups = TaskBoard.summary(files, iter, ensemble_size)
     end
 
-    groups = TaskBoard.summary(files, iter, ensemble_size)
     foreach(m -> write_model_completed(output_dir, iter, m), groups.done)
     check_failure_rate(length(groups.failed), ensemble_size, backend, iter)
     return nothing
@@ -97,22 +89,15 @@ function run_worker(
     idle_timeout = 600,
     poll_interval = 5,
 )
-    output_dir = abspath(output_dir)
     files = LocalFiles(output_dir)
-    Threads.nthreads() == 1 &&
-        @warn "Worker $worker_id has one thread, so its claims are only \
-               renewed while the forward model yields"
     @info "Worker $worker_id looking for members" files
 
     ran = 0
     idle_since = time()
     while time() - idle_since < idle_timeout
         current = TaskBoard.current(files)
-        member = if isnothing(current)
-            nothing
-        else
-            claim_any!(files, current.iteration, current.ensemble_size, worker_id)
-        end
+        member = isnothing(current) ? nothing :
+                 claim_any!(files, current, worker_id)
         if isnothing(member)
             sleep(poll_interval)
             continue
@@ -133,16 +118,10 @@ function run_worker(
     return ran
 end
 
-"""
-    claim_any!(files, iteration, ensemble_size, worker_id)
-
-Claim one open member of the iteration, or return `nothing`. The members
-are tried starting from one chosen by `worker_id`.
-"""
-function claim_any!(files, iteration, ensemble_size, worker_id)
-    open = TaskBoard.summary(files, iteration, ensemble_size).open
-    isempty(open) && return nothing
-    for member in circshift(open, hash(worker_id) % length(open))
+"Claim one open member of the current iteration, or return `nothing`."
+function claim_any!(files, current, worker_id)
+    (; iteration, ensemble_size) = current
+    for member in TaskBoard.summary(files, iteration, ensemble_size).open
         TaskBoard.claim!(files, iteration, member, worker_id) && return member
     end
     return nothing
@@ -171,7 +150,6 @@ function run_claimed_member(
         TaskBoard.renew!(files, iteration, member, worker_id) || break
     end
 
-    started = time()
     error_text = nothing
     try
         ClimaCalibrate.forward_model(interface, iteration, member)
@@ -182,7 +160,6 @@ function run_claimed_member(
         running[] = false
     end
     wait(renewal)
-    runtime_s = time() - started
 
     # The claim may have lapsed between renewals, so ownership is checked
     # once more before anything is recorded
@@ -190,18 +167,10 @@ function run_claimed_member(
         @warn "Worker $worker_id lost its claim on member $member, leaving it \
                to the new owner"
     elseif isnothing(error_text)
-        TaskBoard.complete!(files, iteration, member; worker_id, runtime_s)
-        @info "Worker $worker_id completed member $member in \
-               $(round(runtime_s; digits = 1)) s"
+        TaskBoard.complete!(files, iteration, member; worker_id)
+        @info "Worker $worker_id completed member $member"
     else
-        TaskBoard.fail!(
-            files,
-            iteration,
-            member;
-            worker_id,
-            runtime_s,
-            error = error_text,
-        )
+        TaskBoard.fail!(files, iteration, member; worker_id, error = error_text)
         @error "Member $member failed on worker $worker_id\n$error_text"
     end
     return nothing
