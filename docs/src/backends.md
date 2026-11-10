@@ -24,7 +24,14 @@ resources.
    [`add_workers`](@ref) to put several workers, one per GPU, in each
    allocation.
 
-3. HPC Cluster Backends: These backends schedule forward model runs on HPC clusters using Slurm or PBS.
+3. [`SharedFilesBackend`](@ref): The driver posts each member to a directory
+   the workers can see, and workers started by any means pull members from it
+   with [`run_worker`](@ref). Workers may join or leave at any time, a member
+   whose worker dies is handed to another, and the driver can be restarted
+   mid-iteration. Use it when workers live outside the driver's scheduler or
+   when the driver should not hold an allocation.
+
+4. HPC Cluster Backends: These backends schedule forward model runs on HPC clusters using Slurm or PBS.
     - [`CaltechHPCBackend`](@ref): Caltech's Resnick HPC cluster,
     - [`ClimaGPUBackend`](@ref): CliMA's private GPU server,
     - [`DerechoBackend`](@ref): NSF NCAR Derecho supercomputing system,

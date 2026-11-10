@@ -33,6 +33,9 @@ include("model_interface.jl")
 include("ekp_utils.jl")
 @reexport using .EKPUtils
 
+include("shared_files.jl")
+include("task_board.jl")
+
 include("backend.jl")
 @reexport using .Backend
 

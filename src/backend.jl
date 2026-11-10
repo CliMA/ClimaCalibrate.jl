@@ -17,11 +17,13 @@ module Backend
 
 import Distributed
 import Reexport: @reexport
+import ..ClimaCalibrate
 
 export HPCBackend,
     SlurmBackend,
     JuliaBackend,
     WorkerBackend,
+    SharedFilesBackend,
     DerechoBackend,
     GCPBackend,
     ClimaGPUBackend,
@@ -172,6 +174,50 @@ Base.@kwdef struct WorkerBackend{WORKERPOOL <: Distributed.WorkerPool} <:
     failure_rate::Float64 = DEFAULT_FAILURE_RATE
     worker_pool::WORKERPOOL = calibration_worker_pool()
     empty_pool_timeout::Int = EMPTY_POOL_TIMEOUT
+end
+
+"""
+    SharedFilesBackend(; failure_rate = $DEFAULT_FAILURE_RATE, poll_interval = 5,
+                         lease = 300, wait_timeout = $EMPTY_POOL_TIMEOUT)
+
+Hand the ensemble members to workers that pull them from files in the
+calibration's `output_dir`.
+
+The driver posts each member of an iteration there, then waits for workers
+to claim and finish them. Workers are separate processes that can see the
+`output_dir`, started by whatever means suits the machine, each running
+[`ClimaCalibrate.run_worker`](@ref) with the same model interface. Each
+member runs in place, with nothing copied. Workers may join or leave at any
+time: a claim whose worker stops renewing it lapses after `lease` seconds
+and the member is handed out again, up to three times. A forward model that
+raises is not retried until the iteration is rerun.
+
+# Keyword Arguments
+- `failure_rate::Float64`: The fraction of an iteration's ensemble members
+  that may fail before the calibration is halted `[-]`. The default is
+  $DEFAULT_FAILURE_RATE.
+- `poll_interval::Float64`: Seconds between checks of the members' status
+  `[s]`.
+- `lease::Float64`: Seconds a claim stays valid without renewal `[s]`. The
+  driver's and the workers' clocks must agree to well within this.
+- `wait_timeout::Float64`: How long an iteration waits with members open and
+  none claimed before halting, which is what happens when no worker is
+  running `[s]`. The default is $EMPTY_POOL_TIMEOUT.
+
+# Examples
+```julia
+backend = ClimaCalibrate.SharedFilesBackend()
+```
+On every worker machine, with the same `interface` and `output_dir`:
+```julia
+ClimaCalibrate.run_worker(interface, output_dir)
+```
+"""
+Base.@kwdef struct SharedFilesBackend <: AbstractBackend
+    failure_rate::Float64 = DEFAULT_FAILURE_RATE
+    poll_interval::Float64 = 5.0
+    lease::Float64 = 300.0
+    wait_timeout::Float64 = EMPTY_POOL_TIMEOUT
 end
 
 """

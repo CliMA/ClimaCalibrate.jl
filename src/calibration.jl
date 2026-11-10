@@ -14,16 +14,19 @@ module Calibration
 import ClimaCalibrate
 import ..ClimaCalibrate: Backend, AbstractModelInterface, Report
 import ClimaCalibrate.Backend: HPCBackend, WorkerBackend, JuliaBackend
-import ClimaCalibrate.Backend: Workers
+import ClimaCalibrate.Backend: Workers, SharedFilesBackend
+import ..SharedFiles: LocalFiles
+import ..TaskBoard
 
 # Needed for interfacing with WorkerBackend
 import Distributed
 
 import EnsembleKalmanProcesses as EKP
 
-export calibrate
+export calibrate, run_worker
 
 include("ekp_interface.jl")
+include("shared_files_backend.jl")
 
 """
     calibrate(

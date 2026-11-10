@@ -25,6 +25,7 @@ ClimaCalibrate.exeflags
 ```@docs
 ClimaCalibrate.Calibration
 ClimaCalibrate.calibrate
+ClimaCalibrate.run_worker
 ```
 
 ## Config Interface
@@ -43,6 +44,7 @@ ClimaCalibrate.Backend.PBSConfig()
 ClimaCalibrate.Backend
 ClimaCalibrate.JuliaBackend
 ClimaCalibrate.WorkerBackend
+ClimaCalibrate.SharedFilesBackend
 ClimaCalibrate.HPCBackend
 ClimaCalibrate.SlurmBackend
 ClimaCalibrate.CaltechHPCBackend
@@ -52,6 +54,19 @@ ClimaCalibrate.DerechoBackend
 ClimaCalibrate.Backend.failure_rate
 ClimaCalibrate.Backend.job_timeout
 ClimaCalibrate.backend_type
+```
+
+## Shared files
+
+How a [`SharedFilesBackend`](@ref) driver and its workers communicate.
+
+```@docs
+ClimaCalibrate.SharedFiles
+ClimaCalibrate.SharedFiles.AbstractSharedFiles
+ClimaCalibrate.SharedFiles.LocalFiles
+ClimaCalibrate.SharedFiles.create
+ClimaCalibrate.TaskBoard
+ClimaCalibrate.TaskBoard.MAX_ATTEMPTS
 ```
 
 ## Worker Interface

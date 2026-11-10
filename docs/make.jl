@@ -29,6 +29,8 @@ makedocs(
         ClimaCalibrate.Backend,
         ClimaCalibrate.Backend.Workers,
         ClimaCalibrate.Calibration,
+        ClimaCalibrate.SharedFiles,
+        ClimaCalibrate.TaskBoard,
         ClimaCalibrate.SampleBuilder,
         ClimaCalibrate.ObservationRecipe,
         ClimaCalibrate.EnsembleBuilder,
