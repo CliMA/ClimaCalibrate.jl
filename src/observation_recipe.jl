@@ -4,9 +4,10 @@
 Estimate a noise covariance from a `SampleCollection` and build an
 `EKP.Observation` from it.
 
-Three estimators are available: [`ScalarCovariance`](@ref) for a multiple of the
-identity, [`SVDplusDCovariance`](@ref) for a low-rank sample covariance plus a
-diagonal term, and [`SVDplusModelErrorCovariance`](@ref) for a low-rank sample
+Four estimators are available: [`ScalarCovariance`](@ref) for a multiple of the
+identity, [`DiagonalCovariance`](@ref) for a diagonal matrix,
+[`SVDplusDCovariance`](@ref) for a low-rank sample covariance plus a diagonal
+term, and [`SVDplusModelErrorCovariance`](@ref) for a low-rank sample
 covariance plus the residual variance and a model error term. All take samples
 built by [`ClimaCalibrate.SampleBuilder`](@ref).
 
@@ -19,6 +20,7 @@ Requires ClimaAnalysis to be loaded.
 module ObservationRecipe
 
 export ScalarCovariance,
+    DiagonalCovariance,
     SVDplusDCovariance,
     SVDplusModelErrorCovariance,
     covariance,
@@ -31,6 +33,8 @@ export ScalarCovariance,
     reconstruct_diag_cov,
     reconstruct_vars,
     reconstruct_residual
+
+import LinearAlgebra
 
 import ..SampleBuilder: LatitudeWeighting
 
@@ -64,6 +68,8 @@ on which sample is chosen as the observation.
 
 Subtypes:
 - [`ScalarCovariance`](@ref): a multiple of the identity.
+- [`DiagonalCovariance`](@ref): a diagonal matrix described by a diagonal term
+  or given directly as a `Diagonal` matrix or a `UniformScaling`.
 - [`SVDplusDCovariance`](@ref): a low-rank sample covariance plus a diagonal
   term.
 - [`SVDplusModelErrorCovariance`](@ref): a low-rank sample covariance plus the
@@ -127,6 +133,49 @@ function ScalarCovariance(;
     latitude_weighting::Union{Nothing, LatitudeWeightDiagonal} = nothing,
 )
     return ScalarCovariance(scalar, latitude_weighting)
+end
+
+"""
+    DiagonalCovariance <: AbstractCovarianceEstimator
+
+Covariance estimator that returns a diagonal covariance matrix.
+
+The matrix is described by a diagonal term, a subtype of
+[`AbstractDiagonalTerm`](@ref), or given directly as a `Diagonal` matrix with
+one entry per row of the samples or as a `UniformScaling`. When used with
+`ObservationRecipe.covariance`, return a `Diagonal` matrix, or a
+`UniformScaling` if one is given. The element type is converted to the element
+type of the samples.
+
+An error is thrown if any diagonal entry is not finite or not positive. The
+diagonal of a covariance matrix holds variances, and a zero or `NaN` variance
+leaves the matrix singular.
+
+If the sample collection is a `TransformedSampleCollection`, an error is
+thrown. To latitude weight the covariance matrix, multiply the diagonal term by
+a [`LatitudeWeightDiagonal`](@ref).
+
+# Example
+
+```julia
+DiagonalCovariance(
+    VarianceDiagonal() .* LatitudeWeightDiagonal() .+ ScalarDiagonal(1e-6),
+)
+```
+
+In the example, the entries are the latitude weighted variance of each entry
+across the samples, with `1e-6` added to keep them positive.
+"""
+struct DiagonalCovariance{
+    D <: Union{
+        AbstractDiagonalTerm,
+        LinearAlgebra.Diagonal,
+        LinearAlgebra.UniformScaling,
+    },
+} <: AbstractCovarianceEstimator
+    """A diagonal term that describes the covariance matrix, or the `Diagonal`
+    or `UniformScaling` covariance matrix itself"""
+    diagonal::D
 end
 
 """
