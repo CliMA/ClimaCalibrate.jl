@@ -38,7 +38,7 @@ main
   `QuantileRegularization` is removed. Replace
   `model_error_scale = x, regularization = QuantileRegularization(q)` with
   `ModelErrorScaleDiagonal(x) .+ QuantileDiagonal(q, ModelErrorScaleDiagonal(x))`
-  [#XXX](https://github.com/CliMA/ClimaCalibrate.jl/pull/XXX).
+  [#395](https://github.com/CliMA/ClimaCalibrate.jl/pull/395).
 
 ### Observation pipeline
 
