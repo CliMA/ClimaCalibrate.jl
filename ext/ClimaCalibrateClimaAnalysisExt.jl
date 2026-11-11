@@ -10,7 +10,7 @@ import Statistics
 import Statistics: mean
 import NaNStatistics: nanmean, nanvar
 
-import LinearAlgebra: Diagonal, I, diag, diagind
+import LinearAlgebra: Diagonal, I, UniformScaling, diag, diagind
 
 # Used by both by SampleBuilder and ObservationRecipe for default flattening
 # of OutputVars
