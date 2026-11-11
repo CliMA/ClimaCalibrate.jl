@@ -87,6 +87,16 @@ struct ScalarCovariance{
     """The latitude weighting applied to the diagonal of the covariance matrix,
     or `nothing` for no latitude weighting"""
     latitude_weighting::L
+
+    function ScalarCovariance(
+        scalar::FT,
+        latitude_weighting::L,
+    ) where {FT <: AbstractFloat, L <: Union{Nothing, LatitudeWeightDiagonal}}
+        if scalar <= zero(scalar)
+            error("The value for scalar ($scalar) should be positive")
+        end
+        return new{FT, L}(scalar, latitude_weighting)
+    end
 end
 
 """
@@ -116,10 +126,6 @@ function ScalarCovariance(;
     scalar = 1.0,
     latitude_weighting::Union{Nothing, LatitudeWeightDiagonal} = nothing,
 )
-    if scalar <= zero(scalar)
-        error("The value for scalar ($scalar) should be positive")
-    end
-
     return ScalarCovariance(scalar, latitude_weighting)
 end
 
@@ -140,6 +146,25 @@ struct SVDplusDCovariance{
     """Rank of the singular value decomposition, or `nothing` to infer it from
     the data"""
     rank::R
+
+    function SVDplusDCovariance(
+        diagonal::D,
+        rank::R,
+    ) where {D <: AbstractDiagonalTerm, R <: Union{Integer, Nothing}}
+        _contains_term(diagonal, LatitudeWeightDiagonal) && error(
+            "SVDplusDCovariance does not support a LatitudeWeightDiagonal in its diagonal term. To apply latitude weighting, pipe the sample collection into a SampleBuilder.LatitudeWeighting instead",
+        )
+        isnothing(rank) ||
+            rank >= 0 ||
+            error("Rank ($rank) should be nothing or non-negative")
+        _contains_term(
+            diagonal,
+            term -> term isa ResidualVarianceDiagonal && term.rank != rank,
+        ) && error(
+            "The rank of every ResidualVarianceDiagonal in the diagonal term must match the rank of SVDplusDCovariance ($rank), so that the diagonal subtracts the modes the SVD keeps",
+        )
+        return new{D, R}(diagonal, rank)
+    end
 end
 
 """
@@ -172,19 +197,6 @@ term `diagonal`. When used with `ObservationRecipe.observation` or
     ```
 """
 function SVDplusDCovariance(diagonal::AbstractDiagonalTerm; rank = nothing)
-    _contains_term(diagonal, LatitudeWeightDiagonal) && error(
-        "SVDplusDCovariance does not support a LatitudeWeightDiagonal in its diagonal term. To apply latitude weighting, pipe the sample collection into a SampleBuilder.LatitudeWeighting instead",
-    )
-    isnothing(rank) ||
-        rank >= 0 ||
-        error("Rank ($rank) should be nothing or non-negative")
-    _contains_term(
-        diagonal,
-        term -> term isa ResidualVarianceDiagonal && term.rank != rank,
-    ) && error(
-        "The rank of every ResidualVarianceDiagonal in the diagonal term must match the rank of SVDplusDCovariance ($rank), so that the diagonal subtracts the modes the SVD keeps",
-    )
-
     return SVDplusDCovariance(diagonal, rank)
 end
 
