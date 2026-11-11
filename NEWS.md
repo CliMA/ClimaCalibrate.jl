@@ -38,7 +38,7 @@ main
   `QuantileRegularization` is removed. Replace
   `model_error_scale = x, regularization = QuantileRegularization(q)` with
   `ModelErrorScaleDiagonal(x) .+ QuantileDiagonal(q, ModelErrorScaleDiagonal(x))`
-  [#XXX](https://github.com/CliMA/ClimaCalibrate.jl/pull/XXX).
+  [#391](https://github.com/CliMA/ClimaCalibrate.jl/pull/391).
 
 ### Observation pipeline
 
@@ -63,7 +63,16 @@ main
   weights. Multiply another diagonal term by it to latitude weight that term,
   as in `ScalarDiagonal(1e-6) .* LatitudeWeightDiagonal()`
   [#386](https://github.com/CliMA/ClimaCalibrate.jl/pull/386).
-- Add the `DiagonalCovariance` observation recipe, which returns a `Diagonal`
+- Add the `ResidualVarianceDiagonal` diagonal term, whose entries are the
+  variance of each entry across the samples minus the diagonal of the truncated
+  SVD of the sample covariance matrix. With a `SVDplusDCovariance` of the same
+  rank, the diagonal of the covariance matrix is the sample variance
+  [#394](https://github.com/CliMA/ClimaCalibrate.jl/pull/394).
+- Add the `SVDplusModelErrorCovariance` observation recipe, which returns an
+  `EKP.SVDplusD` covariance matrix that is a low-rank sample covariance plus the
+  residual variance and a model error term
+  [#394](https://github.com/CliMA/ClimaCalibrate.jl/pull/394).
+- Add the `DiagonalCovariance` observation recipe, which returns a diagonal
   covariance matrix described by a diagonal term or given directly as a
   `Diagonal` matrix or a `UniformScaling`
   [#395](https://github.com/CliMA/ClimaCalibrate.jl/pull/395).
