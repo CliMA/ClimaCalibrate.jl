@@ -120,6 +120,9 @@ end
         ObservationRecipe.ScalarDiagonal(1e-3);
         rank = -1,
     )
+
+    # DiagonalCovariance only takes a diagonal term or a Diagonal matrix
+    @test_throws MethodError ObservationRecipe.DiagonalCovariance(ones(2, 2))
 end
 
 @testset "Lat weights" begin
@@ -339,6 +342,114 @@ end
           10.0 .* Diagonal(
         ClimaAnalysis.flatten(ext._lat_weights_var(var, min_cosd_lat = 0.2)).data,
     )
+end
+
+@testset "DiagonalCovariance" begin
+    lat = [-90.0, 0.0, 90.0]
+    lon = [-90.0, 0.0, 30.0, 90.0]
+    function scaled_var(short_name, dim_name, dim_values, factor)
+        var =
+            TemplateVar() |>
+            add_dim(dim_name, dim_values, units = "degrees") |>
+            add_attribs(short_name = short_name, units = "mm/day") |>
+            one_to_n_data(collected = true) |>
+            initialize
+        var.data .*= factor
+        return var
+    end
+    pr_var(factor) = scaled_var("pr", "lat", lat, factor)
+    tas_var(factor) = scaled_var("tas", "lon", lon, factor)
+
+    # The rows of the samples are pr (1:3) and tas (4:7), and the three samples
+    # are scaled by one, two, and three
+    sample_collection = SampleBuilder.build_samples(
+        [
+            pr_var(1.0) pr_var(2.0) pr_var(3.0)
+            tas_var(1.0) tas_var(2.0) tas_var(3.0)
+        ];
+        FT = Float64,
+    )
+    variances = [1.0, 4.0, 9.0, 1.0, 4.0, 9.0, 16.0]
+
+    # A ScalarDiagonal is the same as a ScalarCovariance
+    covar_estimator = ObservationRecipe.DiagonalCovariance(
+        ObservationRecipe.ScalarDiagonal(2.0),
+    )
+    @test ObservationRecipe.covariance(covar_estimator, sample_collection) ==
+          ObservationRecipe.covariance(
+        ObservationRecipe.ScalarCovariance(scalar = 2.0),
+        sample_collection,
+    )
+
+    # Diagonal term computed from the samples
+    covar_estimator = ObservationRecipe.DiagonalCovariance(
+        ObservationRecipe.VarianceDiagonal() .+
+        ObservationRecipe.ScalarDiagonal(1e-6),
+    )
+    @test ObservationRecipe.covariance(covar_estimator, sample_collection) ≈
+          Diagonal(variances .+ 1e-6)
+
+    # Latitude weighting, where tas has no latitude dimension. With
+    # min_cosd_lat = 0.25, the weights at the latitudes 0 and ±90 degrees are 1
+    # and 4 respectively
+    lat_weights = [4.0, 1.0, 4.0, 1.0, 1.0, 1.0, 1.0]
+    covar_estimator = ObservationRecipe.DiagonalCovariance(
+        ObservationRecipe.VarianceDiagonal() .*
+        ObservationRecipe.LatitudeWeightDiagonal(min_cosd_lat = 0.25),
+    )
+    @test ObservationRecipe.covariance(covar_estimator, sample_collection) ≈
+          Diagonal(variances .* lat_weights)
+
+    # Transforms are not supported
+    covar_estimator = ObservationRecipe.DiagonalCovariance(
+        ObservationRecipe.VarianceDiagonal(),
+    )
+    @test_throws r"does not support transforms" ObservationRecipe.covariance(
+        covar_estimator,
+        sample_collection |> SampleBuilder.PerCollectionWeighting(2.0),
+    )
+
+    # The covariance matrix is diagonal and the observation is the ith sample
+    obs = ObservationRecipe.observation(covar_estimator, sample_collection, 2)
+    @test only(EKP.get_covs(obs)) ≈ Diagonal(variances)
+    @test EKP.get_obs(obs) == [2.0, 4.0, 6.0, 2.0, 4.0, 6.0, 8.0]
+
+    # The element type of the covariance matrix is the element type of the
+    # samples
+    float32_collection = SampleBuilder.build_samples(
+        [
+            pr_var(1.0) pr_var(2.0)
+            tas_var(1.0) tas_var(2.0)
+        ];
+        FT = Float32,
+    )
+    @test ObservationRecipe.covariance(covar_estimator, float32_collection) isa
+          Diagonal{Float32}
+    @test ObservationRecipe.covariance(
+        ObservationRecipe.DiagonalCovariance(Diagonal(ones(7))),
+        float32_collection,
+    ) isa Diagonal{Float32}
+
+    # A Diagonal matrix is used as is
+    diag_matrix = Diagonal(collect(1.0:7.0))
+    covar_estimator = ObservationRecipe.DiagonalCovariance(diag_matrix)
+    @test ObservationRecipe.covariance(covar_estimator, sample_collection) ==
+          diag_matrix
+
+    # A Diagonal matrix needs one entry per row of the samples
+    @test_throws r"but the samples have 7 entries" ObservationRecipe.covariance(
+        ObservationRecipe.DiagonalCovariance(Diagonal(collect(1.0:6.0))),
+        sample_collection,
+    )
+
+    # EKP cannot invert a covariance matrix with non-positive or NaN entries
+    for bad_value in (0.0, -1.0, NaN)
+        bad_diag = Diagonal([1.0, bad_value, 1.0, 1.0, 1.0, 1.0, 1.0])
+        @test_throws r"non-positive or NaN diagonal entries" ObservationRecipe.covariance(
+            ObservationRecipe.DiagonalCovariance(bad_diag),
+            sample_collection,
+        )
+    end
 end
 
 @testset "Covariance with latitudes that differ across samples" begin

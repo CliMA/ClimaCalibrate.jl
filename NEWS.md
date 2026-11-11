@@ -63,6 +63,10 @@ main
   weights. Multiply another diagonal term by it to latitude weight that term,
   as in `ScalarDiagonal(1e-6) .* LatitudeWeightDiagonal()`
   [#386](https://github.com/CliMA/ClimaCalibrate.jl/pull/386).
+- Add the `DiagonalCovariance` observation recipe, which returns a `Diagonal`
+  covariance matrix described by a diagonal term or given directly as a
+  `Diagonal` matrix
+  [#395](https://github.com/CliMA/ClimaCalibrate.jl/pull/395).
 
 v0.6.0
 -------
