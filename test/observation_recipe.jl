@@ -7,7 +7,7 @@ import ClimaCalibrate.SampleBuilder
 import EnsembleKalmanProcesses
 import OrderedCollections: OrderedDict
 import Statistics: mean
-import LinearAlgebra: Diagonal
+import LinearAlgebra: Diagonal, diag
 import Statistics
 
 import EnsembleKalmanProcesses as EKP
@@ -887,6 +887,31 @@ end
         )
     end
 
+    # Every ResidualVarianceDiagonal in the diagonal term must have the same
+    # rank as the SVD
+    residual_term = ObservationRecipe.ResidualVarianceDiagonal(2)
+    for term in (
+        residual_term,
+        residual_term .+ ObservationRecipe.ScalarDiagonal(3.0),
+        ObservationRecipe.QuantileDiagonal(
+            0.5,
+            residual_term .+ ObservationRecipe.ScalarDiagonal(1e-3),
+        ),
+    )
+        @test ObservationRecipe.SVDplusDCovariance(term; rank = 2).diagonal ==
+              term
+        for rank in (nothing, 1, 3)
+            @test_throws "must match the rank" ObservationRecipe.SVDplusDCovariance(
+                term;
+                rank,
+            )
+        end
+    end
+    @test_throws "must match the rank" ObservationRecipe.SVDplusDCovariance(
+        residual_term .+ ObservationRecipe.ResidualVarianceDiagonal(1);
+        rank = 2,
+    )
+
     # A single variable with a time dimension and three samples, where each
     # sample is one year of seasonal averages
     time = ClimaAnalysis.Utils.date_to_time.(
@@ -992,6 +1017,161 @@ end
             lat_sample_collection |> transform,
         ).diag_cov ≈ factor * diag_cov_unweighted
     end
+end
+
+@testset "ToBeDecidedCovariance" begin
+    make_var(short_name, data) =
+        TemplateVar() |>
+        add_dim("time", collect(1.0:length(data)), units = "s") |>
+        add_attribs(short_name = short_name, start_date = "2008-1-1") |>
+        add_data(; data) |>
+        initialize
+
+    # Two variables with flattened lengths of 11 and 7, and five samples
+    vars_matrix = vcat(
+        permutedims([make_var("pr", sin.(j .* (1:11))) for j in 1:5]),
+        permutedims([make_var("ta", 3.0 .* cos.(j .* (1:7))) for j in 1:5]),
+    )
+    sample_collection = SampleBuilder.build_samples(vars_matrix; FT = Float64)
+    samples = SampleBuilder.get_samples(sample_collection)
+    variances = vec(Statistics.var(samples, dims = 2))
+    means = vec(mean(samples, dims = 2))
+    pr_rows, ta_rows = SampleBuilder.var_indices(sample_collection)
+    beta = [0.5, 2.0]
+    betas = vcat(fill(0.5, length(pr_rows)), fill(2.0, length(ta_rows)))
+
+    make_covariance(; kwargs...) = ObservationRecipe.covariance(
+        ObservationRecipe.ToBeDecidedCovariance(; beta, kwargs...),
+        sample_collection,
+    )
+    # Get the diagonal of the SVD part plus the diagonal term
+    function full_diagonal(covar)
+        (; U, S) = covar.svd_cov
+        return diag(U * Diagonal(S) * U') .+ covar.diag_cov.diag
+    end
+
+    # With sigma = 0, the floor is never used, so the model error is beta^2
+    # times the squared mean
+    @test full_diagonal(make_covariance(sigma = 0.0)) ≈
+          variances .+ betas .^ 2 .* means .^ 2
+
+    # With a large sigma, the floor is always used, so the model error is beta^2
+    # times sigma^2 times the median variance of each variable
+    large_sigma = 1e3
+    medians = vcat(
+        fill(Statistics.median(variances[pr_rows]), length(pr_rows)),
+        fill(Statistics.median(variances[ta_rows]), length(ta_rows)),
+    )
+    @test full_diagonal(make_covariance(sigma = large_sigma)) ≈
+          variances .+ betas .^ 2 .* large_sigma^2 .* medians
+
+    # Choose sigma so that the floor is used for some entries and not for other
+    # entries
+    mid_sigma = 0.2
+    floors = mid_sigma^2 .* medians
+    @test any(means .^ 2 .< floors) && any(means .^ 2 .> floors)
+    @test full_diagonal(make_covariance(sigma = mid_sigma)) ≈
+          variances .+ betas .^ 2 .* max.(means .^ 2, floors)
+
+    # The rank moves variance between the SVD part and the diagonal term, but
+    # does not change the diagonal of the covariance
+    rank1_covar = make_covariance(rank = 1)
+    rank3_covar = make_covariance(rank = 3)
+    @test length(rank1_covar.svd_cov.S) == 1
+    @test length(rank3_covar.svd_cov.S) == 3
+    @test full_diagonal(rank1_covar) ≈ full_diagonal(rank3_covar)
+
+    # Weighting a variable scales its entries by the squared weight and leaves
+    # the other variable unchanged
+    weighted_collection =
+        sample_collection |> SampleBuilder.PerVariableWeighting([1.0, 10.0])
+    squared_weights = vcat(ones(length(pr_rows)), fill(100.0, length(ta_rows)))
+    for sigma in (0.0, mid_sigma, large_sigma)
+        covar_estimator = ObservationRecipe.ToBeDecidedCovariance(; beta, sigma)
+        weighted_covar =
+            ObservationRecipe.covariance(covar_estimator, weighted_collection)
+        unweighted_covar =
+            ObservationRecipe.covariance(covar_estimator, sample_collection)
+        @test full_diagonal(weighted_covar) ≈
+              squared_weights .* full_diagonal(unweighted_covar)
+    end
+
+    # Latitude weights differ across the entries of a variable, and the floor is
+    # the median of the weighted variances of each variable
+    make_lat_var(short_name, lat, data) =
+        TemplateVar() |>
+        add_dim("lat", lat, units = "degrees") |>
+        add_attribs(short_name = short_name, start_date = "2008-1-1") |>
+        add_data(; data) |>
+        initialize
+    pr_lat = [-80.0, -60.0, -30.0, 0.0, 30.0, 60.0, 80.0]
+    ta_lat = [-70.0, -40.0, -10.0, 20.0, 50.0]
+    lat_vars_matrix = vcat(
+        permutedims([
+            make_lat_var("pr", pr_lat, sin.(j .* (1:7))) for j in 1:5
+        ]),
+        permutedims([
+            make_lat_var("ta", ta_lat, 3.0 .* cos.(j .* (1:5))) for j in 1:5
+        ]),
+    )
+    lat_collection = SampleBuilder.build_samples(lat_vars_matrix; FT = Float64)
+    lat_samples = SampleBuilder.get_samples(lat_collection)
+    lat_pr_rows, lat_ta_rows = SampleBuilder.var_indices(lat_collection)
+    # No latitude is beyond 80 degrees, so min_cosd_lat = 0.1 is never used
+    lat_weights = 1.0 ./ cosd.(vcat(pr_lat, ta_lat))
+    weighted_variances =
+        lat_weights .* vec(Statistics.var(lat_samples, dims = 2))
+    weighted_squared_means =
+        lat_weights .* vec(mean(lat_samples, dims = 2)) .^ 2
+    weighted_floors =
+        mid_sigma^2 .* vcat(
+            fill(
+                Statistics.median(weighted_variances[lat_pr_rows]),
+                length(lat_pr_rows),
+            ),
+            fill(
+                Statistics.median(weighted_variances[lat_ta_rows]),
+                length(lat_ta_rows),
+            ),
+        )
+    @test any(weighted_squared_means .< weighted_floors) &&
+          any(weighted_squared_means .> weighted_floors)
+    lat_covar = ObservationRecipe.covariance(
+        ObservationRecipe.ToBeDecidedCovariance(; beta, sigma = mid_sigma),
+        lat_collection |> SampleBuilder.LatitudeWeighting(),
+    )
+    lat_betas =
+        vcat(fill(0.5, length(lat_pr_rows)), fill(2.0, length(lat_ta_rows)))
+    @test full_diagonal(lat_covar) ≈
+          weighted_variances .+
+          lat_betas .^ 2 .* max.(weighted_squared_means, weighted_floors)
+
+    # A scalar beta is used for every variable
+    estimator(beta) =
+        ObservationRecipe.ToBeDecidedCovariance(; beta, sigma = 0.1)
+    scalar_covar = ObservationRecipe.covariance(estimator(2), sample_collection)
+    vector_covar =
+        ObservationRecipe.covariance(estimator([2.0, 2.0]), sample_collection)
+    @test scalar_covar.diag_cov == vector_covar.diag_cov
+
+    # The number of values in beta must be one or match the number of variables
+    @test_throws "The number of scalars" ObservationRecipe.covariance(
+        estimator([1.0, 2.0, 3.0]),
+        sample_collection,
+    )
+
+    # Negative values for beta, rank, and sigma
+    @test_throws "Scalars should be non-negative" ObservationRecipe.ToBeDecidedCovariance(
+        beta = -0.05,
+    )
+    @test_throws "Rank (-1) should be non-negative" ObservationRecipe.ToBeDecidedCovariance(
+        beta = 0.05,
+        rank = -1,
+    )
+    @test_throws "Sigma (-1.0) should not be negative" ObservationRecipe.ToBeDecidedCovariance(
+        beta = 0.05,
+        sigma = -1.0,
+    )
 end
 
 @testset "Observation" begin

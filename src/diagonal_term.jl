@@ -1,6 +1,7 @@
 export ScalarDiagonal,
     ModelErrorScaleDiagonal,
     VarianceDiagonal,
+    ResidualVarianceDiagonal,
     QuantileDiagonal,
     LatitudeWeightDiagonal,
     BroadcastedDiagonal,
@@ -126,6 +127,38 @@ VarianceDiagonal()
 struct VarianceDiagonal <: AbstractDiagonalTerm end
 
 """
+    ResidualVarianceDiagonal <: AbstractDiagonalTerm
+
+A diagonal term whose entries are the variance of each row of the sample matrix,
+taken across the samples, minus the diagonal of the truncated SVD of rank `rank`
+of the sample covariance matrix.
+
+# Example
+
+```julia
+rank = 2
+covar_estimator = SVDplusDCovariance(
+    ResidualVarianceDiagonal(rank);
+    rank,
+)
+```
+
+The diagonal of the covariance matrix built from `covar_estimator` in the
+example is the same as a diagonal of the matrix built from `VarianceDiagonal`.
+
+!!! note "SVDplusDCovariance"
+    This is intended to be used with `SVDplusDCovariance`. Do not build a
+    diagonal covariance matrix with this.
+"""
+struct ResidualVarianceDiagonal <: AbstractDiagonalTerm
+    rank::Int
+    function ResidualVarianceDiagonal(rank::Integer)
+        rank >= 0 || error("Rank ($rank) should be non-negative")
+        return new(rank)
+    end
+end
+
+"""
     QuantileDiagonal <: AbstractDiagonalTerm
 
 A diagonal term whose entries are constant for each variable, where the constant
@@ -242,13 +275,17 @@ Broadcast.broadcasted(::DiagonalTermStyle, f, args...) =
     BroadcastedDiagonal(f, args)
 
 """
+    _contains_term(x, pred)
     _contains_term(x, T::Type)
 
-Return `true` if `x` or any value nested in it is a `T`, and `false` otherwise.
+Return `true` if `pred` is `true` for `x` or any value nested in it (or, given a
+type `T`, if any of them is a `T`), and `false` otherwise.
 """
-function _contains_term(x, ::Type{T}) where {T}
-    return x isa T || any(child -> _contains_term(child, T), _subterms(x))
+function _contains_term(x, pred)
+    return pred(x) || any(child -> _contains_term(child, pred), _subterms(x))
 end
+
+_contains_term(x, ::Type{T}) where {T} = _contains_term(x, term -> term isa T)
 
 """
     _subterms(x)
