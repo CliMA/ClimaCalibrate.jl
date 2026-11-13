@@ -755,4 +755,8 @@ end
         ObservationRecipe.SVDplusDCovariance(WrongSizeDiagonal()),
         sample_collection,
     )
+    @test_throws r"but the samples have 13 entries" ObservationRecipe.covariance(
+        ObservationRecipe.DiagonalCovariance(WrongSizeDiagonal()),
+        sample_collection,
+    )
 end

@@ -1,7 +1,8 @@
 import ClimaCalibrate
 import ClimaCalibrate.ObservationRecipe
 import ClimaCalibrate.ObservationRecipe: AbstractCovarianceEstimator
-import ClimaCalibrate.ObservationRecipe: ScalarCovariance, SVDplusDCovariance
+import ClimaCalibrate.ObservationRecipe:
+    ScalarCovariance, DiagonalCovariance, SVDplusDCovariance
 
 include("diagonal_term.jl")
 
@@ -29,6 +30,51 @@ function ObservationRecipe.covariance(
         diag_term = diag_term .* latitude_weighting
     end
     return compute_diagonal(diag_term, sample_collection)
+end
+
+"""
+    covariance(
+        covar_estimator::DiagonalCovariance,
+        sample_collection::AbstractSampleCollection,
+    )
+
+Compute the diagonal covariance matrix described by the diagonal term of
+`covar_estimator`, or return its `Diagonal` matrix.
+
+If `sample_collection` is a `TransformedSampleCollection`, an error is thrown.
+"""
+function ObservationRecipe.covariance(
+    covar_estimator::DiagonalCovariance,
+    sample_collection::AbstractSampleCollection,
+)
+    sample_collection isa TransformedSampleCollection && error(
+        "DiagonalCovariance does not support transforms. For latitude weighting, multiply the diagonal term by a LatitudeWeightDiagonal instead",
+    )
+    (; diagonal) = covar_estimator
+    samples = get_samples(sample_collection)
+    diag_cov = if diagonal isa Diagonal
+        Diagonal(convert(Vector{eltype(samples)}, diagonal.diag))
+    else
+        compute_diagonal(diagonal, sample_collection)
+    end
+
+    # Check size of covariance matrix match with length of samples
+    n_entries = size(samples, 1)
+    size(diag_cov, 1) == n_entries || error(
+        "The diagonal matrix is $(size(diag_cov, 1)) by $(size(diag_cov, 2)), but the samples have $n_entries entries",
+    )
+
+    description = _describe_bad_diagonal(
+        diag_cov.diag,
+        _metadata_of_first_sample(sample_collection),
+    )
+    isnothing(description) || error(
+        "The estimated covariance has $description. A zero variance means that \
+        entry does not vary across the samples, and a NaN means all samples \
+        were NaN there. Check the preprocessing, or add a positive \
+        `ScalarDiagonal` to the diagonal term.",
+    )
+    return diag_cov
 end
 
 """
