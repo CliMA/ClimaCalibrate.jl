@@ -36,7 +36,9 @@ using EnsembleKalmanProcesses.ParameterDistributions
     neg_var = -2.0 * var
     ClimaAnalysis.set_short_name!(neg_var, "neg_hi")
 
-    covar_estimator = ObservationRecipe.ScalarCovariance(; scalar = 1.0)
+    covar_estimator = ObservationRecipe.DiagonalCovariance(
+        ObservationRecipe.ScalarDiagonal(1.0),
+    )
 
     start_date = Dates.DateTime(2007, 12)
     end_date = start_date + Dates.Second(time[end])

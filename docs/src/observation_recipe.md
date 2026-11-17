@@ -35,22 +35,23 @@ All functions assume that any data preprocessing is done with `ClimaAnalysis`.
 
 ### Covariance Estimators
 
-There are currently four covariance estimators, [`ScalarCovariance`](@ref),
-[`DiagonalCovariance`](@ref), [`SVDplusDCovariance`](@ref), and
-[`SVDplusModelErrorCovariance`](@ref), which are subtypes of
-[`AbstractCovarianceEstimator`](@ref). Each estimates the noise covariance
-matrix from the matrix of samples in a `SampleCollection`. `ScalarCovariance`
-approximates the observation noise covariance as a scalar diagonal matrix.
-`DiagonalCovariance` approximates it as a diagonal matrix, whose diagonal is
-described by a [diagonal term](observation_recipe.md#Diagonal-terms) or given
-directly as a `Diagonal` matrix or a `UniformScaling`. `SVDplusDCovariance`
-approximates the variances and the correlations between points from, often
-limited, time series observations. `SVDplusModelErrorCovariance` is a
-`SVDplusDCovariance` whose diagonal term is the variance that the low-rank part
-does not explain plus a model error term. Because `SVDplusDCovariance` and
-`SVDplusModelErrorCovariance` estimate them across samples, they require at
-least two samples (columns), whereas `ScalarCovariance` works with a single
-sample.
+There are currently three covariance estimators, [`DiagonalCovariance`](@ref),
+[`SVDplusDCovariance`](@ref), and [`SVDplusModelErrorCovariance`](@ref), which
+are subtypes of [`AbstractCovarianceEstimator`](@ref). Each estimates the noise
+covariance matrix from the matrix of samples in a `SampleCollection`.
+`DiagonalCovariance` approximates the observation noise covariance as a diagonal
+matrix, whose diagonal is described by a [diagonal
+term](observation_recipe.md#Diagonal-terms) or given directly as a `Diagonal`
+matrix or a `UniformScaling`. For example,
+`DiagonalCovariance(ScalarDiagonal(2.0))` is twice the identity matrix.
+`SVDplusDCovariance` approximates the variances and the correlations between
+points from, often limited, time series observations.
+`SVDplusModelErrorCovariance` is a `SVDplusDCovariance` whose diagonal term is
+the variance that the low-rank part does not explain plus a model error term.
+Because `SVDplusDCovariance` and `SVDplusModelErrorCovariance` estimate them
+across samples, they require at least two samples (columns), whereas
+`DiagonalCovariance` works with a single sample if its diagonal does not depend
+on the samples, as with a `ScalarDiagonal`.
 
 ### Necessary data preprocessing
 
@@ -139,12 +140,10 @@ obs = ObservationRecipe.observation(covar_estimator, transformed_collection, 1)
 The observation and its metadata come from the untransformed samples. What
 happens to the transforms depends on the estimator.
 
-1. `ScalarCovariance` throws an error for any transform, since the values of
-   the samples are not used.
-2. `DiagonalCovariance` throws an error for any transform.
-3. `SVDplusDCovariance` applies the transforms before computing the SVD and the
+1. `DiagonalCovariance` throws an error for any transform.
+2. `SVDplusDCovariance` applies the transforms before computing the SVD and the
    diagonal term.
-4. `SVDplusModelErrorCovariance` applies the transforms in the same way as
+3. `SVDplusModelErrorCovariance` applies the transforms in the same way as
    `SVDplusDCovariance`.
 
 Putting it together, here is an example of using transforms to weight the
@@ -548,8 +547,7 @@ regularization from a quantile of the model error scale instead of a fixed
 value, as in `QuantileDiagonal(0.05, ModelErrorScaleDiagonal(0.05))`.
 
 `SVDplusDCovariance` and `DiagonalCovariance` accept them, since both take a
-diagonal term. [`ScalarCovariance`](@ref) takes neither: its diagonal is the
-`scalar` you give it, so there is nothing to inflate.
+diagonal term.
 
 !!! note "SVDplusDCovariance needs one of them"
     `SVDplusDCovariance` builds a covariance of the form `SVD + D`, where `D` is
@@ -586,24 +584,9 @@ weighted_collection = sample_collection |> SampleBuilder.LatitudeWeighting()
 obs = ObservationRecipe.observation(covar_estimator, weighted_collection, 1)
 ```
 
-For `ScalarCovariance`, pass a
+`DiagonalCovariance` does not accept transforms. Multiply its diagonal term by a
 [`LatitudeWeightDiagonal`](@ref
-ClimaCalibrate.ObservationRecipe.LatitudeWeightDiagonal) as the
-`latitude_weighting` keyword argument instead.
-
-```julia
-covar_estimator = ObservationRecipe.ScalarCovariance(
-    latitude_weighting = ObservationRecipe.LatitudeWeightDiagonal(),
-)
-obs = ObservationRecipe.observation(covar_estimator, sample_collection, 1)
-```
-
-This multiplies the whole diagonal by the weight, including `scalar`. The
-variables without a latitude dimension are not weighted, and
-`ObservationRecipe.LatitudeWeightDiagonal(["pr"])` weights only `pr`.
-
-`DiagonalCovariance` does not accept transforms either. Multiply its diagonal
-term by a `LatitudeWeightDiagonal` instead.
+ClimaCalibrate.ObservationRecipe.LatitudeWeightDiagonal) instead.
 
 ```julia
 covar_estimator = ObservationRecipe.DiagonalCovariance(
@@ -612,6 +595,9 @@ covar_estimator = ObservationRecipe.DiagonalCovariance(
 )
 obs = ObservationRecipe.observation(covar_estimator, sample_collection, 1)
 ```
+
+The variables without a latitude dimension are not weighted, and
+`ObservationRecipe.LatitudeWeightDiagonal(["pr"])` weights only `pr`.
 
 **Q: How do I make a variable count more or less in the calibration?**
 

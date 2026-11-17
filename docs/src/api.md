@@ -180,8 +180,6 @@ ClimaCalibrate.SampleBuilder.compute_weights(::ClimaCalibrate.SampleBuilder.PerC
 ```@docs
 ClimaCalibrate.ObservationRecipe
 ClimaCalibrate.ObservationRecipe.AbstractCovarianceEstimator
-ClimaCalibrate.ObservationRecipe.ScalarCovariance
-ClimaCalibrate.ObservationRecipe.ScalarCovariance()
 ClimaCalibrate.ObservationRecipe.DiagonalCovariance
 ClimaCalibrate.ObservationRecipe.SVDplusDCovariance
 ClimaCalibrate.ObservationRecipe.SVDplusDCovariance(::ClimaCalibrate.ObservationRecipe.AbstractDiagonalTerm)

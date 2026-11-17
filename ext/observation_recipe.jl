@@ -2,38 +2,9 @@ import ClimaCalibrate
 import ClimaCalibrate.ObservationRecipe
 import ClimaCalibrate.ObservationRecipe: AbstractCovarianceEstimator
 import ClimaCalibrate.ObservationRecipe:
-    ScalarCovariance,
-    DiagonalCovariance,
-    SVDplusDCovariance,
-    SVDplusModelErrorCovariance
+    DiagonalCovariance, SVDplusDCovariance, SVDplusModelErrorCovariance
 
 include("diagonal_term.jl")
-
-"""
-    covariance(
-        covar_estimator::ScalarCovariance,
-        sample_collection::AbstractSampleCollection,
-    )
-
-Compute the scalar covariance matrix.
-
-The data in the matrix of samples in `sample_collection` is ignored. If
-`sample_collection` is a `TransformedSampleCollection`, an error is thrown.
-"""
-function ObservationRecipe.covariance(
-    covar_estimator::ScalarCovariance,
-    sample_collection::AbstractSampleCollection,
-)
-    sample_collection isa TransformedSampleCollection && error(
-        "ScalarCovariance does not support transforms since the values of the samples are not used. For latitude weighting, use the keyword argument `latitude_weighting` instead",
-    )
-    diag_term = ScalarDiagonal(covar_estimator.scalar)
-    (; latitude_weighting) = covar_estimator
-    if !isnothing(latitude_weighting)
-        diag_term = diag_term .* latitude_weighting
-    end
-    return compute_diagonal(diag_term, sample_collection)
-end
 
 """
     covariance(

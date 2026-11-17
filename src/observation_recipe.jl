@@ -4,10 +4,9 @@
 Estimate a noise covariance from a `SampleCollection` and build an
 `EKP.Observation` from it.
 
-Four estimators are available: [`ScalarCovariance`](@ref) for a multiple of the
-identity, [`DiagonalCovariance`](@ref) for a diagonal matrix,
-[`SVDplusDCovariance`](@ref) for a low-rank sample covariance plus a diagonal
-term, and [`SVDplusModelErrorCovariance`](@ref) for a low-rank sample
+Three estimators are available: [`DiagonalCovariance`](@ref) for a diagonal
+matrix, [`SVDplusDCovariance`](@ref) for a low-rank sample covariance plus a
+diagonal term, and [`SVDplusModelErrorCovariance`](@ref) for a low-rank sample
 covariance plus the residual variance and a model error term. All take samples
 built by [`ClimaCalibrate.SampleBuilder`](@ref).
 
@@ -19,8 +18,7 @@ Requires ClimaAnalysis to be loaded.
 """
 module ObservationRecipe
 
-export ScalarCovariance,
-    DiagonalCovariance,
+export DiagonalCovariance,
     SVDplusDCovariance,
     SVDplusModelErrorCovariance,
     covariance,
@@ -67,7 +65,6 @@ on which sample is chosen as the observation.
 `SampleBuilder.base` to get the untransformed samples.
 
 Subtypes:
-- [`ScalarCovariance`](@ref): a multiple of the identity.
 - [`DiagonalCovariance`](@ref): a diagonal matrix described by a diagonal term
   or given directly as a `Diagonal` matrix or a `UniformScaling`.
 - [`SVDplusDCovariance`](@ref): a low-rank sample covariance plus a diagonal
@@ -76,64 +73,6 @@ Subtypes:
   residual variance and a model error term.
 """
 abstract type AbstractCovarianceEstimator end
-
-"""
-    ScalarCovariance <: AbstractCovarianceEstimator
-
-Covariance estimator that contains the necessary information to construct the
-scalar covariance matrix.
-"""
-struct ScalarCovariance{
-    FT <: AbstractFloat,
-    L <: Union{Nothing, LatitudeWeightDiagonal},
-} <: AbstractCovarianceEstimator
-    """Scalar to multiply the identity matrix by"""
-    scalar::FT
-
-    """The latitude weighting applied to the diagonal of the covariance matrix,
-    or `nothing` for no latitude weighting"""
-    latitude_weighting::L
-
-    function ScalarCovariance(
-        scalar::FT,
-        latitude_weighting::L,
-    ) where {FT <: AbstractFloat, L <: Union{Nothing, LatitudeWeightDiagonal}}
-        if scalar <= zero(scalar)
-            error("The value for scalar ($scalar) should be positive")
-        end
-        return new{FT, L}(scalar, latitude_weighting)
-    end
-end
-
-"""
-    ScalarCovariance(;
-        scalar = 1.0,
-        latitude_weighting = nothing,
-    )
-
-Create a `ScalarCovariance` which specifies how the covariance matrix should be
-formed. When used with `ObservationRecipe.observation` or
-`ObservationRecipe.covariance`, return a `Diagonal` matrix.
-
-If the sample collection is a `TransformedSampleCollection`, an error is thrown.
-
-# Keyword Arguments
-
-- `scalar`: Scalar value to multiply the identity matrix by.
-
-- `latitude_weighting`: A [`LatitudeWeightDiagonal`](@ref) that describes the
-  latitude weighting applied to the covariance matrix, or `nothing` for no
-  latitude weighting. Latitude weighting multiplies the diagonal entries of the
-  weighted variables by `1 / max(cosd(lat), min_cosd_lat)` and leaves the other
-  entries unchanged, where `min_cosd_lat` is the keyword argument of
-  `LatitudeWeightDiagonal` that caps the weight toward the poles.
-"""
-function ScalarCovariance(;
-    scalar = 1.0,
-    latitude_weighting::Union{Nothing, LatitudeWeightDiagonal} = nothing,
-)
-    return ScalarCovariance(scalar, latitude_weighting)
-end
 
 """
     DiagonalCovariance <: AbstractCovarianceEstimator
@@ -165,6 +104,17 @@ DiagonalCovariance(
 
 In the example, the entries are the latitude weighted variance of each entry
 across the samples, with `1e-6` added to keep them positive.
+
+!!! tip "Scalar covariance with latitude weighting"
+    For a multiple of the identity matrix, use a [`ScalarDiagonal`](@ref). To
+    latitude weight it, multiply it by a `LatitudeWeightDiagonal`.
+
+    ```julia
+    DiagonalCovariance(ScalarDiagonal(2.0) .* LatitudeWeightDiagonal())
+    ```
+
+    The entries are `2.0` times the latitude weights. The entries of variables
+    without a latitude dimension are `2.0`.
 """
 struct DiagonalCovariance{
     D <: Union{

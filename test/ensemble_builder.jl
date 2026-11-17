@@ -351,7 +351,9 @@ end
         one_to_n_data() |>
         initialize
 
-    covar_estimator = ObservationRecipe.ScalarCovariance()
+    covar_estimator = ObservationRecipe.DiagonalCovariance(
+        ObservationRecipe.ScalarDiagonal(1.0),
+    )
 
     sample_collection = SampleBuilder.build_samples(lon_var)
     obs_vec =
@@ -396,7 +398,9 @@ end
     ts_var = make_0d_var(300.0, short_name = "ts")
     ta_var = make_0d_var(250.0, short_name = "ta")
 
-    covar_estimator = ObservationRecipe.ScalarCovariance()
+    covar_estimator = ObservationRecipe.DiagonalCovariance(
+        ObservationRecipe.ScalarDiagonal(1.0),
+    )
 
     sample_collection = SampleBuilder.build_samples([ts_var, ta_var])
     obs_vec =
@@ -475,7 +479,9 @@ end
         one_to_n_data() |>
         initialize
 
-    covar_estimator = ObservationRecipe.ScalarCovariance()
+    covar_estimator = ObservationRecipe.DiagonalCovariance(
+        ObservationRecipe.ScalarDiagonal(1.0),
+    )
 
     sample_date_ranges = [
         (Dates.DateTime(i, 12, 1), Dates.DateTime(i + 1, 9, 1)) for
@@ -659,7 +665,9 @@ end
         one_to_n_data() |>
         initialize
 
-    covar_estimator = ObservationRecipe.ScalarCovariance()
+    covar_estimator = ObservationRecipe.DiagonalCovariance(
+        ObservationRecipe.ScalarDiagonal(1.0),
+    )
 
     sample_date_ranges = [
         (Dates.DateTime(i, 12, 1), Dates.DateTime(i + 1, 9, 1)) for
@@ -723,7 +731,9 @@ end
         add_attribs(start_date = "2007-12-1") |>
         one_to_n_data() |>
         initialize
-    covar_estimator = ObservationRecipe.ScalarCovariance()
+    covar_estimator = ObservationRecipe.DiagonalCovariance(
+        ObservationRecipe.ScalarDiagonal(1.0),
+    )
     sample_date_ranges = [
         (Dates.DateTime(i, 12, 1), Dates.DateTime(i + 1, 9, 1)) for
         i in 2007:2008
