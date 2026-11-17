@@ -3,6 +3,9 @@ ClimaCalibrate.jl Release Notes
 
 main
 -------
+
+v0.7.0
+-------
 - `WorkerBackend` workers are tracked in a worker registry, one record per
   worker with its scheduler job id, Distributed id, output file, and state.
   `worker_rows()` lists them, one line per worker. `add_workers`
@@ -35,6 +38,14 @@ main
   without a latitude dimension are left unweighted instead of throwing an error
   [#386](https://github.com/CliMA/ClimaCalibrate.jl/pull/386),
   [#396](https://github.com/CliMA/ClimaCalibrate.jl/pull/396).
+- `SeasonalDiagonalCovariance` is removed. Use a `DiagonalCovariance` with a
+  `VarianceDiagonal` instead. For example, replace
+  `SeasonalDiagonalCovariance(model_error_scale = x, regularization = y)` with
+  `DiagonalCovariance(VarianceDiagonal() .+ ModelErrorScaleDiagonal(x) .+ ScalarDiagonal(y))`.
+  To apply latitude weighting, multiply the sum by a `LatitudeWeightDiagonal`.
+  For example, replace `use_latitude_weights = true, min_cosd_lat = z` with
+  `(VarianceDiagonal() .+ ModelErrorScaleDiagonal(x) .+ ScalarDiagonal(y)) .* LatitudeWeightDiagonal(min_cosd_lat = z)`
+  [#388](https://github.com/CliMA/ClimaCalibrate.jl/pull/388).
 - The keyword constructor of `SVDplusDCovariance` is removed. Pass a diagonal
   term instead. For example, replace
   `SVDplusDCovariance(model_error_scale = x, regularization = y)` with
