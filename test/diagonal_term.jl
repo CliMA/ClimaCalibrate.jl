@@ -505,6 +505,14 @@ end
         sample_collection,
     ) == Diagonal([8.0, 2.0, 8.0, 2.0, 2.0, 2.0, 2.0, 2.0, 8.0])
 
+    # NaNs are dropped from the samples, so the weight at latitude 0 is dropped
+    # with them
+    nan_pr_var = ClimaAnalysis.remake(pr_var, data = [1.0, NaN, 3.0])
+    @test compute_diagonal(
+        LatitudeWeightDiagonal(min_cosd_lat = 0.25),
+        SampleBuilder.build_samples([nan_pr_var]),
+    ) == Diagonal([4.0, 4.0])
+
     # The errors of LatitudeWeighting are thrown when the diagonal is computed
     @test_throws "None of the variables have a latitude" compute_diagonal(
         LatitudeWeightDiagonal(),
