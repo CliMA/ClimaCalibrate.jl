@@ -27,7 +27,6 @@ export HPCBackend,
     ClimaGPUBackend,
     CaltechHPCBackend,
     backend_type,
-    get_backend,
     JobInfo,
     JobStatus,
     job_status,
@@ -623,22 +622,6 @@ function backend_type()
 end
 
 """
-    get_backend()
-
-Deprecated alias for [`backend_type`](@ref).
-"""
-function get_backend()
-    Base.depwarn(
-        "`get_backend` returns a backend *type*, not a backend. It has been \
-        renamed to `backend_type` to say so. Construct a backend by calling the \
-        type: `backend_type()(; directives, modules, env_vars)` for an \
-        `HPCBackend`, or `JuliaBackend()` off a cluster.",
-        :get_backend,
-    )
-    return backend_type()
-end
-
-"""
     _run_capturing_output(cmd)
 
 Run `cmd`, returning `(stdout, stderr, exit_code)` with both streams stripped of
@@ -666,6 +649,5 @@ include("backends/slurm.jl")
 include("backends/pbs.jl")
 include("backends/workers.jl")
 @reexport using .Workers
-import .Workers: default_worker_pool
 
 end

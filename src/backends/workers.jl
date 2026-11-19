@@ -123,21 +123,6 @@ function calibration_worker_pool()
     return GLOBAL_WORKER_POOL
 end
 
-"""
-    default_worker_pool()
-
-Deprecated name for [`calibration_worker_pool`](@ref).
-"""
-function default_worker_pool()
-    Base.depwarn(
-        "`default_worker_pool` is now `calibration_worker_pool`, since \
-        `Distributed` exports a `default_worker_pool` of its own. It is not \
-        exported, so call it as `ClimaCalibrate.calibration_worker_pool()`.",
-        :default_worker_pool,
-    )
-    return calibration_worker_pool()
-end
-
 # ----------------------------------------------------------------------------
 # Worker code-loading registry
 #
