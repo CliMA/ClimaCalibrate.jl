@@ -1,8 +1,8 @@
 """
     ClimaCalibrate.Report
 
-Reporters that summarize the state of a calibration in a report after each
-iteration.
+Reporters that summarize the state of a calibration in a report at events of the
+calibration, such as the end of each iteration.
 
 [`CalibrationReport`](@ref) puts the report together from reporters, each of
 which adds a section on
@@ -15,7 +15,12 @@ which adds a section on
 """
 module Report
 
-export ReportContext,
+export AbstractEvent,
+    CalibrationStart,
+    IterationStart,
+    IterationEnd,
+    CalibrationEnd,
+    ReportContext,
     AbstractReporter,
     CalibrationReport,
     WalltimeReporter,
@@ -31,6 +36,98 @@ import Dates
 import EnsembleKalmanProcesses as EKP
 import EnsembleKalmanProcesses.ParameterDistributions as PD
 import ..EKPUtils: _constrained_spread
+
+"""
+    AbstractEvent
+
+An event of a calibration at which a [`CalibrationReport`](@ref) is logged.
+
+The events are [`CalibrationStart`](@ref), [`IterationStart`](@ref),
+[`IterationEnd`](@ref), and [`CalibrationEnd`](@ref). For a calibration of `n`
+iterations, they happen in this order:
+
+```
+CalibrationStart(1)
+IterationStart(1), IterationEnd(1)
+IterationStart(2), IterationEnd(2)
+⋮
+IterationStart(n), IterationEnd(n)
+CalibrationEnd(n)
+```
+
+A resumed calibration starts at the first iteration that is not completed. When
+the scheduler terminates the calibration in iteration `i`, there is no
+`IterationEnd(i)` and the last event is `CalibrationEnd(i - 1)`.
+"""
+abstract type AbstractEvent end
+
+"""
+    CalibrationStart <: AbstractEvent
+
+The event at the start of a calibration, before its first iteration runs.
+
+# Fields
+- `iteration`: The first iteration to run. When a calibration is resumed, this
+  is the first iteration that is not completed, which can be greater than 1.
+"""
+struct CalibrationStart <: AbstractEvent
+    iteration::Int
+end
+
+"""
+    IterationStart <: AbstractEvent
+
+The event at the start of an iteration, before the forward models of the
+iteration run.
+
+# Fields
+- `iteration`: The iteration that is starting.
+"""
+struct IterationStart <: AbstractEvent
+    iteration::Int
+end
+
+"""
+    IterationEnd <: AbstractEvent
+
+The event at the end of an iteration, after the `EnsembleKalmanProcess` is
+updated with the output of the forward models of the iteration.
+
+There is no `IterationEnd` for the iteration where the scheduler terminates the
+calibration, since the `EnsembleKalmanProcess` is not updated.
+
+`IterationEnd` happens at the end of every iteration, while
+[`CalibrationEnd`](@ref) happens once, after the last iteration. Use
+`IterationEnd` to report on each iteration and `CalibrationEnd` to summarize the
+whole calibration.
+
+# Fields
+- `iteration`: The iteration that ended.
+"""
+struct IterationEnd <: AbstractEvent
+    iteration::Int
+end
+
+"""
+    CalibrationEnd <: AbstractEvent
+
+The event at the end of a calibration, after its last iteration.
+
+`CalibrationEnd` happens once, whether the calibration runs all of its
+iterations or the scheduler terminates it.
+
+# Fields
+- `iteration`: The last iteration whose update is in the
+  `EnsembleKalmanProcess`. For a calibration that runs all `n` of its
+  iterations, this is `n`. The scheduler terminates the calibration when the
+  ensemble is about to be updated at the end of an iteration `i`, after the
+  forward models of the iteration have run. The ensemble is not updated, so
+  this is `i - 1`. The output of the forward models of iteration `i` is saved
+  to the output directory, but is not added to the `EnsembleKalmanProcess`.
+"""
+struct CalibrationEnd <: AbstractEvent
+    iteration::Int
+end
 
 """
     ReportContext(ekp, prior, output_dir)
@@ -50,28 +147,25 @@ end
 """
     AbstractReporter
 
-An object that reports information about the state of the calibration after
-each iteration from a [`ReportContext`](@ref), which holds the
-`ekp::EnsembleKalmanProcess` and `prior::ParameterDistribution` of the
-calibration.
+An object that reports information about the state of the calibration at
+events of the calibration, such as the end of each iteration, from a
+[`ReportContext`](@ref), which holds the `ekp::EnsembleKalmanProcess` and
+`prior::ParameterDistribution` of the calibration.
 
 ## Define your own reporter
 
-An `AbstractReporter` must implement `ClimaCalibrate.Report.report` and
-optionally, `ClimaCalibrate.Report.title`. For a minimal example, see the
-"Report" section on the `ClimaCalibrate` documentation.
+An `AbstractReporter` must implement `ClimaCalibrate.Report.report` for each
+[`AbstractEvent`](@ref) it reports on, and optionally,
+`ClimaCalibrate.Report.title`. A `report` method that does not specify the type
+of the event reports on every event. A reporter that prints nothing, such as
+one without a `report` method for the event, is left out of the report. For a
+minimal example, see the "Report" section on the `ClimaCalibrate`
+documentation.
 """
 abstract type AbstractReporter end
 
-function report(
-    io::IO,
-    reporter::AbstractReporter,
-    ekp::EKP.EnsembleKalmanProcess,
-    prior::PD.ParameterDistribution,
-    output_dir::AbstractString,
-)
-    return report(io, reporter, ReportContext(ekp, prior, output_dir))
-end
+# Only the reporter is typed, so that any method for a reporter is more specific
+report(_, ::AbstractReporter, _, _) = nothing
 
 """
     title(reporter::AbstractReporter)
@@ -100,11 +194,12 @@ end
 """
     CalibrationReport
 
-A report on the state of the calibration, logged after each iteration.
+A report on the state of the calibration, logged at events of the calibration,
+such as the end of each iteration.
 
-The report starts with a header of the current iteration, date, and time. Each
-reporter in `reporters` then adds a section, in order, made of its
-[`title`](@ref) and what its `report` method prints.
+The report starts with a header of the event, date, and time. Each reporter in
+`reporters` that prints something for the event then adds a section, in order,
+made of its [`title`](@ref) and what its `report` method prints.
 
 To add a section of your own, see [`AbstractReporter`](@ref).
 """
@@ -143,22 +238,25 @@ function CalibrationReport(;
 end
 
 """
-    report(calibration_report::CalibrationReport, context::ReportContext)
+    report(
+        calibration_report::CalibrationReport,
+        event::AbstractEvent,
+        context::ReportContext,
+    )
 
-Log a report with a header of the current iteration, date, and time and the
-contents of each reporter in `calibration_report` using `context`. If
-`calibration_report` has no reporters, nothing is logged.
-
-`report(calibration_report, ekp, prior, output_dir)` is the same as
-`report(calibration_report, ReportContext(ekp, prior, output_dir))`.
+Log a report of `event` with a header of the event, date, and time and the
+contents of each reporter in `calibration_report` that prints something for
+`event`, using `context`. If no reporter prints anything, nothing is logged.
 
 If a reporter throws an error, its section says so and the error is logged after
 the report, so the other sections are still reported.
 """
-function report(calibration_report::CalibrationReport, context::ReportContext)
-    (; ekp) = context
+function report(
+    calibration_report::CalibrationReport,
+    event::AbstractEvent,
+    context::ReportContext,
+)
     (; reporters) = calibration_report
-    isempty(reporters) && return nothing
     io = IOBuffer()
     failures = Pair{String, Any}[]
     for reporter in reporters
@@ -166,20 +264,23 @@ function report(calibration_report::CalibrationReport, context::ReportContext)
         section_title = string(nameof(typeof(reporter)))
         body = try
             section_title = title(reporter)
-            sprint(io -> report(io, reporter, context))
+            sprint(io -> report(io, reporter, event, context))
         catch err
             err isa InterruptException && rethrow()
             push!(failures, section_title => (err, catch_backtrace()))
             "Encountered an error while generating this section\n"
         end
+        isempty(body) && continue
         println(io, "  ", section_title)
         for line in eachline(IOBuffer(body))
             println(io, "    ", line)
         end
     end
-    header = "Calibration report · iteration $(EKP.get_N_iterations(ekp)) · \
+    sections = String(take!(io))
+    isempty(sections) && return nothing
+    header = "Calibration report · $(_describe(event)) · \
               $(trunc(Dates.now(), Dates.Second))"
-    @info header * "\n" * chomp(String(take!(io)))
+    @info header * "\n" * chomp(sections)
 
     # The errors are logged after the report so that one reporter failing does
     # not stop the rest of the report
@@ -190,15 +291,11 @@ function report(calibration_report::CalibrationReport, context::ReportContext)
     return nothing
 end
 
-function report(
-    calibration_report::CalibrationReport,
-    ekp::EKP.EnsembleKalmanProcess,
-    prior::PD.ParameterDistribution,
-    output_dir::AbstractString,
-)
-    context = ReportContext(ekp, prior, output_dir)
-    return report(calibration_report, context)
-end
+# Helper functiosn for printing the events of a calibration
+_describe(::CalibrationStart) = "start of calibration"
+_describe(event::IterationStart) = "start of iteration $(event.iteration)"
+_describe(event::IterationEnd) = "iteration $(event.iteration)"
+_describe(::CalibrationEnd) = "end of calibration"
 
 """
     WalltimeReporter <: AbstractReporter
@@ -236,12 +333,22 @@ Return the section title, "Walltime".
 title(::WalltimeReporter) = "Walltime"
 
 """
-    report(io::IO, reporter::WalltimeReporter, context::ReportContext)
+    report(
+        io::IO,
+        reporter::WalltimeReporter,
+        ::IterationEnd,
+        context::ReportContext,
+    )
 
 Report the walltime of the last iteration, the total walltime, and an estimate
 of the remaining walltime.
 """
-function report(io::IO, reporter::WalltimeReporter, context::ReportContext)
+function report(
+    io::IO,
+    reporter::WalltimeReporter,
+    ::IterationEnd,
+    context::ReportContext,
+)
     (; ekp) = context
     (; times, n_iterations) = reporter
     push!(times, time())
@@ -301,12 +408,22 @@ Return the section title, "Timestep".
 title(::TimestepReporter) = "Timestep"
 
 """
-    report(io::IO, ::TimestepReporter, context::ReportContext)
+    report(
+        io::IO,
+        ::TimestepReporter,
+        ::IterationEnd,
+        context::ReportContext,
+    )
 
 Report the current ensemble Kalman process algorithm time, current timestep
 size, and the recent timestep history.
 """
-function report(io::IO, ::TimestepReporter, context::ReportContext)
+function report(
+    io::IO,
+    ::TimestepReporter,
+    ::IterationEnd,
+    context::ReportContext,
+)
     (; ekp) = context
     Δts = EKP.get_Δt(ekp)
     isempty(Δts) && return nothing
@@ -376,13 +493,23 @@ Return the section title, "Error".
 title(::ErrorReporter) = "Error"
 
 """
-    report(io::IO, reporter::ErrorReporter, context::ReportContext)
+    report(
+        io::IO,
+        reporter::ErrorReporter,
+        ::IterationEnd,
+        context::ReportContext,
+    )
 
 Report the error metrics as desired in `reporter` with how it changes from the
 error from the previous iteration, the best error so far and the iteration it
 was reached at, and a recent history of the error metrics.
 """
-function report(io::IO, reporter::ErrorReporter, context::ReportContext)
+function report(
+    io::IO,
+    reporter::ErrorReporter,
+    ::IterationEnd,
+    context::ReportContext,
+)
     (; ekp) = context
     all_error_metrics = EKP.get_error_metrics(ekp)
     isempty(all_error_metrics) && return nothing
@@ -430,12 +557,22 @@ Return the section title, "Parameter".
 title(::ParameterReporter) = "Parameter"
 
 """
-    report(io::IO, ::ParameterReporter, context::ReportContext)
+    report(
+        io::IO,
+        ::ParameterReporter,
+        ::IterationEnd,
+        context::ReportContext,
+    )
 
 Report the mean and spread of each constrained parameter and their change from
 the previous iteration.
 """
-function report(io::IO, ::ParameterReporter, context::ReportContext)
+function report(
+    io::IO,
+    ::ParameterReporter,
+    ::IterationEnd,
+    context::ReportContext,
+)
     (; ekp, prior) = context
     N = EKP.get_N_iterations(ekp)
     N == 0 && return nothing
@@ -485,12 +622,22 @@ Return the section title, "Ensemble".
 title(::EnsembleReporter) = "Ensemble"
 
 """
-    report(io::IO, ::EnsembleReporter, context::ReportContext)
+    report(
+        io::IO,
+        ::EnsembleReporter,
+        ::IterationEnd,
+        context::ReportContext,
+    )
 
 Report the number of successful ensemble members out of the total number of
 ensemble members and list the failing ensemble members.
 """
-function report(io::IO, ::EnsembleReporter, context::ReportContext)
+function report(
+    io::IO,
+    ::EnsembleReporter,
+    ::IterationEnd,
+    context::ReportContext,
+)
     (; ekp) = context
     EKP.get_N_iterations(ekp) == 0 && return nothing
     g = EKP.get_g_final(ekp)

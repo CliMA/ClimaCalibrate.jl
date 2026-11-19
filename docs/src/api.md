@@ -279,6 +279,11 @@ ClimaCalibrate.Report.TimestepReporter
 ClimaCalibrate.Report.ErrorReporter
 ClimaCalibrate.Report.ParameterReporter
 ClimaCalibrate.Report.EnsembleReporter
+ClimaCalibrate.Report.AbstractEvent
+ClimaCalibrate.Report.CalibrationStart
+ClimaCalibrate.Report.IterationStart
+ClimaCalibrate.Report.IterationEnd
+ClimaCalibrate.Report.CalibrationEnd
 ClimaCalibrate.Report.report
 ClimaCalibrate.Report.title
 ClimaCalibrate.Report.print_aligned
