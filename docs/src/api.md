@@ -52,7 +52,6 @@ ClimaCalibrate.DerechoBackend
 ClimaCalibrate.Backend.failure_rate
 ClimaCalibrate.Backend.job_timeout
 ClimaCalibrate.backend_type
-ClimaCalibrate.get_backend
 ```
 
 ## Worker Interface
