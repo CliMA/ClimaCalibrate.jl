@@ -58,10 +58,10 @@ iterations are skipped, as are ensemble members that recorded a completed
 forward model. Pass a fresh `output_dir` to start over.
 
 # Keyword Arguments
-- `calibration_report`: The [`Report.CalibrationReport`](@ref) to log after The
-  end of each iteration. Each reporter is given the `ekp`, `prior`, and
-  `output_dir`. No report is logged for an iteration where the scheduler
-  terminates the calibration. To turn off the report, pass
+- `calibration_report`: The [`Report.CalibrationReport`](@ref) to log after the
+  end of each iteration. Each reporter is given a [`Report.ReportContext`](@ref)
+  of the `ekp`, `prior`, and `output_dir`. No report is logged for an iteration
+  where the scheduler terminates the calibration. To turn off the report, pass
   `Report.CalibrationReport(; reporters = ())`. See the [Calibration
   report](@ref) documentation for more information.
 
@@ -131,7 +131,8 @@ function calibrate(
             write_terminated(output_dir, iter)
             break
         end
-        Report.report(calibration_report, ekp, prior, output_dir)
+        context = Report.ReportContext(ekp, prior, output_dir)
+        Report.report(calibration_report, context)
     end
     return ekp
 end

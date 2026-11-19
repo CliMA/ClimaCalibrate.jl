@@ -86,10 +86,11 @@ const CHANGE_REGEX = r"^(\S+) \(([+-]?\d+\.\d)% from previous\)$"
 
     # Test report without the total number of iterations
     ekp, prior = make_ekp(2)
+    context = Report.ReportContext(ekp, prior, "")
     reporter = Report.WalltimeReporter()
     # Pretend the iteration took about an hour so the walltime is not zero
     reporter.times[1] -= 3600
-    output = sprint(io -> Report.report(io, reporter, ekp, prior, ""))
+    output = sprint(io -> Report.report(io, reporter, context))
 
     # Helper function to get the human readable duration
     readable_duration(seconds) =
@@ -103,7 +104,7 @@ const CHANGE_REGEX = r"^(\S+) \(([+-]?\d+\.\d)% from previous\)$"
           ["iteration walltime" => walltime, "total walltime" => walltime]
 
     # Test that the total walltime accumulates over iterations
-    output = sprint(io -> Report.report(io, reporter, ekp, prior, ""))
+    output = sprint(io -> Report.report(io, reporter, context))
     (; times) = reporter
     @test parse_rows(output) == [
         "iteration walltime" => readable_duration(times[3] - times[2]),
@@ -112,9 +113,10 @@ const CHANGE_REGEX = r"^(\S+) \(([+-]?\d+\.\d)% from previous\)$"
 
     # Test report with the total number of iterations
     ekp, prior = make_ekp(2)
+    context = Report.ReportContext(ekp, prior, "")
     reporter = Report.WalltimeReporter(5)
     reporter.times[1] -= 3600
-    output = sprint(io -> Report.report(io, reporter, ekp, prior, ""))
+    output = sprint(io -> Report.report(io, reporter, context))
     lines = split(chomp(output), '\n')
     @test length(lines) == 3
 
@@ -139,8 +141,9 @@ const CHANGE_REGEX = r"^(\S+) \(([+-]?\d+\.\d)% from previous\)$"
 
     # Test that no estimate is shown when all iterations are done
     ekp, prior = make_ekp(2)
+    context = Report.ReportContext(ekp, prior, "")
     reporter = Report.WalltimeReporter(2)
-    output = sprint(io -> Report.report(io, reporter, ekp, prior, ""))
+    output = sprint(io -> Report.report(io, reporter, context))
     @test startswith(output, "iteration walltime:")
     @test !occursin("walltime remaining", output)
 end
@@ -155,11 +158,13 @@ end
 
     # Test that nothing is reported before the first update
     ekp, prior = make_ekp(0)
-    @test sprint(io -> Report.report(io, reporter, ekp, prior, "")) == ""
+    context = Report.ReportContext(ekp, prior, "")
+    @test sprint(io -> Report.report(io, reporter, context)) == ""
 
     # Test report
     ekp, prior = make_ekp(2)
-    output = sprint(io -> Report.report(io, reporter, ekp, prior, ""))
+    context = Report.ReportContext(ekp, prior, "")
+    output = sprint(io -> Report.report(io, reporter, context))
     Δts = EKP.get_Δt(ekp)
     algorithm_time = round(sum(Δts); sigdigits = 3)
     rounded_Δts = round.(Δts; sigdigits = 3)
@@ -184,11 +189,13 @@ end
     # Test that nothing is reported before the first update
     reporter = Report.ErrorReporter()
     ekp, prior = make_ekp(0)
-    @test sprint(io -> Report.report(io, reporter, ekp, prior, "")) == ""
+    context = Report.ReportContext(ekp, prior, "")
+    @test sprint(io -> Report.report(io, reporter, context)) == ""
 
     # Test report after one update, which has no previous error to compare to
     ekp, prior = make_ekp(1)
-    output = sprint(io -> Report.report(io, reporter, ekp, prior, ""))
+    context = Report.ReportContext(ekp, prior, "")
+    output = sprint(io -> Report.report(io, reporter, context))
     error_metrics = EKP.get_error_metrics(ekp)
     loss = round(only(error_metrics["loss"]); sigdigits = 3)
     unweighted_loss =
@@ -204,7 +211,8 @@ end
 
     # Test report with the change from the previous iteration
     ekp, prior = make_ekp(2)
-    output = sprint(io -> Report.report(io, reporter, ekp, prior, ""))
+    context = Report.ReportContext(ekp, prior, "")
+    output = sprint(io -> Report.report(io, reporter, context))
     rows = parse_rows(output)
     @test first.(rows) == [
         "current loss",
@@ -232,7 +240,7 @@ end
 
     # Test that only the requested error metrics are reported
     reporter = Report.ErrorReporter(; error_metrics = ["crps"])
-    output = sprint(io -> Report.report(io, reporter, ekp, prior, ""))
+    output = sprint(io -> Report.report(io, reporter, context))
     @test first.(parse_rows(output)) ==
           ["current crps", "best crps", "crps history"]
 end
@@ -247,11 +255,13 @@ end
 
     # Test that nothing is reported before the first update
     ekp, prior = make_ekp(0)
-    @test sprint(io -> Report.report(io, reporter, ekp, prior, "")) == ""
+    context = Report.ReportContext(ekp, prior, "")
+    @test sprint(io -> Report.report(io, reporter, context)) == ""
 
     # Test report
     ekp, prior = make_ekp(2)
-    output = sprint(io -> Report.report(io, reporter, ekp, prior, ""))
+    context = Report.ReportContext(ekp, prior, "")
+    output = sprint(io -> Report.report(io, reporter, context))
     rows = parse_rows(output)
     labels = [
         "a",
@@ -306,18 +316,20 @@ end
 
     # Test that nothing is reported before the first update
     ekp, prior = make_ekp(0)
-    @test sprint(io -> Report.report(io, reporter, ekp, prior, "")) == ""
+    context = Report.ReportContext(ekp, prior, "")
+    @test sprint(io -> Report.report(io, reporter, context)) == ""
 
     # Test report when every member succeeds
     ekp, prior = make_ekp(1)
-    output = sprint(io -> Report.report(io, reporter, ekp, prior, ""))
+    context = Report.ReportContext(ekp, prior, "")
+    output = sprint(io -> Report.report(io, reporter, context))
     @test output == "successful members: 10 of 10\n"
 
     # Test report when members 3 and 7 fail
     g = copy(EKP.get_g_final(ekp))
     g[:, [3, 7]] .= NaN
     EKP.update_ensemble!(ekp, g)
-    output = sprint(io -> Report.report(io, reporter, ekp, prior, ""))
+    output = sprint(io -> Report.report(io, reporter, context))
     @test parse_rows(output) ==
           ["successful members" => "8 of 10", "failed members" => "3, 7"]
 end
@@ -333,18 +345,18 @@ end
 
     Report.title(::CountingReporter) = "Counting"
 
-    function Report.report(io::IO, reporter::CountingReporter, _, _, output_dir)
+    function Report.report(io::IO, reporter::CountingReporter, context)
         reporter.n_calls += 1
         println(io, "first line")
-        println(io, "output directory: $output_dir")
+        println(io, "output directory: $(context.output_dir)")
         return nothing
     end
 
     # Log the report with a `TestLogger` and return the logged records
-    function log_report(calibration_report, ekp, prior, output_dir)
+    function log_report(calibration_report, context)
         logger = Test.TestLogger()
         Logging.with_logger(logger) do
-            Report.report(calibration_report, ekp, prior, output_dir)
+            Report.report(calibration_report, context)
         end
         return logger.logs
     end
@@ -365,9 +377,10 @@ end
 
     # Test that the report is logged as a single message with a header
     ekp, prior = make_ekp(2)
+    context = Report.ReportContext(ekp, prior, "output")
     reporter = CountingReporter()
     calibration_report = Report.CalibrationReport(; reporters = (reporter,))
-    logs = log_report(calibration_report, ekp, prior, "output")
+    logs = log_report(calibration_report, context)
     @test length(logs) == 1
     @test only(logs).level == Logging.Info
 
@@ -385,16 +398,26 @@ end
 
     # Test that a report without reporters logs nothing
     calibration_report = Report.CalibrationReport(; reporters = ())
-    logs = log_report(calibration_report, ekp, prior, "")
+    logs = log_report(calibration_report, context)
     @test isempty(logs)
 
     # Test that the default report works before the first update
     ekp, prior = make_ekp(0)
-    logs = log_report(Report.CalibrationReport(), ekp, prior, "")
+    context = Report.ReportContext(ekp, prior, "")
+    logs = log_report(Report.CalibrationReport(), context)
     lines = split(only(logs).message, '\n')
     @test startswith(lines[1], "Calibration report · iteration 0 · ")
     titles = [strip(line) for line in lines if occursin(r"^  \S", line)]
     @test titles == ["Walltime", "Timestep", "Error", "Parameter", "Ensemble"]
+end
+
+@testset "ReportContext" begin
+    # Test constructor
+    ekp, prior = make_ekp(1)
+    context = Report.ReportContext(ekp, prior, "output")
+    @test context.ekp === ekp
+    @test context.prior === prior
+    @test context.output_dir == "output"
 end
 
 @testset "Helper functions" begin

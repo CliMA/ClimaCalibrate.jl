@@ -15,7 +15,8 @@ which adds a section on
 """
 module Report
 
-export AbstractReporter,
+export ReportContext,
+    AbstractReporter,
     CalibrationReport,
     WalltimeReporter,
     TimestepReporter,
@@ -32,11 +33,27 @@ import EnsembleKalmanProcesses.ParameterDistributions as PD
 import ..EKPUtils: _constrained_spread
 
 """
+    ReportContext(ekp, prior, output_dir)
+
+The state of the calibration that is given to each reporter, made of
+
+- `ekp`: The `EnsembleKalmanProcess` of the calibration,
+- `prior`: The `ParameterDistribution` of the calibration,
+- `output_dir`: The output directory of the calibration.
+"""
+struct ReportContext
+    ekp::EKP.EnsembleKalmanProcess
+    prior::PD.ParameterDistribution
+    output_dir::String
+end
+
+"""
     AbstractReporter
 
 An object that reports information about the state of the calibration after
-each iteration from `ekp::EnsembleKalmanProcess` and
-`prior::ParameterDistribution` of the calibration.
+each iteration from a [`ReportContext`](@ref), which holds the
+`ekp::EnsembleKalmanProcess` and `prior::ParameterDistribution` of the
+calibration.
 
 ## Define your own reporter
 
@@ -69,8 +86,6 @@ function print_aligned(io, rows)
     end
     return nothing
 end
-
-# TODO: Store output_dir in CalibrationReport?
 
 """
     CalibrationReport
@@ -118,26 +133,17 @@ function CalibrationReport(;
 end
 
 """
-    report(
-        calibration_report::CalibrationReport,
-        ekp::EKP.EnsembleKalmanProcess,
-        prior::PD.ParameterDistribution,
-        output_dir::AbstractString,
-    )
+    report(calibration_report::CalibrationReport, context::ReportContext)
 
 Log a report with a header of the current iteration, date, and time and the
-contents of each reporter in `calibration_report` using the `ekp`, `prior`, and
-`output_dir`. If `calibration_report` has no reporters, nothing is logged.
+contents of each reporter in `calibration_report` using `context`. If
+`calibration_report` has no reporters, nothing is logged.
 
 If a reporter throws an error, its section says so and the error is logged after
 the report, so the other sections are still reported.
 """
-function report(
-    calibration_report::CalibrationReport,
-    ekp::EKP.EnsembleKalmanProcess,
-    prior::PD.ParameterDistribution,
-    output_dir::AbstractString,
-)
+function report(calibration_report::CalibrationReport, context::ReportContext)
+    (; ekp) = context
     (; reporters) = calibration_report
     isempty(reporters) && return nothing
     io = IOBuffer()
@@ -147,7 +153,7 @@ function report(
         section_title = string(nameof(typeof(reporter)))
         body = try
             section_title = title(reporter)
-            sprint(io -> report(io, reporter, ekp, prior, output_dir))
+            sprint(io -> report(io, reporter, context))
         catch err
             err isa InterruptException && rethrow()
             push!(failures, section_title => (err, catch_backtrace()))
@@ -207,24 +213,13 @@ Return the section title, "Walltime".
 title(::WalltimeReporter) = "Walltime"
 
 """
-    report(
-        io::IO,
-        reporter::WalltimeReporter,
-        ekp::EKP.EnsembleKalmanProcess,
-        ::PD.ParameterDistribution,
-        output_dir,
-    )
+    report(io::IO, reporter::WalltimeReporter, context::ReportContext)
 
 Report the walltime of the last iteration, the total walltime, and an estimate
 of the remaining walltime.
 """
-function report(
-    io::IO,
-    reporter::WalltimeReporter,
-    ekp::EKP.EnsembleKalmanProcess,
-    ::PD.ParameterDistribution,
-    output_dir,
-)
+function report(io::IO, reporter::WalltimeReporter, context::ReportContext)
+    (; ekp) = context
     (; times, n_iterations) = reporter
     push!(times, time())
 
@@ -283,24 +278,13 @@ Return the section title, "Timestep".
 title(::TimestepReporter) = "Timestep"
 
 """
-    report(
-        io::IO,
-        ::TimestepReporter,
-        ekp::EKP.EnsembleKalmanProcess,
-        ::PD.ParameterDistribution,
-        output_dir,
-    )
+    report(io::IO, ::TimestepReporter, context::ReportContext)
 
 Report the current ensemble Kalman process algorithm time, current timestep
 size, and the recent timestep history.
 """
-function report(
-    io::IO,
-    ::TimestepReporter,
-    ekp::EKP.EnsembleKalmanProcess,
-    ::PD.ParameterDistribution,
-    output_dir,
-)
+function report(io::IO, ::TimestepReporter, context::ReportContext)
+    (; ekp) = context
     Δts = EKP.get_Δt(ekp)
     isempty(Δts) && return nothing
 
@@ -369,25 +353,14 @@ Return the section title, "Error".
 title(::ErrorReporter) = "Error"
 
 """
-    report(
-        io::IO,
-        reporter::ErrorReporter,
-        ekp::EKP.EnsembleKalmanProcess,
-        ::PD.ParameterDistribution,
-        output_dir,
-    )
+    report(io::IO, reporter::ErrorReporter, context::ReportContext)
 
 Report the error metrics as desired in `reporter` with how it changes from the
 error from the previous iteration, the best error so far and the iteration it
 was reached at, and a recent history of the error metrics.
 """
-function report(
-    io::IO,
-    reporter::ErrorReporter,
-    ekp::EKP.EnsembleKalmanProcess,
-    ::PD.ParameterDistribution,
-    output_dir,
-)
+function report(io::IO, reporter::ErrorReporter, context::ReportContext)
+    (; ekp) = context
     all_error_metrics = EKP.get_error_metrics(ekp)
     isempty(all_error_metrics) && return nothing
 
@@ -434,24 +407,13 @@ Return the section title, "Parameter".
 title(::ParameterReporter) = "Parameter"
 
 """
-    report(
-        io::IO,
-        ::ParameterReporter,
-        ekp::EKP.EnsembleKalmanProcess,
-        prior::PD.ParameterDistribution,
-        output_dir,
-    )
+    report(io::IO, ::ParameterReporter, context::ReportContext)
 
 Report the mean and spread of each constrained parameter and their change from
 the previous iteration.
 """
-function report(
-    io::IO,
-    ::ParameterReporter,
-    ekp::EKP.EnsembleKalmanProcess,
-    prior::PD.ParameterDistribution,
-    output_dir,
-)
+function report(io::IO, ::ParameterReporter, context::ReportContext)
+    (; ekp, prior) = context
     N = EKP.get_N_iterations(ekp)
     N == 0 && return nothing
 
@@ -500,24 +462,13 @@ Return the section title, "Ensemble".
 title(::EnsembleReporter) = "Ensemble"
 
 """
-    report(
-        io::IO,
-        ::EnsembleReporter,
-        ekp::EKP.EnsembleKalmanProcess,
-        ::PD.ParameterDistribution,
-        output_dir,
-    )
+    report(io::IO, ::EnsembleReporter, context::ReportContext)
 
 Report the number of successful ensemble members out of the total number of
 ensemble members and list the failing ensemble members.
 """
-function report(
-    io::IO,
-    ::EnsembleReporter,
-    ekp::EKP.EnsembleKalmanProcess,
-    ::PD.ParameterDistribution,
-    output_dir,
-)
+function report(io::IO, ::EnsembleReporter, context::ReportContext)
+    (; ekp) = context
     EKP.get_N_iterations(ekp) == 0 && return nothing
     g = EKP.get_g_final(ekp)
     # Found directly since `EKP.split_indices_by_success` warns and throws
