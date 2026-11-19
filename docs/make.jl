@@ -50,7 +50,7 @@ makedocs(
         prettyurls = !isempty(get(ENV, "CI", "")),
         collapselevel = 1,
         mathengine = MathJax3(),
-        size_threshold = 250 * 1024,  # 250 KiB
+        size_threshold = 300 * 1024,  # 300 KiB
     ),
     pages = [
         "Home" => "index.md",
