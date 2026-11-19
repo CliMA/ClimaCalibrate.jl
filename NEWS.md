@@ -3,6 +3,16 @@ ClimaCalibrate.jl Release Notes
 
 main
 -------
+- Add `Report.CalibrationReport`, which logs the state of a calibration.
+  For more information, see the "Report" section in the documentation
+  [#389](https://github.com/CliMA/ClimaCalibrate.jl/pull/389).
+- `calibrate` takes a `calibration_report` keyword argument and logs a
+  calibration report after every iteration by default. To turn off the report,
+  pass `Report.CalibrationReport(; reporters = ())`
+  [#389](https://github.com/CliMA/ClimaCalibrate.jl/pull/389).
+- The default `analyze_iteration` no longer logs the mean constrained
+  parameters and the covariance-weighted error, since the calibration report
+  includes them [#389](https://github.com/CliMA/ClimaCalibrate.jl/pull/389).
 
 v0.7.0
 -------
@@ -18,9 +28,6 @@ v0.7.0
   exported names (`add_workers`, `SlurmManager`, `@worker_setup`, ...) are
   unchanged; unexported helpers such as `GLOBAL_WORKER_POOL` are now under
   `Backend.Workers`.
-- Add `Report.CalibrationReport`, which logs the state of a calibration.
-  For more information, see the "Report" section in the documentation
-  [#389](https://github.com/CliMA/ClimaCalibrate.jl/pull/389).
 
 ### Breaking
 
