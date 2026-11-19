@@ -272,6 +272,7 @@ ClimaCalibrate.Visualization.plot_residual!
 ```@docs
 ClimaCalibrate.Report
 ClimaCalibrate.Report.CalibrationReport
+ClimaCalibrate.Report.ReportContext
 ClimaCalibrate.Report.AbstractReporter
 ClimaCalibrate.Report.WalltimeReporter
 ClimaCalibrate.Report.TimestepReporter

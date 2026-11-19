@@ -333,10 +333,10 @@ end
 
     Report.title(::CountingReporter) = "Counting"
 
-    function Report.report(io::IO, reporter::CountingReporter, _, _, output_dir)
+    function Report.report(io::IO, reporter::CountingReporter, context)
         reporter.n_calls += 1
         println(io, "first line")
-        println(io, "output directory: $output_dir")
+        println(io, "output directory: $(context.output_dir)")
         return nothing
     end
 
@@ -395,6 +395,21 @@ end
     @test startswith(lines[1], "Calibration report · iteration 0 · ")
     titles = [strip(line) for line in lines if occursin(r"^  \S", line)]
     @test titles == ["Walltime", "Timestep", "Error", "Parameter", "Ensemble"]
+end
+
+@testset "ReportContext" begin
+    # Test constructor
+    ekp, prior = make_ekp(1)
+    context = Report.ReportContext(ekp, prior, "output")
+    @test context.ekp === ekp
+    @test context.prior === prior
+    @test context.output_dir == "output"
+
+    # Test that reporting with the ekp, prior, and output directory is the same
+    # as reporting with their context
+    reporter = Report.ParameterReporter()
+    @test sprint(io -> Report.report(io, reporter, ekp, prior, "output")) ==
+          sprint(io -> Report.report(io, reporter, context))
 end
 
 @testset "Helper functions" begin
