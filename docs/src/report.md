@@ -57,12 +57,13 @@ ekp = EKP.EnsembleKalmanProcess(
 The output of the first two iterations of a calibration looks like:
 
 ```@example report
+context = Report.ReportContext(ekp, prior, ".") # hide
 Logging.with_logger(Logging.ConsoleLogger(stdout)) do # hide
     for _ in 1:2 # hide
         sleep(1) # hide
         ϕ = EKP.get_ϕ_final(prior, ekp) # hide
         EKP.update_ensemble!(ekp, reduce(hcat, G.(eachcol(ϕ)))) # hide
-        Report.report(calibration_report, ekp, prior, ".") # hide
+        Report.report(calibration_report, context) # hide
     end # hide
 end # hide
 nothing # hide
@@ -74,8 +75,6 @@ To write your own reporter, subtype [`AbstractReporter`](@ref) and add a
 method to [`report`](@ref), and optionally to [`title`](@ref).
 
 ```@example reporter
-import EnsembleKalmanProcesses as EKP
-import EnsembleKalmanProcesses.ParameterDistributions as PD
 import ClimaCalibrate.Report as Report
 
 struct YourReporter <: Report.AbstractReporter end
@@ -83,9 +82,7 @@ struct YourReporter <: Report.AbstractReporter end
 function Report.report(
     io::IO,
     reporter::YourReporter,
-    ekp::EKP.EnsembleKalmanProcess,
-    prior::PD.ParameterDistribution,
-    output_dir,
+    context::Report.ReportContext,
 )
     println(io, "Your report")
 end
@@ -113,9 +110,11 @@ The arguments to [`report`](@ref) are
 - `io`: Where to write the section. Write to `io` with `print` or `println`
   instead of logging with `@info` or printing to `stdout`, so that the section
   is part of the report.
-- `ekp`: The `EnsembleKalmanProcess` after the update of the current iteration.
-- `prior`: The `ParameterDistribution` of the calibration.
-- `output_dir`: Directory to write logs or plots to.
+- `context`: The [`ReportContext`](@ref) of the calibration, which holds
+  - `ekp`: The `EnsembleKalmanProcess` after the update of the current
+    iteration.
+  - `prior`: The `ParameterDistribution` of the calibration.
+  - `output_dir`: Directory to write logs or plots to.
 
 [`CalibrationReport`](@ref) prints the title of the section and indents the
 lines below it, so a reporter should not print its own title or indent its

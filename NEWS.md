@@ -6,6 +6,9 @@ main
 - Add `Report.CalibrationReport`, which logs the state of a calibration.
   For more information, see the "Report" section in the documentation
   [#389](https://github.com/CliMA/ClimaCalibrate.jl/pull/389).
+- Add `Report.ReportContext`, which holds the `ekp`, `prior`, and `output_dir`
+  of a calibration and is given to each reporter
+  [#397](https://github.com/CliMA/ClimaCalibrate.jl/pull/397).
 - `calibrate` takes a `calibration_report` keyword argument and logs a
   calibration report after every iteration by default. To turn off the report,
   pass `Report.CalibrationReport(; reporters = ())`
