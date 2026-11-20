@@ -98,14 +98,10 @@ const CHANGE_REGEX = r"^(\S+) \(([+-]?\d+\.\d)% from previous\)$"
     reporter.times[1] -= 3600
     output = report_iteration_end(reporter, ekp, prior)
 
-    # Helper function to get the human readable duration
-    readable_duration(seconds) =
-        string(Dates.canonicalize(Dates.Second(round(Int, seconds))))
-
     (; times) = reporter
     @test length(times) == 2
     # Only one iteration has passed, so the total is the iteration walltime
-    walltime = readable_duration(times[2] - times[1])
+    walltime = Report._format_duration(times[2] - times[1])
     @test parse_rows(output) ==
           ["iteration walltime" => walltime, "total walltime" => walltime]
 
@@ -113,8 +109,8 @@ const CHANGE_REGEX = r"^(\S+) \(([+-]?\d+\.\d)% from previous\)$"
     output = report_iteration_end(reporter, ekp, prior)
     (; times) = reporter
     @test parse_rows(output) == [
-        "iteration walltime" => readable_duration(times[3] - times[2]),
-        "total walltime" => readable_duration(times[3] - times[1]),
+        "iteration walltime" => Report._format_duration(times[3] - times[2]),
+        "total walltime" => Report._format_duration(times[3] - times[1]),
     ]
 
     # Test report with the total number of iterations
@@ -126,7 +122,7 @@ const CHANGE_REGEX = r"^(\S+) \(([+-]?\d+\.\d)% from previous\)$"
     @test length(lines) == 3
 
     (; times) = reporter
-    walltime = readable_duration(times[2] - times[1])
+    walltime = Report._format_duration(times[2] - times[1])
     current = match(r"^iteration walltime: +(.+)$", lines[1])
     @test !isnothing(current)
     @test current[1] == walltime
@@ -135,7 +131,7 @@ const CHANGE_REGEX = r"^(\S+) \(([+-]?\d+\.\d)% from previous\)$"
     @test total[1] == walltime
 
     # Two of the five iterations are done, so three remain
-    remaining = readable_duration(3 * (times[2] - times[1]))
+    remaining = Report._format_duration(3 * (times[2] - times[1]))
     estimate = match(
         r"^walltime remaining for 3 iterations: (.+) \((\S+)\)$",
         lines[3],
@@ -678,6 +674,14 @@ end
     @test Report._format_change([3.0, 4.0]) == " (+33.3% from previous)"
     # Only the last two values are compared
     @test Report._format_change([100.0, 2.0, 3.0]) == " (+50.0% from previous)"
+
+    # Test _format_duration
+    @test Report._format_duration(0) == "0 seconds"
+    @test Report._format_duration(0.4) == "0 seconds"
+    @test Report._format_duration(0.6) == "1 second"
+    @test Report._format_duration(59) == "59 seconds"
+    @test Report._format_duration(3725) == "1 hour, 2 minutes, 5 seconds"
+    @test Report._format_duration(90000) == "1 day, 1 hour"
 
     # Test _parameter_labels
     _, prior = make_ekp(0)

@@ -315,13 +315,14 @@ iterations.
 
 If `n_iterations` is `nothing`, then an estimate of the remaining walltime is
 not reported.
+
+The walltime is measured from [`CalibrationStart`](@ref).
 """
 function WalltimeReporter(n_iterations = nothing)
-    # We will assume that when the WalltimeReporter is constructed, it is the
-    # beginning of the iteration
     !isnothing(n_iterations) &&
         n_iterations <= 0 &&
         error("Total number of iterations ($n_iterations) should be positive")
+    # Populate with a non-empty vector if this reporter is called manually
     return WalltimeReporter(Float64[time()], n_iterations)
 end
 
@@ -331,6 +332,19 @@ end
 Return the section title, "Walltime".
 """
 title(::WalltimeReporter) = "Walltime"
+
+function report(
+    ::IO,
+    reporter::WalltimeReporter,
+    ::CalibrationStart,
+    ::ReportContext,
+)
+    # Measure the walltime from the start of the calibration
+    (; times) = reporter
+    empty!(times)
+    push!(times, time())
+    return nothing
+end
 
 """
     report(
@@ -353,19 +367,13 @@ function report(
     (; times, n_iterations) = reporter
     push!(times, time())
 
-    # The condition should never be satisfied
-    length(times) <= 1 && return nothing
-
     # Print human readable walltime
     walltime = times[end] - times[end - 1]
-    readable_walltime = Dates.canonicalize(Dates.Second(round(Int, walltime)))
     N = EKP.get_N_iterations(ekp)
     total_walltime = last(times) - first(times)
-    readable_total_walltime =
-        Dates.canonicalize(Dates.Second(round(Int, total_walltime)))
     rows = [
-        "iteration walltime" => string(readable_walltime),
-        "total walltime" => string(readable_total_walltime),
+        "iteration walltime" => _format_duration(walltime),
+        "total walltime" => _format_duration(total_walltime),
     ]
 
     if !isnothing(n_iterations) && N < n_iterations
@@ -374,14 +382,30 @@ function report(
         mean_time_diff = (last(times) - first(times)) / (length(times) - 1)
         remaining = Dates.Second(round(Int, mean_time_diff * n_remaining))
         finish_date = trunc(Dates.now() + remaining, Dates.Second)
+        iterations = n_remaining == 1 ? "iteration" : "iterations"
         push!(
             rows,
-            "walltime remaining for $n_remaining iterations" => "$(Dates.canonicalize(remaining)) ($finish_date)",
+            "walltime remaining for $n_remaining $iterations" => "$(_format_duration(Dates.value(remaining))) ($finish_date)",
         )
     end
 
     print_aligned(io, rows)
     return nothing
+end
+
+"""
+    _format_duration(seconds)
+
+Return `seconds`, rounded to whole seconds, as a human readable string like
+`"1 hour, 2 minutes, 5 seconds"`.
+
+Return `"0 seconds"` if `seconds` rounds to zero.
+"""
+function _format_duration(seconds)
+    seconds = round(Int, seconds)
+    # `Dates.canonicalize` turns zero seconds into an "empty period"
+    iszero(seconds) && return "0 seconds"
+    return string(Dates.canonicalize(Dates.Second(seconds)))
 end
 
 """
