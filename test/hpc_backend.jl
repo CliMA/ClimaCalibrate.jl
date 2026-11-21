@@ -22,9 +22,9 @@ if backend == ClimaCalibrate.DerechoBackend
 end
 
 climacommon_dict = Dict(
-    ClimaCalibrate.DerechoBackend => "climacommon/2026_04_08",
-    ClimaCalibrate.ClimaGPUBackend => "climacommon/2026_02_18",
-    ClimaCalibrate.CaltechHPCBackend => "climacommon/2025_03_18",
+    ClimaCalibrate.DerechoBackend => "climacommon/2026_11_18",
+    ClimaCalibrate.ClimaGPUBackend => "climacommon/2026_11_06-1.13.3",
+    ClimaCalibrate.CaltechHPCBackend => "climacommon/2026_10_30-1.13.3",
 )
 
 cc_module = climacommon_dict[backend]
