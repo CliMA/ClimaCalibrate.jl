@@ -274,7 +274,7 @@ function _check_climacommon(modules; env = ENV)
     # any modules
 
     # Get climacommon from modules
-    climacommon_regex = r"^climacommon(?:/\d{4}_\d{2}_\d{2})?$"
+    climacommon_regex = r"^climacommon(?:/\d{4}_\d{2}_\d{2}(?:-[\w.+]+)?)?$"
     job_modules_idx = findlast(m -> occursin(climacommon_regex, m), modules)
     job_module_cc =
         isnothing(job_modules_idx) ? nothing : modules[job_modules_idx]
