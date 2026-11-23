@@ -13,63 +13,6 @@ include(joinpath(experiment_path, "model_interface.jl"))
 FT = Float32
 
 """
-    generate_profiles(FT)
-
-Generate a set of test profiles for the surface fluxes model. Here we want the profiles to be
-statically stable to be sensitive to the input parameters, `a_m` and `a_b`.
-"""
-function generate_profiles(FT)
-    profiles_sfc = []
-    profiles_int = []
-    struct_to_nt(s) =
-        NamedTuple{propertynames(s)}(map(x -> getfield(s, x), propertynames(s)))
-    for i in 1:20
-        push!(
-            profiles_sfc,
-            struct_to_nt(TestAtmosProfile{FT}(T = FT(280 + i / 10), z = FT(0))),
-        )
-        push!(
-            profiles_int,
-            struct_to_nt(
-                TestAtmosProfile{FT}(T = FT(280.2 + i / 10), z = FT(10)),
-            ),
-        )
-    end
-
-    return profiles_sfc, profiles_int
-end
-Base.@kwdef mutable struct TestAtmosProfile{FT}
-    u::FT = FT(2)
-    v::FT = FT(0)
-    ρ::FT = FT(1)
-    q::FT = FT(0.001)
-    T::FT = FT(300)
-    z::FT = FT(0)
-end
-
-"""
-    save_profiles(FT; data_path = "data", x_data_file = "data/surface_fluxes_test_data.jld2")
-
-Save the generated profiles to file.
-"""
-function save_profiles(
-    FT;
-    data_path = "data",
-    x_data_file = "data/surface_fluxes_test_data.jld2",
-)
-
-    mkpath(data_path)
-
-    profiles_sfc, profiles_int = generate_profiles(FT)
-
-    data = Dict(
-        "profiles_sfc" => profiles_sfc[1:end],
-        "profiles_int" => profiles_int[1:end],
-    )
-    JLD2.save(joinpath(data_path, x_data_file), data)
-end
-
-"""
     NOISE_FRACTION
 
 The standard deviation of the observation error, as a fraction of the observed

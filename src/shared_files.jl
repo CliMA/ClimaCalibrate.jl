@@ -5,7 +5,8 @@ Files a driver and its workers can both see, addressed by keys, relative paths
 joined with `/`. `read`, `write`, `rm`, `ispath`, `mtime`, and `touch` are
 extended for a collection, and [`create`](@ref) is a create-if-absent that
 exactly one of several concurrent callers wins. [`LocalFiles`](@ref) is a
-directory and [`BucketFiles`](@ref) an S3-compatible bucket.
+directory and [`BucketFiles`](@ref) an S3-compatible bucket. [`under`](@ref)
+narrows either to the keys below a prefix.
 """
 module SharedFiles
 
@@ -112,7 +113,36 @@ end
 BucketFiles(endpoint, bucket, prefix = ""; kwargs...) =
     BucketFiles(; endpoint, bucket, prefix, kwargs...)
 
-Base.show(io::IO, f::BucketFiles) =
-    print(io, "BucketFiles(", f.endpoint, "/", f.bucket, "/", f.prefix, ")")
+"""
+    BucketFiles(url)
+
+The bucket at `"<endpoint>/<bucket>/<prefix>"`, as [`url`](@ref) prints it,
+with the default `region` and `credentials`.
+"""
+function BucketFiles(url::AbstractString)
+    found = match(r"^(https?://[^/]+)/([^/]+)/?(.*)$", url)
+    isnothing(found) &&
+        throw(ArgumentError("expected <endpoint>/<bucket>/<prefix>, got $url"))
+    return BucketFiles(found[1], found[2], found[3])
+end
+
+"The bucket as `<endpoint>/<bucket>/<prefix>`."
+url(f::BucketFiles) = join((f.endpoint, f.bucket, f.prefix), "/")
+
+Base.show(io::IO, f::BucketFiles) = print(io, "BucketFiles(\"", url(f), "\")")
+
+"""
+    under(files, prefix)
+
+The same collection narrowed to the keys below `prefix`.
+"""
+under(f::LocalFiles, prefix) = LocalFiles(joinpath(f.root, prefix))
+under(f::BucketFiles, prefix) = BucketFiles(
+    f.endpoint,
+    f.bucket,
+    isempty(f.prefix) ? String(prefix) : f.prefix * "/" * prefix;
+    f.region,
+    f.credentials,
+)
 
 end # module SharedFiles

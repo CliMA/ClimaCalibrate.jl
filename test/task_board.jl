@@ -81,5 +81,10 @@ end
     f = LocalFiles(mktempdir())
     @test isnothing(TB.current(f))
     TB.set_current!(f, 2, 5; lease = 30)
-    @test TB.current(f) == (; iteration = 2, ensemble_size = 5, lease = 30.0)
+    @test TB.current(f) == (;
+        iteration = 2,
+        ensemble_size = 5,
+        lease = 30.0,
+        outputs = String[],
+    )
 end

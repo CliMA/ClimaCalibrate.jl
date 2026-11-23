@@ -1,6 +1,39 @@
 # The driver and worker halves of `SharedFilesBackend`. Both sides speak
 # through `TaskBoard` and never to each other.
 
+const PREFIX_FILE = "shared_files_prefix"
+
+"""
+The files this calibration meets its workers in: `output_dir` itself, or
+`backend.files` under a prefix made on the first call and kept in
+`output_dir`, so a resumed calibration finds its own members and a fresh one
+finds none.
+"""
+function shared_files(backend::SharedFilesBackend, output_dir)
+    isnothing(backend.files) && return LocalFiles(output_dir)
+    path = joinpath(output_dir, PREFIX_FILE)
+    if !isfile(path)
+        mkpath(output_dir)
+        write(path, "$(basename(output_dir))-$(round(Int, time()))")
+    end
+    return SharedFiles.under(backend.files, read(path, String))
+end
+
+function initialize_backend!(
+    backend::SharedFilesBackend,
+    interface::AbstractModelInterface,
+    output_dir,
+)
+    isnothing(backend.workers) && return nothing
+    Backend.launch(
+        backend.workers;
+        files = shared_files(backend, output_dir),
+        model_interface = ClimaCalibrate.model_interface_filepath(interface),
+        output_dir,
+    )
+    return nothing
+end
+
 """
     run_iteration(
         backend::SharedFilesBackend,
@@ -21,7 +54,7 @@ function run_iteration(
     output_dir,
 )
     staged = !isnothing(backend.files)
-    files = staged ? backend.files : LocalFiles(output_dir)
+    files = shared_files(backend, output_dir)
     for member in 1:ensemble_size
         status = TaskBoard.status(files, iter, member)
         # A rerun of the iteration retries its failed members
@@ -30,11 +63,17 @@ function run_iteration(
         staged && upload_inputs(files, output_dir, iter, member)
         TaskBoard.publish!(files, iter, member)
     end
-    TaskBoard.set_current!(files, iter, ensemble_size; lease = backend.lease)
+    TaskBoard.set_current!(
+        files,
+        iter,
+        ensemble_size;
+        lease = backend.lease,
+        outputs = backend.outputs,
+    )
     @info "Posted iteration $iter, waiting for workers" files
 
     unclaimed_since = time()
-    groups = TaskBoard.summary(files, iter, ensemble_size)
+    groups = TaskBoard.summary(files, iter, 0)
     while length(groups.done) + length(groups.failed) < ensemble_size
         for member in groups.claimed
             TaskBoard.lease_expired(files, iter, member, backend.lease) ||
@@ -50,7 +89,8 @@ function run_iteration(
                    $(backend.wait_timeout) s")
         end
         sleep(backend.poll_interval)
-        groups = TaskBoard.summary(files, iter, ensemble_size)
+        before, groups = groups, TaskBoard.summary(files, iter, ensemble_size)
+        report(files, iter, before, groups)
     end
 
     for member in groups.done
@@ -62,16 +102,33 @@ function run_iteration(
     return nothing
 end
 
+# Log what changed between two summaries of an iteration
+function report(files, iteration, before, after)
+    for member in setdiff(after.claimed, before.claimed)
+        owner = TaskBoard.owner(files, iteration, member)
+        @info "Member $member of iteration $iteration claimed by $owner"
+    end
+    for member in setdiff(after.done, before.done)
+        owner = TaskBoard.owner(files, iteration, member)
+        @info "Member $member of iteration $iteration done on $owner"
+    end
+    for member in setdiff(after.failed, before.failed)
+        failure = TaskBoard.failure(files, iteration, member)
+        @warn "Member $member of iteration $iteration failed\n$failure"
+    end
+    return nothing
+end
+
 """
     run_worker(
         interface::AbstractModelInterface,
         output_dir;
         files = nothing,
-        outputs = String[],
         worker_id = "<hostname>-<pid>",
         idle_timeout = 600,
         poll_interval = 5,
     )
+    run_worker()
 
 Claim and run ensemble members posted by a [`SharedFilesBackend`](@ref)
 driver until none have been available for `idle_timeout` seconds. Returns
@@ -79,10 +136,10 @@ the number of members this worker ran.
 
 Without `files`, `interface` and `output_dir` must be the ones the driver
 uses, since each member runs in place in `output_dir`. With `files`, the
-driver's shared files, `output_dir` is this worker's own directory: each
-member's `parameters.toml` is downloaded into it before the forward model
-runs, and `outputs`, files or directories relative to the member's
-directory, are uploaded afterwards.
+driver's shared files under the calibration's prefix, as the driver logs
+them, `output_dir` is this worker's own directory: each member's
+`parameters.toml` is downloaded into it before the forward model runs, and
+the backend's `outputs` are uploaded afterwards.
 
 The lease length comes from the driver. Start workers with at least two
 threads: the claim is renewed from a second task while the forward model
@@ -92,16 +149,20 @@ A worker is a Julia process that builds the interface the way the driver
 script does, then calls this:
 ```julia
 julia --project=experiment --threads=2 -e '
-    include("model_interface.jl")
     using ClimaCalibrate
-    run_worker(MyModel(config), "output")'
+    run_worker(include("model_interface.jl"), "output")'
 ```
+
+Without arguments, the worker is set up by its launcher's environment:
+`CLIMA_MODEL_INTERFACE` is the interface file, which evaluates to the
+interface, `CLIMA_OUTPUT_DIR` the worker's directory, and `CLIMA_FILES` a
+[`BucketFiles`](@ref ClimaCalibrate.SharedFiles.BucketFiles) as
+`<endpoint>/<bucket>/<prefix>`.
 """
 function run_worker(
     interface::AbstractModelInterface,
     output_dir;
     files = nothing,
-    outputs = String[],
     worker_id = "$(gethostname())-$(getpid())",
     idle_timeout = 600,
     poll_interval = 5,
@@ -128,7 +189,7 @@ function run_worker(
             worker_id,
             lease = current.lease,
             output_dir,
-            outputs = staged ? outputs : nothing,
+            outputs = staged ? current.outputs : nothing,
         )
         ran += 1
         idle_since = time()
@@ -137,6 +198,12 @@ function run_worker(
            exiting" ran
     return ran
 end
+
+run_worker() = run_worker(
+    Base.include(Main, ENV["CLIMA_MODEL_INTERFACE"]),
+    ENV["CLIMA_OUTPUT_DIR"];
+    files = SharedFiles.BucketFiles(ENV["CLIMA_FILES"]),
+)
 
 "Claim one open member of the current iteration, or return `nothing`."
 function claim_any!(files, current, worker_id)

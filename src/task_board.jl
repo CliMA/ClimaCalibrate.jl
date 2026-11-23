@@ -17,7 +17,8 @@ TOML files:
                   the driver after [`MAX_ATTEMPTS`](@ref) claims lapsed
 
 `state/current.toml` names the iteration workers should look at, its ensemble
-size, and the lease length.
+size, the lease length, and the outputs a worker uploads when it does not run
+in place.
 
 Claiming relies on `create`: of any number of workers trying to create
 `claim.toml` for one member, exactly one succeeds.
@@ -87,13 +88,15 @@ end
 
 """
 Point workers at `iteration`. `lease` is the seconds a claim stays valid
-without renewal.
+without renewal, `outputs` the files or directories, relative to the member
+directory, a worker uploads once its forward model has run.
 """
 function set_current!(
     files::AbstractSharedFiles,
     iteration,
     ensemble_size;
     lease,
+    outputs = String[],
 )
     write_toml(
         files,
@@ -102,6 +105,7 @@ function set_current!(
             "iteration" => iteration,
             "ensemble_size" => ensemble_size,
             "lease" => Float64(lease),
+            "outputs" => outputs,
         ),
     )
     return nothing
@@ -109,7 +113,7 @@ end
 
 """
 The iteration workers should look at, as `(; iteration, ensemble_size,
-lease)`, or `nothing` before a driver has posted one.
+lease, outputs)`, or `nothing` before a driver has posted one.
 """
 function current(files::AbstractSharedFiles)
     ispath(files, CURRENT_KEY) || return nothing
@@ -118,6 +122,7 @@ function current(files::AbstractSharedFiles)
         iteration = c["iteration"],
         ensemble_size = c["ensemble_size"],
         lease = c["lease"],
+        outputs = c["outputs"],
     )
 end
 
@@ -226,5 +231,13 @@ attempt(files::AbstractSharedFiles, iteration, member) =
 "The files a done member uploaded, relative to its directory."
 outputs(files::AbstractSharedFiles, iteration, member) =
     read_toml(files, member_key(iteration, member, "done.toml"))["outputs"]
+
+"The worker holding the member's claim."
+owner(files::AbstractSharedFiles, iteration, member) =
+    read_toml(files, member_key(iteration, member, "claim.toml"))["worker_id"]
+
+"Why the member failed."
+failure(files::AbstractSharedFiles, iteration, member) =
+    read_toml(files, member_key(iteration, member, "failed.toml"))["error"]
 
 end # module TaskBoard

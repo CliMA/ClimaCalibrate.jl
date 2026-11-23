@@ -149,6 +149,9 @@ provider. The driver and the workers share only `output_dir`.
    )
    ```
 
+   When `model_interface.jl` evaluates to the interface, as the surface
+   fluxes one does, the worker is `run_worker(include(path), output_dir)`.
+
 3. Start the workers, one per GPU with two threads each, then the driver:
 
    ```sh
@@ -188,46 +191,53 @@ files = ClimaCalibrate.SharedFiles.BucketFiles(
 )
 ```
 
-The driver passes it to the backend, `SharedFilesBackend(; files)`, and keeps
-its `output_dir` local. Each worker passes it to `run_worker` with a local
-`output_dir` of its own and the outputs `observation_map` reads, as paths
-relative to the member directory:
+The driver passes it to the backend with the outputs `observation_map`
+reads, as paths relative to the member directory, and keeps its
+`output_dir` local:
 
 ```julia
-run_worker(MyModel("/output", 10), "/output"; files, outputs = ["output_active"])
+backend = SharedFilesBackend(; files, outputs = ["output_active"])
+```
+
+Each calibration gets its own prefix in the bucket, made on the first
+iteration and kept in `output_dir/shared_files_prefix`, so a rerun resumes
+where it stopped and a new `output_dir` starts clean. The driver logs the
+prefixed bucket when it posts an iteration. A worker started by hand passes
+that to `run_worker` with a local `output_dir` of its own:
+
+```julia
+run_worker(MyModel("/output", 10), "/output"; files = BucketFiles("https://<account>.r2.cloudflarestorage.com/clima-calibrations/experiments/my_experiment/my_experiment-1795458247"))
 ```
 
 The driver uploads each member's `parameters.toml` before posting it. The
 worker downloads that, runs the member locally, uploads `outputs`, and lists
 them in `done.toml`. The driver downloads them into its `output_dir` once the
 member is done. Transfers pass through memory, so keep `outputs` to what the
-observation map needs.
+observation map needs. Bucket copies are leftovers once downloaded, so give
+the bucket a lifecycle rule that deletes objects after a few days.
 
-On Vast.ai, the driver script rents the instances itself with
-[`launch_workers`](@ref ClimaCalibrate.Backend.Vast.launch_workers) and ends
-them with [`destroy_workers`](@ref ClimaCalibrate.Backend.Vast.destroy_workers):
+On Vast.ai, the backend rents the instances itself and destroys them when
+the driver exits:
 
 ```julia
 import ClimaCalibrate.Backend: Vast
-ids = Vast.launch_workers(
-    4;
-    worker = "/clima/MyExperiment.jl/worker.jl",
-    repos = "MyExperiment.jl",
-    project = "MyExperiment.jl",
-    gpu = "L40S",
+backend = SharedFilesBackend(;
+    files,
+    outputs = ["output_active"],
+    workers = Vast.Workers(4; gpu = "L40S", disk = 200),
 )
-try
-    ClimaCalibrate.calibrate(SharedFilesBackend(; files), ekp, interface, n_iterations, prior, output_dir)
-finally
-    Vast.destroy_workers(ids)
-end
 ```
 
-Each instance runs the `clima-base` image, whose entrypoint clones `repos`,
-instantiates `project`, and runs `worker`, a script in the clone that builds
-the interface and calls `run_worker` as above. The `vastai` tool must be
-installed, with an API key holding `instance_read`, `instance_write`, and
-`misc`.
+Each instance runs the `clima-base` image, whose entrypoint clones the
+repository holding `model_interface_filepath(interface)` at the branch
+checked out on the driver, instantiates the driver's active project, and
+runs `run_worker()`, which includes that file and runs the interface it
+evaluates to. So the experiment's `model_interface.jl` ends with the
+interface, the branch is pushed before the driver starts, the project must
+hold `AWSS3`, and the project, the interface file, and `output_dir` all live
+inside the repository, since the worker resolves them against its clone.
+The `vastai` tool must be installed, with an API key holding
+`instance_read`, `instance_write`, and `misc`.
 
 When something dies:
 

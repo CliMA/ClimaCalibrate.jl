@@ -289,8 +289,15 @@ end
 @testset "a worker on its own directory stages files through the store" begin
     driver_dir, worker_dir, store_dir = mktempdir(), mktempdir(), mktempdir()
     n = 2
-    files = LocalFiles(store_dir)
-    backend = CAL.SharedFilesBackend(; poll_interval = 0.1, files)
+    backend = CAL.SharedFilesBackend(;
+        poll_interval = 0.1,
+        files = LocalFiles(store_dir),
+        outputs = [FILE_MODEL_OUTPUT],
+    )
+    # The calibration's own prefix within the store, as the driver will find it
+    files = CAL.Calibration.shared_files(backend, driver_dir)
+    @test files.root != store_dir
+    @test CAL.Calibration.shared_files(backend, driver_dir) == files
     driver = @async CAL.calibrate(
         backend,
         make_ekp(n),
@@ -304,7 +311,6 @@ end
         FileModel(worker_dir, n, 0.0),
         worker_dir;
         files,
-        outputs = [FILE_MODEL_OUTPUT],
         worker_id = "w",
         idle_timeout = 1.0,
         poll_interval = 0.1,

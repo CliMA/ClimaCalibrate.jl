@@ -178,25 +178,28 @@ end
 
 """
     SharedFilesBackend(; failure_rate = $DEFAULT_FAILURE_RATE, files = nothing,
+                         outputs = String[], workers = nothing,
                          poll_interval = 5, lease = 300,
                          wait_timeout = $EMPTY_POOL_TIMEOUT)
 
 Hand the ensemble members to workers that pull them from shared files.
 
 The driver posts each member of an iteration there, then waits for workers
-to claim and finish them. Workers are separate processes started by whatever
-means suits the machine, each running [`ClimaCalibrate.run_worker`](@ref)
-with the same model interface. Workers may join or leave at any time: a
-claim whose worker stops renewing it lapses after `lease` seconds and the
-member is handed out again, up to three times. A forward model that raises
-is not retried until the iteration is rerun.
+to claim and finish them. Workers are separate processes, each running
+[`ClimaCalibrate.run_worker`](@ref) with the same model interface, started
+by `workers` or by whatever means suits the machine. Workers may join or
+leave at any time: a claim whose worker stops renewing it lapses after
+`lease` seconds and the member is handed out again, up to three times. A
+forward model that raises is not retried until the iteration is rerun.
 
 The shared files are the calibration's `output_dir` itself, with each member
 running in place, or a
 [`BucketFiles`](@ref ClimaCalibrate.SharedFiles.BucketFiles) or another
-directory given as `files`. Then the driver uploads each member's
-`parameters.toml` before posting it and downloads the outputs the worker
-lists in `done.toml` once it is done.
+directory given as `files`. Then each calibration gets its own prefix
+there, made on the first iteration and kept in `output_dir`, the driver
+uploads each member's `parameters.toml` before posting it, the worker
+uploads `outputs` once the forward model has run, and the driver downloads
+them.
 
 # Keyword Arguments
 - `failure_rate::Float64`: The fraction of an iteration's ensemble members
@@ -204,6 +207,11 @@ lists in `done.toml` once it is done.
   $DEFAULT_FAILURE_RATE.
 - `files`: Where the driver and the workers meet, when that is not
   `output_dir`.
+- `outputs::Vector{String}`: What a worker uploads from a member directory,
+  files or directories relative to it, when `files` is given. What
+  `observation_map` reads.
+- `workers`: Workers to start for this calibration and end when the driver
+  exits, such as [`Vast.Workers`](@ref ClimaCalibrate.Backend.Vast.Workers).
 - `poll_interval::Float64`: Seconds between checks of the members' status
   `[s]`.
 - `lease::Float64`: Seconds a claim stays valid without renewal `[s]`. The
@@ -220,6 +228,14 @@ On every worker machine, with the same `interface` and `output_dir`:
 ```julia
 ClimaCalibrate.run_worker(interface, output_dir)
 ```
+Through a bucket, on four Vast.ai instances:
+```julia
+backend = ClimaCalibrate.SharedFilesBackend(;
+    files = BucketFiles("https://<account>.r2.cloudflarestorage.com/calibrations"),
+    outputs = ["output_active"],
+    workers = Vast.Workers(4; gpu = "L40S"),
+)
+```
 """
 Base.@kwdef struct SharedFilesBackend <: AbstractBackend
     failure_rate::Float64 = DEFAULT_FAILURE_RATE
@@ -227,7 +243,19 @@ Base.@kwdef struct SharedFilesBackend <: AbstractBackend
     lease::Float64 = 300.0
     wait_timeout::Float64 = EMPTY_POOL_TIMEOUT
     files::Union{Nothing, AbstractSharedFiles} = nothing
+    outputs::Vector{String} = String[]
+    workers::Any = nothing
 end
+
+"""
+    launch(workers; files, model_interface, output_dir)
+
+Start `workers` for a [`SharedFilesBackend`](@ref) calibration: processes
+that run [`ClimaCalibrate.run_worker`](@ref) against `files`, with the
+interface the file `model_interface` evaluates to, staging members under a
+directory of their own that stands for the driver's `output_dir`.
+"""
+function launch end
 
 """
     HPCBackend <: AbstractBackend

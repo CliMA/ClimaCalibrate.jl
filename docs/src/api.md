@@ -65,7 +65,8 @@ ClimaCalibrate.SharedFiles.BucketFiles
 ## Vast.ai
 ```@docs
 ClimaCalibrate.Backend.Vast
-ClimaCalibrate.Backend.Vast.launch_workers
+ClimaCalibrate.Backend.Vast.Workers
+ClimaCalibrate.Backend.launch
 ClimaCalibrate.Backend.Vast.destroy_workers
 ClimaCalibrate.Backend.Vast.logs
 ```

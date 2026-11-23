@@ -70,7 +70,19 @@ function ClimaCalibrate.forward_model(
         "data",
         "synthetic_profile_data.jld2",
     )
+    isfile(x_data_file) || save_profiles(
+        Float32;
+        data_path = dirname(x_data_file),
+        x_data_file = basename(x_data_file),
+    )
     x_inputs = load_profiles(x_data_file)
     FT = typeof(x_inputs.profiles_int[1].T)
     obtain_ustar(FT, x_inputs, model_config)
 end
+
+# The interface this file stands for, with the experiment's own output
+# directory and ensemble size
+SurfaceFluxModelInterface(
+    joinpath(pkgdir_CC, "output", "surface_fluxes_perfect_model"),
+    8,
+)
