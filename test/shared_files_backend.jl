@@ -285,3 +285,38 @@ end
     )
     @test CAL.last_completed_iteration(output_dir) == 1
 end
+
+@testset "a worker on its own directory stages files through the store" begin
+    driver_dir, worker_dir, store_dir = mktempdir(), mktempdir(), mktempdir()
+    n = 2
+    files = LocalFiles(store_dir)
+    backend = CAL.SharedFilesBackend(; poll_interval = 0.1, files)
+    driver = @async CAL.calibrate(
+        backend,
+        make_ekp(n),
+        FileModel(driver_dir, n, 0.0),
+        1,
+        prior,
+        driver_dir,
+    )
+    @test timedwait(() -> !isnothing(TB.current(files)), 60.0) == :ok
+    CAL.run_worker(
+        FileModel(worker_dir, n, 0.0),
+        worker_dir;
+        files,
+        outputs = [FILE_MODEL_OUTPUT],
+        worker_id = "w",
+        idle_timeout = 1.0,
+        poll_interval = 0.1,
+    )
+    wait(driver)
+    @test CAL.last_completed_iteration(driver_dir) == 1
+    @test TB.outputs(files, 1, 1) == [FILE_MODEL_OUTPUT]
+    for m in 1:n
+        worker_member = CAL.path_to_ensemble_member(worker_dir, 1, m)
+        driver_member = CAL.path_to_ensemble_member(driver_dir, 1, m)
+        @test isfile(joinpath(worker_member, "parameters.toml"))
+        @test isfile(joinpath(driver_member, FILE_MODEL_OUTPUT))
+        @test CAL.model_completed(driver_dir, 1, m)
+    end
+end

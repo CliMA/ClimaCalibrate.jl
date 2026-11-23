@@ -15,6 +15,7 @@ import ClimaCalibrate
 import ..ClimaCalibrate: Backend, AbstractModelInterface, Report
 import ClimaCalibrate.Backend: HPCBackend, WorkerBackend, JuliaBackend
 import ClimaCalibrate.Backend: Workers, SharedFilesBackend
+import ..SharedFiles
 import ..SharedFiles: LocalFiles
 import ..TaskBoard
 

@@ -17,6 +17,7 @@ module Backend
 
 import Distributed
 import Reexport: @reexport
+import ..SharedFiles: AbstractSharedFiles
 
 export HPCBackend,
     SlurmBackend,
@@ -176,25 +177,33 @@ Base.@kwdef struct WorkerBackend{WORKERPOOL <: Distributed.WorkerPool} <:
 end
 
 """
-    SharedFilesBackend(; failure_rate = $DEFAULT_FAILURE_RATE, poll_interval = 5,
-                         lease = 300, wait_timeout = $EMPTY_POOL_TIMEOUT)
+    SharedFilesBackend(; failure_rate = $DEFAULT_FAILURE_RATE, files = nothing,
+                         poll_interval = 5, lease = 300,
+                         wait_timeout = $EMPTY_POOL_TIMEOUT)
 
-Hand the ensemble members to workers that pull them from files in the
-calibration's `output_dir`.
+Hand the ensemble members to workers that pull them from shared files.
 
 The driver posts each member of an iteration there, then waits for workers
-to claim and finish them. Workers are separate processes that can see the
-`output_dir`, started by whatever means suits the machine, each running
-[`ClimaCalibrate.run_worker`](@ref) with the same model interface. Each
-member runs in place, with nothing copied. Workers may join or leave at any
-time: a claim whose worker stops renewing it lapses after `lease` seconds
-and the member is handed out again, up to three times. A forward model that
-raises is not retried until the iteration is rerun.
+to claim and finish them. Workers are separate processes started by whatever
+means suits the machine, each running [`ClimaCalibrate.run_worker`](@ref)
+with the same model interface. Workers may join or leave at any time: a
+claim whose worker stops renewing it lapses after `lease` seconds and the
+member is handed out again, up to three times. A forward model that raises
+is not retried until the iteration is rerun.
+
+The shared files are the calibration's `output_dir` itself, with each member
+running in place, or a
+[`BucketFiles`](@ref ClimaCalibrate.SharedFiles.BucketFiles) or another
+directory given as `files`. Then the driver uploads each member's
+`parameters.toml` before posting it and downloads the outputs the worker
+lists in `done.toml` once it is done.
 
 # Keyword Arguments
 - `failure_rate::Float64`: The fraction of an iteration's ensemble members
   that may fail before the calibration is halted `[-]`. The default is
   $DEFAULT_FAILURE_RATE.
+- `files`: Where the driver and the workers meet, when that is not
+  `output_dir`.
 - `poll_interval::Float64`: Seconds between checks of the members' status
   `[s]`.
 - `lease::Float64`: Seconds a claim stays valid without renewal `[s]`. The
@@ -217,6 +226,7 @@ Base.@kwdef struct SharedFilesBackend <: AbstractBackend
     poll_interval::Float64 = 5.0
     lease::Float64 = 300.0
     wait_timeout::Float64 = EMPTY_POOL_TIMEOUT
+    files::Union{Nothing, AbstractSharedFiles} = nothing
 end
 
 """
@@ -693,6 +703,7 @@ end
 include("backends/slurm.jl")
 include("backends/pbs.jl")
 include("backends/workers.jl")
+include("backends/vast.jl")
 @reexport using .Workers
 
 end

@@ -11,7 +11,8 @@ TOML files:
     claim.toml    made by the worker that won the member: worker_id. Its
                   modification time is the lease, renewed by the owner and
                   read by the driver
-    done.toml     written by the worker once the forward model finished
+    done.toml     written by the worker once the forward model finished,
+                  listing the outputs it uploaded
     failed.toml   written by the worker when the forward model raised, or by
                   the driver after [`MAX_ATTEMPTS`](@ref) claims lapsed
 
@@ -176,14 +177,21 @@ function requeue!(files::AbstractSharedFiles, iteration, member)
     return :open
 end
 
-"Record that the member's forward model finished."
-function complete!(files::AbstractSharedFiles, iteration, member; worker_id)
+"Record that the member's forward model finished and which files it uploaded."
+function complete!(
+    files::AbstractSharedFiles,
+    iteration,
+    member;
+    worker_id,
+    outputs = String[],
+)
     write_toml(
         files,
         member_key(iteration, member, "done.toml"),
         Dict(
             "attempt" => attempt(files, iteration, member),
             "worker_id" => worker_id,
+            "outputs" => outputs,
         ),
     )
     return nothing
@@ -214,5 +222,9 @@ end
 "The member's current attempt number."
 attempt(files::AbstractSharedFiles, iteration, member) =
     read_toml(files, member_key(iteration, member, "task.toml"))["attempt"]
+
+"The files a done member uploaded, relative to its directory."
+outputs(files::AbstractSharedFiles, iteration, member) =
+    read_toml(files, member_key(iteration, member, "done.toml"))["outputs"]
 
 end # module TaskBoard

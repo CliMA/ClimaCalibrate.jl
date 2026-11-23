@@ -56,6 +56,20 @@ ClimaCalibrate.Backend.job_timeout
 ClimaCalibrate.backend_type
 ```
 
+## Shared files
+```@docs
+ClimaCalibrate.SharedFiles.LocalFiles
+ClimaCalibrate.SharedFiles.BucketFiles
+```
+
+## Vast.ai
+```@docs
+ClimaCalibrate.Backend.Vast
+ClimaCalibrate.Backend.Vast.launch_workers
+ClimaCalibrate.Backend.Vast.destroy_workers
+ClimaCalibrate.Backend.Vast.logs
+```
+
 ## Worker Interface
 ```@docs
 ClimaCalibrate.SlurmManager

@@ -20,11 +20,14 @@ function run_iteration(
     ensemble_size,
     output_dir,
 )
-    files = LocalFiles(output_dir)
+    staged = !isnothing(backend.files)
+    files = staged ? backend.files : LocalFiles(output_dir)
     for member in 1:ensemble_size
+        status = TaskBoard.status(files, iter, member)
         # A rerun of the iteration retries its failed members
-        TaskBoard.status(files, iter, member) == :failed &&
-            TaskBoard.reset!(files, iter, member)
+        status == :failed && TaskBoard.reset!(files, iter, member)
+        status in (:failed, :unpublished) || continue
+        staged && upload_inputs(files, output_dir, iter, member)
         TaskBoard.publish!(files, iter, member)
     end
     TaskBoard.set_current!(files, iter, ensemble_size; lease = backend.lease)
@@ -50,7 +53,11 @@ function run_iteration(
         groups = TaskBoard.summary(files, iter, ensemble_size)
     end
 
-    foreach(m -> write_model_completed(output_dir, iter, m), groups.done)
+    for member in groups.done
+        model_completed(output_dir, iter, member) && continue
+        staged && download_outputs(files, output_dir, iter, member)
+        write_model_completed(output_dir, iter, member)
+    end
     check_failure_rate(length(groups.failed), ensemble_size, backend, iter)
     return nothing
 end
@@ -59,6 +66,8 @@ end
     run_worker(
         interface::AbstractModelInterface,
         output_dir;
+        files = nothing,
+        outputs = String[],
         worker_id = "<hostname>-<pid>",
         idle_timeout = 600,
         poll_interval = 5,
@@ -68,10 +77,16 @@ Claim and run ensemble members posted by a [`SharedFilesBackend`](@ref)
 driver until none have been available for `idle_timeout` seconds. Returns
 the number of members this worker ran.
 
-`interface` and `output_dir` must be the ones the driver uses, since each
-member runs in place in `output_dir`. The lease length comes from the driver.
-Start workers with at least two threads: the claim is renewed from a second
-task while the forward model runs.
+Without `files`, `interface` and `output_dir` must be the ones the driver
+uses, since each member runs in place in `output_dir`. With `files`, the
+driver's shared files, `output_dir` is this worker's own directory: each
+member's `parameters.toml` is downloaded into it before the forward model
+runs, and `outputs`, files or directories relative to the member's
+directory, are uploaded afterwards.
+
+The lease length comes from the driver. Start workers with at least two
+threads: the claim is renewed from a second task while the forward model
+runs.
 
 A worker is a Julia process that builds the interface the way the driver
 script does, then calls this:
@@ -85,11 +100,14 @@ julia --project=experiment --threads=2 -e '
 function run_worker(
     interface::AbstractModelInterface,
     output_dir;
+    files = nothing,
+    outputs = String[],
     worker_id = "$(gethostname())-$(getpid())",
     idle_timeout = 600,
     poll_interval = 5,
 )
-    files = LocalFiles(output_dir)
+    staged = !isnothing(files)
+    files = staged ? files : LocalFiles(output_dir)
     @info "Worker $worker_id looking for members" files
 
     ran = 0
@@ -109,6 +127,8 @@ function run_worker(
             member;
             worker_id,
             lease = current.lease,
+            output_dir,
+            outputs = staged ? outputs : nothing,
         )
         ran += 1
         idle_since = time()
@@ -128,11 +148,12 @@ function claim_any!(files, current, worker_id)
 end
 
 """
-    run_claimed_member(files, interface, iteration, member; worker_id, lease)
+    run_claimed_member(files, interface, iteration, member;
+                       worker_id, lease, output_dir, outputs)
 
 Run one claimed member's forward model, renewing the claim meanwhile, and
-record the outcome. If the claim was taken away during the run, nothing is
-recorded.
+record the outcome. `outputs` is `nothing` when the member runs in place.
+If the claim was taken away during the run, nothing is recorded.
 """
 function run_claimed_member(
     files,
@@ -141,6 +162,8 @@ function run_claimed_member(
     member;
     worker_id,
     lease,
+    output_dir,
+    outputs,
 )
     @info "Worker $worker_id running member $member of iteration $iteration"
 
@@ -151,8 +174,15 @@ function run_claimed_member(
     end
 
     error_text = nothing
+    uploaded = String[]
     try
+        isnothing(outputs) ||
+            download_inputs(files, output_dir, iteration, member)
         ClimaCalibrate.forward_model(interface, iteration, member)
+        isnothing(outputs) || (
+            uploaded =
+                upload_outputs(files, output_dir, iteration, member, outputs)
+        )
     catch e
         e isa InterruptException && rethrow()
         error_text = sprint(showerror, e, catch_backtrace())
@@ -167,7 +197,13 @@ function run_claimed_member(
         @warn "Worker $worker_id lost its claim on member $member, leaving it \
                to the new owner"
     elseif isnothing(error_text)
-        TaskBoard.complete!(files, iteration, member; worker_id)
+        TaskBoard.complete!(
+            files,
+            iteration,
+            member;
+            worker_id,
+            outputs = uploaded,
+        )
         @info "Worker $worker_id completed member $member"
     else
         TaskBoard.fail!(files, iteration, member; worker_id, error = error_text)
@@ -175,3 +211,57 @@ function run_claimed_member(
     end
     return nothing
 end
+
+# With `files` elsewhere than `output_dir`, a member's `parameters.toml` and
+# its outputs travel as files named relative to the member directory
+
+function upload_inputs(files, output_dir, iteration, member)
+    SharedFiles.upload(
+        files,
+        TaskBoard.member_key(iteration, member, DEFAULT_PARAMETER_FILE),
+        parameter_path(output_dir, iteration, member),
+    )
+    return nothing
+end
+
+function download_inputs(files, output_dir, iteration, member)
+    SharedFiles.download(
+        files,
+        TaskBoard.member_key(iteration, member, DEFAULT_PARAMETER_FILE),
+        parameter_path(output_dir, iteration, member),
+    )
+    return nothing
+end
+
+function download_outputs(files, output_dir, iteration, member)
+    dir = path_to_ensemble_member(output_dir, iteration, member)
+    for name in TaskBoard.outputs(files, iteration, member)
+        SharedFiles.download(
+            files,
+            TaskBoard.member_key(iteration, member, name),
+            joinpath(dir, name),
+        )
+    end
+    return nothing
+end
+
+# Returns the files uploaded, with a directory in `outputs` expanded
+function upload_outputs(files, output_dir, iteration, member, outputs)
+    dir = path_to_ensemble_member(output_dir, iteration, member)
+    uploaded = String[]
+    for output in outputs, path in files_under(joinpath(dir, output))
+        name = relpath(path, dir)
+        SharedFiles.upload(
+            files,
+            TaskBoard.member_key(iteration, member, name),
+            path,
+        )
+        push!(uploaded, name)
+    end
+    return uploaded
+end
+
+files_under(path) =
+    isdir(path) ?
+    [joinpath(root, f) for (root, _, names) in walkdir(path) for f in names] :
+    [path]

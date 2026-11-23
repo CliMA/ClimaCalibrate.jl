@@ -71,6 +71,9 @@ If your forward model requires parallelization across multiple cores or GPUs,
 choose one of the HPC cluster backends. These allow you to allocate more
 resources to each forward model using Slurm or PBS.
 
+If your workers live outside the driver's scheduler, on another cluster or on
+rented machines, use the `SharedFilesBackend`.
+
 ## Worker registry
 
 For a [`WorkerBackend`](@ref), the driver keeps a record of every worker
@@ -107,6 +110,141 @@ the setup code is likely broken.
 When the driver exits, an `atexit` hook cancels every job the session
 submitted by id and ends the live rows with
 `exit_reason = "cancel_worker_jobs"`.
+
+## Shared files backend
+
+Use a [`SharedFilesBackend`](@ref) when something other than the driver starts
+the workers: you, on a multi-GPU machine, `qsub` on Derecho, or a cloud
+provider. The driver and the workers share only `output_dir`.
+
+1. Write the driver script as for any backend, with a `SharedFilesBackend()`.
+   The quickstart script works with that one change:
+
+   ```julia
+   eki = ClimaCalibrate.calibrate(
+       ClimaCalibrate.SharedFilesBackend(),
+       ekp,
+       SurfaceFluxModelInterface(output_dir, ensemble_size),
+       n_iterations,
+       prior,
+       output_dir,
+   )
+   ```
+
+2. Write a worker script that builds the same interface with the same
+   `output_dir` and calls [`run_worker`](@ref). For the quickstart, where
+   `output_dir` is `my_experiment` and the ensemble has three members:
+
+   ```julia
+   import ClimaCalibrate
+   include(joinpath(
+       pkgdir(ClimaCalibrate),
+       "experiments",
+       "surface_fluxes_perfect_model",
+       "model_interface.jl",
+   ))
+   ClimaCalibrate.run_worker(
+       SurfaceFluxModelInterface("my_experiment", 3),
+       "my_experiment",
+   )
+   ```
+
+3. Start the workers, one per GPU with two threads each, then the driver:
+
+   ```sh
+   for i in 0 1 2 3; do
+       CUDA_VISIBLE_DEVICES=$i julia --project=experiment --threads=2 \
+           worker.jl > worker-$i.log 2>&1 &
+   done
+   julia --project=experiment driver.jl
+   ```
+
+   The order does not matter. A worker with nothing to run polls every 5
+   seconds and exits after 10 minutes, `idle_timeout`. The second thread
+   renews the worker's claim while the forward model runs. A worker on
+   another machine needs only to mount `output_dir`, so on Derecho each
+   `qsub` job runs the same worker command against GLADE.
+
+4. Watch `worker-*.log` and the driver's output. Each member directory under
+   `output_dir/iteration_XXX/` gains `task.toml` when posted, `claim.toml`
+   while a worker runs it, then `done.toml` or `failed.toml` with the worker
+   id and any error text. The driver moves on once every member has one of
+   the two.
+
+### On a bucket
+
+Workers that cannot mount `output_dir`, on another cluster or on rented
+machines, meet the driver in an S3-compatible bucket instead. Both sides
+load `AWSS3` and name the same
+[`BucketFiles`](@ref ClimaCalibrate.SharedFiles.BucketFiles), with
+`AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` set in both environments:
+
+```julia
+using AWSS3
+files = ClimaCalibrate.SharedFiles.BucketFiles(
+    "https://<account>.r2.cloudflarestorage.com",
+    "clima-calibrations",
+    "experiments/my_experiment",
+)
+```
+
+The driver passes it to the backend, `SharedFilesBackend(; files)`, and keeps
+its `output_dir` local. Each worker passes it to `run_worker` with a local
+`output_dir` of its own and the outputs `observation_map` reads, as paths
+relative to the member directory:
+
+```julia
+run_worker(MyModel("/output", 10), "/output"; files, outputs = ["output_active"])
+```
+
+The driver uploads each member's `parameters.toml` before posting it. The
+worker downloads that, runs the member locally, uploads `outputs`, and lists
+them in `done.toml`. The driver downloads them into its `output_dir` once the
+member is done. Transfers pass through memory, so keep `outputs` to what the
+observation map needs.
+
+On Vast.ai, the driver script rents the instances itself with
+[`launch_workers`](@ref ClimaCalibrate.Backend.Vast.launch_workers) and ends
+them with [`destroy_workers`](@ref ClimaCalibrate.Backend.Vast.destroy_workers):
+
+```julia
+import ClimaCalibrate.Backend: Vast
+ids = Vast.launch_workers(
+    4;
+    worker = "/clima/MyExperiment.jl/worker.jl",
+    repos = "MyExperiment.jl",
+    project = "MyExperiment.jl",
+    gpu = "L40S",
+)
+try
+    ClimaCalibrate.calibrate(SharedFilesBackend(; files), ekp, interface, n_iterations, prior, output_dir)
+finally
+    Vast.destroy_workers(ids)
+end
+```
+
+Each instance runs the `clima-base` image, whose entrypoint clones `repos`,
+instantiates `project`, and runs `worker`, a script in the clone that builds
+the interface and calls `run_worker` as above. The `vastai` tool must be
+installed, with an API key holding `instance_read`, `instance_write`, and
+`misc`.
+
+When something dies:
+
+- A worker that dies or hangs stops renewing its claim. After `lease`
+  seconds, 300 by default, the driver hands the member to another worker.
+  After three attempts the member is failed.
+- A forward model that raises writes `failed.toml` and is not retried within
+  the iteration. `failure_rate` decides whether the iteration halts. Rerunning
+  the calibration retries failed members.
+- A driver that dies can be restarted with the same script. It reposts only
+  what is not done. Restart within the workers' `idle_timeout` or start new
+  workers.
+- With members open and no worker claiming any for `wait_timeout` seconds, 6
+  hours by default, the iteration halts.
+
+The lease compares the driver's clock with modification times stamped by the
+worker's host, so the hosts' clocks must agree to well within `lease`.
 
 ## Job status
 
