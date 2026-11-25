@@ -40,6 +40,7 @@ include("ekp_interface.jl")
                 Report.ErrorReporter(),
                 Report.ParameterReporter(),
                 Report.EnsembleReporter(),
+                Report.ObservationReporter(),
             ),
         ),
     )
@@ -96,6 +97,7 @@ function calibrate(
             Report.ErrorReporter(),
             Report.ParameterReporter(),
             Report.EnsembleReporter(),
+            Report.ObservationReporter(),
         ),
     ),
 )

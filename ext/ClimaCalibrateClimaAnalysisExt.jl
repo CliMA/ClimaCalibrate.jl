@@ -23,5 +23,6 @@ include("sample_builder.jl")
 include("transform.jl")
 include("observation_recipe.jl")
 include("ensemble_builder.jl")
+include("report.jl")
 
 end

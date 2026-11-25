@@ -12,7 +12,8 @@ built from [`AbstractReporter`](@ref)s such as
 - [`TimestepReporter`](@ref) for reporting the timesteps taken,
 - [`ErrorReporter`](@ref) for reporting the error metrics,
 - [`ParameterReporter`](@ref) for reporting the parameter trajectory,
-- and [`EnsembleReporter`](@ref) for reporting the state of the ensemble.
+- [`EnsembleReporter`](@ref) for reporting the state of the ensemble,
+- and [`ObservationReporter`](@ref) for reporting the observations.
 
 ## Example
 
@@ -78,6 +79,7 @@ reporters = (
     Report.ErrorReporter(; error_metrics = ["loss", "unweighted_loss"]),
     Report.ParameterReporter(),
     Report.EnsembleReporter(),
+    Report.ObservationReporter(),
 )
 calibration_report = Report.CalibrationReport(; reporters)
 

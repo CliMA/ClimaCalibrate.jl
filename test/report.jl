@@ -6,6 +6,9 @@ import Logging
 import Random
 import EnsembleKalmanProcesses as EKP
 import EnsembleKalmanProcesses.ParameterDistributions as PD
+import ClimaAnalysis
+import ClimaAnalysis.Template:
+    TemplateVar, add_attribs, add_dim, initialize, one_to_n_data
 import ClimaCalibrate as CAL
 import ClimaCalibrate.Report as Report
 
@@ -337,6 +340,146 @@ end
           ["successful members" => "8 of 10", "failed members" => "3, 7"]
 end
 
+@testset "ObservationReporter" begin
+    # Test constructor
+    reporter = Report.ObservationReporter()
+    @test reporter isa Report.AbstractReporter
+
+    # Test title function
+    @test Report.title(reporter) == "Observations"
+
+    # Return what `reporter` prints at `event`
+    report_event(event, context) =
+        sprint(io -> Report.report(io, reporter, event, context))
+
+    # Test report of a single observation without metadata
+    ekp, prior = make_ekp(0)
+    context = Report.ReportContext(ekp, prior, "")
+    output = report_event(Report.CalibrationStart(1), context)
+    @test parse_rows(output) ==
+          ["samples" => "1 in total", "minibatches" => "1 per epoch"]
+    output = report_event(Report.IterationStart(1), context)
+    @test parse_rows(output) == [
+        "minibatch" => "1 of 1 in epoch 1 (samples 1)",
+        "G ensemble size" => "12 entries × 10 members",
+    ]
+
+    # Test that nothing is reported at the other events
+    @test report_event(Report.IterationEnd(1), context) == ""
+    @test report_event(Report.CalibrationEnd(1), context) == ""
+
+    # Four samples of four times each of two variables, where rsut is NaN at the
+    # latitudes -60 and 60
+    make_var(; attribs...) =
+        TemplateVar() |>
+        add_dim("time", collect(0.0:15.0), units = "s") |>
+        add_dim("lon", [-90.0, 0.0, 90.0, 180.0], units = "degrees") |>
+        add_dim("lat", [-60.0, -30.0, 0.0, 30.0, 60.0], units = "degrees") |>
+        add_attribs(; attribs...) |>
+        one_to_n_data(collected = true) |>
+        initialize
+    pr = make_var(
+        short_name = "pr",
+        long_name = "precipitation",
+        units = "kg m^-2 s^-1",
+    )
+    rsut = make_var(short_name = "rsut", units = "W m^-2")
+    rsut_data = copy(rsut.data)
+    rsut_data[:, :, [1, 5]] .= NaN
+    rsut = ClimaAnalysis.remake(rsut, data = rsut_data)
+
+    time_ranges = [(4.0 * i, 4.0 * i + 3.0) for i in 0:3]
+    samples = CAL.SampleBuilder.build_samples_by_times(
+        [pr, rsut],
+        time_ranges;
+        FT = Float64,
+    )
+    covar_estimator = CAL.ObservationRecipe.DiagonalCovariance(
+        CAL.ObservationRecipe.ScalarDiagonal(1.0),
+    )
+    observations = [
+        CAL.ObservationRecipe.observation(covar_estimator, samples, i) for
+        i in 1:4
+    ]
+    prior = PD.constrained_gaussian("a", 1.0, 0.5, -Inf, Inf)
+    make_obs_ekp(obs_series) = EKP.EnsembleKalmanProcess(
+        EKP.construct_initial_ensemble(prior, 10),
+        obs_series,
+        EKP.Inversion();
+        scheduler = EKP.DefaultScheduler(0.1),
+    )
+    ekp = make_obs_ekp(CAL.observation_series_from_samples(observations, 2))
+    context = Report.ReportContext(ekp, prior, "")
+
+    # Test report at the start of the calibration with minibatches
+    output = report_event(Report.CalibrationStart(1), context)
+    @test parse_rows(output) ==
+          ["samples" => "4 in total", "minibatches" => "2 per epoch"]
+
+    # Test that each variable of each sample in the minibatch is reported
+    first_lines =
+        split(chomp(report_event(Report.IterationStart(1), context)), '\n')
+    @test length(first_lines) == 22
+    @test parse_rows(join(first_lines[1:2], '\n')) == [
+        "minibatch" => "1 of 2 in epoch 1 (samples 1, 2)",
+        "G ensemble size" => "256 entries × 10 members",
+    ]
+    @test first_lines[3:12] == [
+        "pr (precipitation, kg m^-2 s^-1)",
+        "  time:    4 values [0.0, 1.0, 2.0, 3.0]",
+        "  lon:     4 values [-90.0, 0.0, 90.0, 180.0] in degrees",
+        "  lat:     5 values [-60.0, -30.0, …, 60.0] in degrees",
+        "  entries: 80",
+        "rsut (W m^-2)",
+        "  time:    4 values [0.0, 1.0, 2.0, 3.0]",
+        "  lon:     4 values [-90.0, 0.0, 90.0, 180.0] in degrees",
+        "  lat:     5 values [-60.0, -30.0, …, 60.0] in degrees",
+        "  entries: 48 (32 dropped)",
+    ]
+
+    # Test that the second sample of the minibatch is reported with its own
+    # times
+    @test first_lines[[13, 18]] ==
+          ["pr (precipitation, kg m^-2 s^-1)", "rsut (W m^-2)"]
+    @test first_lines[[14, 19]] ==
+          fill("  time:    4 values [4.0, 5.0, 6.0, 7.0]", 2)
+
+    # Test report of the second minibatch, which is used by the second update
+    y = EKP.get_obs(ekp)
+    EKP.update_ensemble!(ekp, y .+ randn(length(y), 10))
+    output = report_event(Report.IterationStart(2), context)
+    @test startswith(
+        output,
+        "minibatch:       2 of 2 in epoch 1 (samples 3, 4)\n",
+    )
+    lines = split(output, '\n')
+    @test lines[[4, 9]] == fill("  time:    4 values [8.0, 9.0, 10.0, 11.0]", 2)
+    @test lines[[14, 19]] ==
+          fill("  time:    4 values [12.0, 13.0, 14.0, 15.0]", 2)
+
+    # Test report of the first minibatch of the second epoch, which only exists
+    # after the ensemble is updated at the end of the first epoch
+    y = EKP.get_obs(ekp)
+    EKP.update_ensemble!(ekp, y .+ randn(length(y), 10))
+    output = report_event(Report.IterationStart(3), context)
+    @test startswith(
+        output,
+        "minibatch:       1 of 2 in epoch 2 (samples 1, 2)\n",
+    )
+
+    # Test that the variables are reported for observations combined by EKP,
+    # whose metadata is a `Vector{Any}` of `ClimaAnalysis.Var.Metadata`
+    combined = EKP.combine_observations(observations[1:2])
+    combined_ekp =
+        make_obs_ekp(CAL.observation_series_from_samples([combined], 1))
+    combined_context = Report.ReportContext(combined_ekp, prior, "")
+    combined_lines = split(
+        chomp(report_event(Report.IterationStart(1), combined_context)),
+        '\n',
+    )
+    @test combined_lines[3:end] == first_lines[3:end]
+end
+
 @testset "Calibration report" begin
     # A reporter that prints fixed lines and the output directory it is given,
     # and counts how many times it is called
@@ -379,6 +522,7 @@ end
         Report.ErrorReporter,
         Report.ParameterReporter,
         Report.EnsembleReporter,
+        Report.ObservationReporter,
     )
 
     reporters = (Report.ErrorReporter(), Report.EnsembleReporter())
@@ -421,8 +565,8 @@ end
     # The other reporters print nothing before the first update
     @test titles == ["Walltime"]
 
-    # Test that every reporter of the default report prints a section after the
-    # first update
+    # Test that every reporter of the default report, except the
+    # ObservationReporter, prints a section at the end of the first iteration
     ekp, prior = make_ekp(1)
     context = Report.ReportContext(ekp, prior, "")
     logs = log_report(Report.CalibrationReport(), context)
@@ -546,15 +690,19 @@ end
     logs = log_event_report(calibration_report, Report.IterationEnd(2), context)
     @test isempty(logs)
 
-    # Test that the built-in reporters only report at the end of an iteration
+    # Test that only the ObservationReporter of the default report reports at
+    # the start of the calibration and of an iteration, and that no reporter of
+    # the default report reports at the end of the calibration
     calibration_report = Report.CalibrationReport()
-    for event in (
-        Report.CalibrationStart(1),
-        Report.IterationStart(2),
-        Report.CalibrationEnd(2),
-    )
-        @test isempty(log_event_report(calibration_report, event, context))
+    for event in (Report.CalibrationStart(1), Report.IterationStart(2))
+        logs = log_event_report(calibration_report, event, context)
+        lines = split(only(logs).message, '\n')
+        titles = [strip(line) for line in lines if occursin(r"^  \S", line)]
+        @test titles == ["Observations"]
     end
+    logs =
+        log_event_report(calibration_report, Report.CalibrationEnd(2), context)
+    @test isempty(logs)
 end
 
 @testset "Events of a calibration" begin

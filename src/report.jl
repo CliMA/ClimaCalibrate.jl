@@ -11,7 +11,8 @@ which adds a section on
 2. the timesteps ([`TimestepReporter`](@ref)),
 3. the error ([`ErrorReporter`](@ref)),
 4. the parameters ([`ParameterReporter`](@ref)),
-5. or the state of the ensemble ([`EnsembleReporter`](@ref)).
+5. the state of the ensemble ([`EnsembleReporter`](@ref)),
+6. or the observations ([`ObservationReporter`](@ref)).
 """
 module Report
 
@@ -28,6 +29,7 @@ export AbstractEvent,
     ErrorReporter,
     ParameterReporter,
     EnsembleReporter,
+    ObservationReporter,
     report,
     title,
     print_aligned
@@ -35,7 +37,7 @@ export AbstractEvent,
 import Dates
 import EnsembleKalmanProcesses as EKP
 import EnsembleKalmanProcesses.ParameterDistributions as PD
-import ..EKPUtils: _constrained_spread
+import ..EKPUtils: _constrained_spread, get_metadata_for_nth_iteration
 
 """
     AbstractEvent
@@ -215,6 +217,7 @@ end
             ErrorReporter(),
             ParameterReporter(),
             EnsembleReporter(),
+            ObservationReporter(),
         ),
     )
 
@@ -223,7 +226,7 @@ Construct a `CalibrationReport` from `reporters`.
 # Keyword Arguments
 - `reporters`: The reporters that make up the report, in order. By default,
   these are `WalltimeReporter()`, `TimestepReporter()`, `ErrorReporter()`,
-  `ParameterReporter()`, and `EnsembleReporter()`.
+  `ParameterReporter()`, `EnsembleReporter()`, and `ObservationReporter()`.
 """
 function CalibrationReport(;
     reporters = (
@@ -232,6 +235,7 @@ function CalibrationReport(;
         ErrorReporter(),
         ParameterReporter(),
         EnsembleReporter(),
+        ObservationReporter(),
     ),
 )
     return CalibrationReport(Tuple(reporters))
@@ -675,6 +679,104 @@ function report(
     print_aligned(io, rows)
     return nothing
 end
+
+"""
+    ObservationReporter <: AbstractReporter
+
+A struct for reporting information about the observations.
+
+## Examples
+
+You do not need to pass any arguments to `ObservationReporter` to construct one.
+
+```julia
+observation_reporter = ObservationReporter()
+```
+"""
+struct ObservationReporter <: AbstractReporter end
+
+"""
+    title(::ObservationReporter)
+
+Return the section title, "Observations".
+"""
+title(::ObservationReporter) = "Observations"
+
+"""
+    report(
+        io::IO,
+        ::ObservationReporter,
+        ::CalibrationStart,
+        context::ReportContext,
+    )
+
+Report the number of samples in the observation series and the number of
+minibatches in each epoch.
+"""
+function report(
+    io::IO,
+    ::ObservationReporter,
+    ::CalibrationStart,
+    context::ReportContext,
+)
+    obs_series = EKP.get_observation_series(context.ekp)
+    n_samples = length(EKP.get_observations(obs_series))
+    rows = [
+        "samples" => "$n_samples in total",
+        "minibatches" => "$(EKP.get_length_epoch(obs_series)) per epoch",
+    ]
+    print_aligned(io, rows)
+    return nothing
+end
+
+"""
+    report(
+        io::IO,
+        ::ObservationReporter,
+        ::IterationStart,
+        context::ReportContext,
+    )
+
+Report the minibatch of the iteration, the samples in it, and the size of the G
+ensemble matrix of the iteration.
+
+If the observations have `ClimaAnalysis.Var.Metadata`, such as observations made
+with `ObservationRecipe.observation`, also report the dimensions and number of
+entries of each variable in each sample of the minibatch.
+"""
+function report(
+    io::IO,
+    ::ObservationReporter,
+    ::IterationStart,
+    context::ReportContext,
+)
+    (; ekp) = context
+    N = EKP.get_N_iterations(ekp) + 1
+    obs_series = EKP.get_observation_series(ekp)
+    index = EKP.get_minibatch_index(obs_series, N)
+    samples = join(EKP.get_minibatch(obs_series, N), ", ")
+    n_entries = length(EKP.get_obs(ekp, N))
+    rows = [
+        "minibatch" => "$(index["minibatch"]) of \
+                        $(EKP.get_length_epoch(obs_series)) in epoch \
+                        $(index["epoch"]) (samples $samples)",
+        "G ensemble size" => "$n_entries entries × $(EKP.get_N_ens(ekp)) members",
+    ]
+    print_aligned(io, rows)
+    _print_variables(io, get_metadata_for_nth_iteration(obs_series, N))
+    return nothing
+end
+
+"""
+    _print_variables(io, metadata)
+
+Print the name, units, dimensions, and number of entries of the variable of
+each element of `metadata`.
+
+Nothing is printed unless the ClimaAnalysis extension is loaded and every
+element of `metadata` is a `ClimaAnalysis.Var.Metadata`.
+"""
+_print_variables(_, _) = nothing
 
 """
     _format_recent(values; n = 5)
