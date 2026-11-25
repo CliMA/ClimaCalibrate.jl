@@ -175,24 +175,30 @@ function run_worker(
     idle_since = time()
     while time() - idle_since < idle_timeout
         current = TaskBoard.current(files)
-        member = isnothing(current) ? nothing :
-                 claim_any!(files, current, worker_id)
-        if isnothing(member)
-            sleep(poll_interval)
-            continue
+        if !isnothing(current)
+            (; iteration, ensemble_size) = current
+            groups = TaskBoard.summary(files, iteration, ensemble_size)
+            member = claim_any!(files, iteration, groups.open, worker_id)
+            if !isnothing(member)
+                run_claimed_member(
+                    files,
+                    interface,
+                    iteration,
+                    member;
+                    worker_id,
+                    lease = current.lease,
+                    output_dir,
+                    outputs = staged ? current.outputs : nothing,
+                )
+                ran += 1
+                idle_since = time()
+                continue
+            end
+            # Peers are still running this iteration, so the worker is waiting
+            # for the update rather than idle after the run
+            isempty(groups.claimed) || (idle_since = time())
         end
-        run_claimed_member(
-            files,
-            interface,
-            current.iteration,
-            member;
-            worker_id,
-            lease = current.lease,
-            output_dir,
-            outputs = staged ? current.outputs : nothing,
-        )
-        ran += 1
-        idle_since = time()
+        sleep(poll_interval)
     end
     @info "Worker $worker_id found nothing to run for $idle_timeout s, \
            exiting" ran
@@ -205,10 +211,9 @@ run_worker() = run_worker(
     files = SharedFiles.BucketFiles(ENV["CLIMA_FILES"]),
 )
 
-"Claim one open member of the current iteration, or return `nothing`."
-function claim_any!(files, current, worker_id)
-    (; iteration, ensemble_size) = current
-    for member in TaskBoard.summary(files, iteration, ensemble_size).open
+"Claim one of the `open` members of `iteration`, or return `nothing`."
+function claim_any!(files, iteration, open, worker_id)
+    for member in open
         TaskBoard.claim!(files, iteration, member, worker_id) && return member
     end
     return nothing
@@ -237,7 +242,13 @@ function run_claimed_member(
     running = Threads.Atomic{Bool}(true)
     renewal = Threads.@spawn while running[]
         sleep(lease / 10)
-        TaskBoard.renew!(files, iteration, member, worker_id) || break
+        still_owned = try
+            TaskBoard.renew!(files, iteration, member, worker_id)
+        catch e
+            @warn "Transient error renewing claim on member $member" exception = e
+            true
+        end
+        still_owned || break
     end
 
     error_text = nothing
