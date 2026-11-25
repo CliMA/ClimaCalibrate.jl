@@ -58,12 +58,12 @@ iterations are skipped, as are ensemble members that recorded a completed
 forward model. Pass a fresh `output_dir` to start over.
 
 # Keyword Arguments
-- `calibration_report`: The [`Report.CalibrationReport`](@ref) to log after the
-  end of each iteration. Each reporter is given a [`Report.ReportContext`](@ref)
-  of the `ekp`, `prior`, and `output_dir`. No report is logged for an iteration
-  where the scheduler terminates the calibration. To turn off the report, pass
-  `Report.CalibrationReport(; reporters = ())`. See the [Calibration
-  report](@ref) documentation for more information.
+- `calibration_report`: The [`Report.CalibrationReport`](@ref) to log at the
+  start of the calibration, at the start and end of each iteration, and at the
+  end of the calibration. Each reporter is given the event and a
+  [`Report.ReportContext`](@ref) of the `ekp`, `prior`, and `output_dir`. To
+  turn off the report, pass `Report.CalibrationReport(; reporters = ())`. See
+  the [Calibration report](@ref) documentation for more information.
 
 # Returns
 The `EnsembleKalmanProcess` at the end of the run.
@@ -120,20 +120,34 @@ function calibrate(
         return load_latest_ekp(output_dir)
     end
 
+    function log_report(event, ekp)
+        context = Report.ReportContext(ekp, prior, output_dir)
+        Report.report(calibration_report, event, context)
+    end
+
+    ekp = load_ekp_struct(output_dir, first_iter)
+    log_report(Report.CalibrationStart(first_iter), ekp)
     for iter in first_iter:n_iterations
+        # Running the forward models does not change the stored EKP struct
+        ekp = load_ekp_struct(output_dir, iter)
+        log_report(Report.IterationStart(iter), ekp)
         @info "Iteration $iter"
         run_iteration(backend, interface, iter, ensemble_size, output_dir)
         @info "Completed iteration $iter, updating ensemble"
-        ekp = load_ekp_struct(output_dir, iter)
+        n_updates = EKP.get_N_iterations(ekp)
         terminate =
             observation_map_and_update!(ekp, output_dir, iter, prior, interface)
+        # Checked directly, since `terminate` does not say whether the ensemble
+        # was updated
+        if EKP.get_N_iterations(ekp) > n_updates
+            log_report(Report.IterationEnd(iter), ekp)
+        end
         if !isnothing(terminate)
             write_terminated(output_dir, iter)
             break
         end
-        context = Report.ReportContext(ekp, prior, output_dir)
-        Report.report(calibration_report, context)
     end
+    log_report(Report.CalibrationEnd(EKP.get_N_iterations(ekp)), ekp)
     return ekp
 end
 

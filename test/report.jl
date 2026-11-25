@@ -58,6 +58,13 @@ function make_ekp(n_updates; rng = Random.MersenneTwister(1234))
     return ekp, prior
 end
 
+# Return what `reporter` prints at the end of the latest iteration of the ekp in
+# `context`
+function report_iteration_end(reporter, context)
+    event = Report.IterationEnd(EKP.get_N_iterations(context.ekp))
+    return sprint(io -> Report.report(io, reporter, event, context))
+end
+
 # Split each line of a reporter's output into its label and its value, ignoring
 # the padding that aligns the values
 function parse_rows(output)
@@ -90,7 +97,7 @@ const CHANGE_REGEX = r"^(\S+) \(([+-]?\d+\.\d)% from previous\)$"
     reporter = Report.WalltimeReporter()
     # Pretend the iteration took about an hour so the walltime is not zero
     reporter.times[1] -= 3600
-    output = sprint(io -> Report.report(io, reporter, context))
+    output = report_iteration_end(reporter, context)
 
     (; times) = reporter
     @test length(times) == 2
@@ -100,7 +107,7 @@ const CHANGE_REGEX = r"^(\S+) \(([+-]?\d+\.\d)% from previous\)$"
           ["iteration walltime" => walltime, "total walltime" => walltime]
 
     # Test that the total walltime accumulates over iterations
-    output = sprint(io -> Report.report(io, reporter, context))
+    output = report_iteration_end(reporter, context)
     (; times) = reporter
     @test parse_rows(output) == [
         "iteration walltime" => Report._format_duration(times[3] - times[2]),
@@ -112,7 +119,7 @@ const CHANGE_REGEX = r"^(\S+) \(([+-]?\d+\.\d)% from previous\)$"
     context = Report.ReportContext(ekp, prior, "")
     reporter = Report.WalltimeReporter(5)
     reporter.times[1] -= 3600
-    output = sprint(io -> Report.report(io, reporter, context))
+    output = report_iteration_end(reporter, context)
     lines = split(chomp(output), '\n')
     @test length(lines) == 3
 
@@ -139,7 +146,7 @@ const CHANGE_REGEX = r"^(\S+) \(([+-]?\d+\.\d)% from previous\)$"
     ekp, prior = make_ekp(2)
     context = Report.ReportContext(ekp, prior, "")
     reporter = Report.WalltimeReporter(2)
-    output = sprint(io -> Report.report(io, reporter, context))
+    output = report_iteration_end(reporter, context)
     @test startswith(output, "iteration walltime:")
     @test !occursin("walltime remaining", output)
 end
@@ -155,12 +162,12 @@ end
     # Test that nothing is reported before the first update
     ekp, prior = make_ekp(0)
     context = Report.ReportContext(ekp, prior, "")
-    @test sprint(io -> Report.report(io, reporter, context)) == ""
+    @test report_iteration_end(reporter, context) == ""
 
     # Test report
     ekp, prior = make_ekp(2)
     context = Report.ReportContext(ekp, prior, "")
-    output = sprint(io -> Report.report(io, reporter, context))
+    output = report_iteration_end(reporter, context)
     Δts = EKP.get_Δt(ekp)
     algorithm_time = round(sum(Δts); sigdigits = 3)
     rounded_Δts = round.(Δts; sigdigits = 3)
@@ -186,12 +193,12 @@ end
     reporter = Report.ErrorReporter()
     ekp, prior = make_ekp(0)
     context = Report.ReportContext(ekp, prior, "")
-    @test sprint(io -> Report.report(io, reporter, context)) == ""
+    @test report_iteration_end(reporter, context) == ""
 
     # Test report after one update, which has no previous error to compare to
     ekp, prior = make_ekp(1)
     context = Report.ReportContext(ekp, prior, "")
-    output = sprint(io -> Report.report(io, reporter, context))
+    output = report_iteration_end(reporter, context)
     error_metrics = EKP.get_error_metrics(ekp)
     loss = round(only(error_metrics["loss"]); sigdigits = 3)
     unweighted_loss =
@@ -208,7 +215,7 @@ end
     # Test report with the change from the previous iteration
     ekp, prior = make_ekp(2)
     context = Report.ReportContext(ekp, prior, "")
-    output = sprint(io -> Report.report(io, reporter, context))
+    output = report_iteration_end(reporter, context)
     rows = parse_rows(output)
     @test first.(rows) == [
         "current loss",
@@ -236,7 +243,7 @@ end
 
     # Test that only the requested error metrics are reported
     reporter = Report.ErrorReporter(; error_metrics = ["crps"])
-    output = sprint(io -> Report.report(io, reporter, context))
+    output = report_iteration_end(reporter, context)
     @test first.(parse_rows(output)) ==
           ["current crps", "best crps", "crps history"]
 end
@@ -252,12 +259,12 @@ end
     # Test that nothing is reported before the first update
     ekp, prior = make_ekp(0)
     context = Report.ReportContext(ekp, prior, "")
-    @test sprint(io -> Report.report(io, reporter, context)) == ""
+    @test report_iteration_end(reporter, context) == ""
 
     # Test report
     ekp, prior = make_ekp(2)
     context = Report.ReportContext(ekp, prior, "")
-    output = sprint(io -> Report.report(io, reporter, context))
+    output = report_iteration_end(reporter, context)
     rows = parse_rows(output)
     labels = [
         "a",
@@ -313,19 +320,19 @@ end
     # Test that nothing is reported before the first update
     ekp, prior = make_ekp(0)
     context = Report.ReportContext(ekp, prior, "")
-    @test sprint(io -> Report.report(io, reporter, context)) == ""
+    @test report_iteration_end(reporter, context) == ""
 
     # Test report when every member succeeds
     ekp, prior = make_ekp(1)
     context = Report.ReportContext(ekp, prior, "")
-    output = sprint(io -> Report.report(io, reporter, context))
+    output = report_iteration_end(reporter, context)
     @test output == "successful members: 10 of 10\n"
 
     # Test report when members 3 and 7 fail
     g = copy(EKP.get_g_final(ekp))
     g[:, [3, 7]] .= NaN
     EKP.update_ensemble!(ekp, g)
-    output = sprint(io -> Report.report(io, reporter, context))
+    output = report_iteration_end(reporter, context)
     @test parse_rows(output) ==
           ["successful members" => "8 of 10", "failed members" => "3, 7"]
 end
@@ -341,18 +348,25 @@ end
 
     Report.title(::CountingReporter) = "Counting"
 
-    function Report.report(io::IO, reporter::CountingReporter, context)
+    function Report.report(
+        io::IO,
+        reporter::CountingReporter,
+        ::Report.IterationEnd,
+        context,
+    )
         reporter.n_calls += 1
         println(io, "first line")
         println(io, "output directory: $(context.output_dir)")
         return nothing
     end
 
-    # Log the report with a `TestLogger` and return the logged records
+    # Log the report of the end of the latest iteration with a `TestLogger` and
+    # return the logged records
     function log_report(calibration_report, context)
+        event = Report.IterationEnd(EKP.get_N_iterations(context.ekp))
         logger = Test.TestLogger()
         Logging.with_logger(logger) do
-            Report.report(calibration_report, context)
+            Report.report(calibration_report, event, context)
         end
         return logger.logs
     end
@@ -404,6 +418,17 @@ end
     lines = split(only(logs).message, '\n')
     @test startswith(lines[1], "Calibration report · iteration 0 · ")
     titles = [strip(line) for line in lines if occursin(r"^  \S", line)]
+    # The other reporters print nothing before the first update
+    @test titles == ["Walltime"]
+
+    # Test that every reporter of the default report prints a section after the
+    # first update
+    ekp, prior = make_ekp(1)
+    context = Report.ReportContext(ekp, prior, "")
+    logs = log_report(Report.CalibrationReport(), context)
+    lines = split(only(logs).message, '\n')
+    @test startswith(lines[1], "Calibration report · iteration 1 · ")
+    titles = [strip(line) for line in lines if occursin(r"^  \S", line)]
     @test titles == ["Walltime", "Timestep", "Error", "Parameter", "Ensemble"]
 end
 
@@ -414,6 +439,224 @@ end
     @test context.ekp === ekp
     @test context.prior === prior
     @test context.output_dir == "output"
+end
+
+@testset "Events" begin
+    # A reporter that only reports at the start of an iteration
+    struct IterationStartReporter <: Report.AbstractReporter end
+
+    function Report.report(
+        io::IO,
+        ::IterationStartReporter,
+        event::Report.IterationStart,
+        context,
+    )
+        println(io, "start of iteration $(event.iteration)")
+        return nothing
+    end
+
+    # A reporter that reports on every event and reports something else at the
+    # end of an iteration
+    struct AllEventsReporter <: Report.AbstractReporter end
+
+    function Report.report(io, ::AllEventsReporter, event, context)
+        println(io, "event: $(nameof(typeof(event)))")
+        return nothing
+    end
+
+    function Report.report(
+        io,
+        ::AllEventsReporter,
+        ::Report.IterationEnd,
+        context,
+    )
+        println(io, "end of iteration")
+        return nothing
+    end
+
+    # A reporter that counts the events it is given and prints nothing
+    mutable struct SilentReporter <: Report.AbstractReporter
+        n_calls::Int
+    end
+
+    function Report.report(io, reporter::SilentReporter, event, context)
+        reporter.n_calls += 1
+        return nothing
+    end
+
+    # Log the report of `event` with a `TestLogger` and return the logged
+    # records
+    function log_event_report(calibration_report, event, context)
+        logger = Test.TestLogger()
+        Logging.with_logger(logger) do
+            Report.report(calibration_report, event, context)
+        end
+        return logger.logs
+    end
+
+    ekp, prior = make_ekp(1)
+    context = Report.ReportContext(ekp, prior, "")
+    silent_reporter = SilentReporter(0)
+    calibration_report = Report.CalibrationReport(;
+        reporters = (
+            IterationStartReporter(),
+            AllEventsReporter(),
+            silent_reporter,
+        ),
+    )
+
+    # Test the header of each event and that only the reporters that print
+    # something for the event have a section
+    expected = [
+        Report.CalibrationStart(1) => (
+            "start of calibration",
+            ["  AllEventsReporter", "    event: CalibrationStart"],
+        ),
+        Report.IterationStart(2) => (
+            "start of iteration 2",
+            [
+                "  IterationStartReporter",
+                "    start of iteration 2",
+                "  AllEventsReporter",
+                "    event: IterationStart",
+            ],
+        ),
+        Report.IterationEnd(2) => (
+            "iteration 2",
+            ["  AllEventsReporter", "    end of iteration"],
+        ),
+        Report.CalibrationEnd(2) => (
+            "end of calibration",
+            ["  AllEventsReporter", "    event: CalibrationEnd"],
+        ),
+    ]
+    for (event, (description, sections)) in expected
+        logs = log_event_report(calibration_report, event, context)
+        lines = split(only(logs).message, '\n')
+        @test startswith(lines[1], "Calibration report · $description · ")
+        @test lines[2:end] == sections
+    end
+
+    # Test that every reporter is given every event
+    @test silent_reporter.n_calls == length(expected)
+
+    # Test that nothing is logged when every reporter prints nothing
+    calibration_report =
+        Report.CalibrationReport(; reporters = (SilentReporter(0),))
+    logs = log_event_report(calibration_report, Report.IterationEnd(2), context)
+    @test isempty(logs)
+
+    # Test that the built-in reporters only report at the end of an iteration
+    calibration_report = Report.CalibrationReport()
+    for event in (
+        Report.CalibrationStart(1),
+        Report.IterationStart(2),
+        Report.CalibrationEnd(2),
+    )
+        @test isempty(log_event_report(calibration_report, event, context))
+    end
+end
+
+@testset "Events of a calibration" begin
+    # A model whose output is its own parameter
+    struct ParameterModelInterface <: CAL.AbstractModelInterface
+        output_dir::String
+        prior::PD.ParameterDistribution
+    end
+
+    CAL.forward_model(::ParameterModelInterface, iteration, member) = nothing
+
+    function CAL.observation_map(interface::ParameterModelInterface, iteration)
+        (; output_dir, prior) = interface
+        ekp = CAL.load_ekp_struct(output_dir, iteration)
+        return EKP.get_ϕ_final(prior, ekp)
+    end
+
+    # A reporter that records the events it is given and prints nothing
+    struct EventRecorder <: Report.AbstractReporter
+        events::Vector{Report.AbstractEvent}
+    end
+
+    function Report.report(io, recorder::EventRecorder, event, context)
+        push!(recorder.events, event)
+        return nothing
+    end
+
+    prior = PD.constrained_gaussian("a", 10.0, 5.0, 0, Inf)
+
+    function make_calibration_ekp(; kwargs...)
+        rng = Random.MersenneTwister(1234)
+        return EKP.EnsembleKalmanProcess(
+            EKP.construct_initial_ensemble(rng, prior, 20),
+            [20.0],
+            [0.01;;],
+            EKP.Inversion();
+            rng,
+            kwargs...,
+        )
+    end
+
+    # Run `n_iterations` of the calibration in `output_dir` and return the
+    # events that are reported
+    function record_events(ekp, n_iterations, output_dir)
+        recorder = EventRecorder(Report.AbstractEvent[])
+        CAL.calibrate(
+            CAL.JuliaBackend(),
+            ekp,
+            ParameterModelInterface(output_dir, prior),
+            n_iterations,
+            prior,
+            output_dir;
+            calibration_report = Report.CalibrationReport(;
+                reporters = (recorder,),
+            ),
+        )
+        return recorder.events
+    end
+
+    # Test the events of a calibration of two iterations
+    ekp = make_calibration_ekp()
+    output_dir = mktempdir()
+    @test record_events(ekp, 2, output_dir) == [
+        Report.CalibrationStart(1),
+        Report.IterationStart(1),
+        Report.IterationEnd(1),
+        Report.IterationStart(2),
+        Report.IterationEnd(2),
+        Report.CalibrationEnd(2),
+    ]
+
+    # Test that a resumed calibration starts at the first iteration that is not
+    # completed
+    @test record_events(ekp, 3, output_dir) == [
+        Report.CalibrationStart(3),
+        Report.IterationStart(3),
+        Report.IterationEnd(3),
+        Report.CalibrationEnd(3),
+    ]
+
+    # Test that nothing is reported when there is nothing left to run
+    @test isempty(record_events(ekp, 3, output_dir))
+
+    # Test that the iteration where the scheduler terminates the calibration
+    # has no end of iteration, since the ensemble is not updated
+    ekp = make_calibration_ekp(
+        scheduler = EKP.DataMisfitController(terminate_at = 1),
+    )
+    output_dir = mktempdir()
+    events = record_events(ekp, 20, output_dir)
+    stopped_at = CAL.terminated_iteration(output_dir)
+    @test !isnothing(stopped_at)
+    expected = Report.AbstractEvent[Report.CalibrationStart(1)]
+    for iter in 1:(stopped_at - 1)
+        push!(expected, Report.IterationStart(iter), Report.IterationEnd(iter))
+    end
+    push!(
+        expected,
+        Report.IterationStart(stopped_at),
+        Report.CalibrationEnd(stopped_at - 1),
+    )
+    @test events == expected
 end
 
 @testset "Helper functions" begin
