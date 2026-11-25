@@ -36,11 +36,6 @@ include("ekp_utils.jl")
 include("backend.jl")
 @reexport using .Backend
 
-include("report.jl")
-
-include("calibration.jl")
-@reexport using .Calibration
-
 include("sample_builder.jl")
 include("observation_recipe.jl")
 include("ensemble_builder.jl")
@@ -48,6 +43,10 @@ include("checkers.jl")
 include("svd_analysis.jl")
 
 include("visualization.jl")
+include("report.jl")
+
+include("calibration.jl")
+@reexport using .Calibration
 
 export SampleBuilder, ObservationRecipe, EnsembleBuilder, Checker, Visualization
 
