@@ -30,8 +30,20 @@ status(e) = e isa AWS.AWSException ? e.cause.status : 0
 Base.read(f::BucketFiles, k::AbstractString) =
     String(AWSS3.s3_get(config(f), f.bucket, key(f, k); raw = true))
 
+const MULTIPART_MB = 16
+
 function Base.write(f::BucketFiles, k::AbstractString, data)
-    AWSS3.s3_put(config(f), f.bucket, key(f, k), data)
+    if sizeof(data) > MULTIPART_MB * 1024 * 1024
+        AWSS3.s3_multipart_upload(
+            config(f),
+            f.bucket,
+            key(f, k),
+            IOBuffer(data),
+            MULTIPART_MB,
+        )
+    else
+        AWSS3.s3_put(config(f), f.bucket, key(f, k), data)
+    end
     return nothing
 end
 
