@@ -4,6 +4,20 @@ import AWSS3
 import AWSS3: AWS, S3, Dates
 import ClimaCalibrate.SharedFiles: BucketFiles, create
 
+function __init__()
+    opts = if pkgversion(AWS.HTTP) >= v"2"
+        (;
+            connect_timeout = 30,
+            read_idle_timeout = 60,
+            write_idle_timeout = 60,
+        )
+    else
+        (; connect_timeout = 30, readtimeout = 60)
+    end
+    AWS.DEFAULT_BACKEND[] = AWS.HTTPBackend(; opts...)
+    return nothing
+end
+
 # An AWS.jl config whose service URL is the bucket's endpoint, which is how
 # the S3 API of R2 or MinIO is reached
 struct Endpoint <: AWS.AbstractAWSConfig

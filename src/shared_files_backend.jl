@@ -75,11 +75,17 @@ function run_iteration(
     unclaimed_since = time()
     groups = TaskBoard.summary(files, iter, 0)
     while length(groups.done) + length(groups.failed) < ensemble_size
-        for member in groups.claimed
-            TaskBoard.lease_expired(files, iter, member, backend.lease) ||
-                continue
-            outcome = TaskBoard.requeue!(files, iter, member)
-            @warn "Member $member's claim lapsed, it is now $outcome"
+        try
+            for member in groups.claimed
+                TaskBoard.lease_expired(files, iter, member, backend.lease) ||
+                    continue
+                outcome = TaskBoard.requeue!(files, iter, member)
+                @warn "Member $member's claim lapsed, it is now $outcome"
+            end
+        catch e
+            e isa InterruptException && rethrow()
+            @warn "Transient error checking leases for iteration $iter" exception =
+                e
         end
         # The clock runs only while members are open and none is claimed
         if isempty(groups.open) || !isempty(groups.claimed)
@@ -89,8 +95,14 @@ function run_iteration(
                    $(backend.wait_timeout) s")
         end
         sleep(backend.poll_interval)
-        before, groups = groups, TaskBoard.summary(files, iter, ensemble_size)
-        report(files, iter, before, groups)
+        try
+            before, groups =
+                groups, TaskBoard.summary(files, iter, ensemble_size)
+            report(files, iter, before, groups)
+        catch e
+            e isa InterruptException && rethrow()
+            @warn "Transient error polling iteration $iter" exception = e
+        end
     end
 
     for member in groups.done
@@ -174,16 +186,26 @@ function run_worker(
     ran = 0
     idle_since = time()
     while time() - idle_since < idle_timeout
-        current = TaskBoard.current(files)
+        current, groups, member = try
+            c = TaskBoard.current(files)
+            if isnothing(c)
+                nothing, nothing, nothing
+            else
+                g = TaskBoard.summary(files, c.iteration, c.ensemble_size)
+                m = claim_any!(files, c.iteration, g.open, worker_id)
+                c, g, m
+            end
+        catch e
+            e isa InterruptException && rethrow()
+            @warn "Transient error polling task board" exception = e
+            nothing, nothing, nothing
+        end
         if !isnothing(current)
-            (; iteration, ensemble_size) = current
-            groups = TaskBoard.summary(files, iteration, ensemble_size)
-            member = claim_any!(files, iteration, groups.open, worker_id)
             if !isnothing(member)
                 run_claimed_member(
                     files,
                     interface,
-                    iteration,
+                    current.iteration,
                     member;
                     worker_id,
                     lease = current.lease,
