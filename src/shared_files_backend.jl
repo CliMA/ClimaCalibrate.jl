@@ -205,11 +205,15 @@ function run_worker(
     return ran
 end
 
-run_worker() = run_worker(
-    Base.include(Main, ENV["CLIMA_MODEL_INTERFACE"]),
-    ENV["CLIMA_OUTPUT_DIR"];
-    files = SharedFiles.BucketFiles(ENV["CLIMA_FILES"]),
-)
+function run_worker()
+    interface = Base.include(Main, ENV["CLIMA_MODEL_INTERFACE"])
+    return Base.invokelatest(
+        run_worker,
+        interface,
+        ENV["CLIMA_OUTPUT_DIR"];
+        files = SharedFiles.BucketFiles(ENV["CLIMA_FILES"]),
+    )
+end
 
 "Claim one of the `open` members of `iteration`, or return `nothing`."
 function claim_any!(files, iteration, open, worker_id)
